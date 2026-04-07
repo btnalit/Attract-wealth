@@ -1,0 +1,39 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+.pytest_cache/
+
+# Environment
+.env
+*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Node / Frontend
+node_modules/
+src/frontend/dist/
+
+# 来财 运行时数据
+data/*.db
+data/knowledge/
+logs/
+sessions/
+
+# 敏感文件
+accounts/
+*.pem
+*.key

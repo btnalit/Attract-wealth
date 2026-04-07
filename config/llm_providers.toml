@@ -1,0 +1,43 @@
+# =============================================
+# LLM Provider 配置 (OpenAI 兼容协议)
+# =============================================
+
+# 默认 Provider
+[default]
+base_url = "https://api.deepseek.com"
+model = "deepseek-chat"
+# api_key 从环境变量 LLM_API_KEY 读取
+
+# 深度思考 (复杂分析)
+[deep]
+model = "deepseek-reasoner"
+temperature = 0.3
+max_tokens = 8192
+
+# 快速任务
+[quick]
+model = "deepseek-chat"
+temperature = 0.5
+max_tokens = 2048
+
+# ===== 其他 Provider 配置模板 =====
+
+# [qwen]
+# base_url = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+# model = "qwen-max"
+
+# [kimi]
+# base_url = "https://api.moonshot.cn/v1"
+# model = "moonshot-v1-auto"
+
+# [openai]
+# base_url = "https://api.openai.com/v1"
+# model = "gpt-4o"
+
+# [ollama]
+# base_url = "http://localhost:11434/v1"
+# model = "qwen2.5:32b"
+
+# [siliconflow]
+# base_url = "https://api.siliconflow.cn/v1"
+# model = "deepseek-ai/DeepSeek-V3"

@@ -1,0 +1,28 @@
+# =============================================
+# 来财 (Attract-wealth) 默认配置
+# =============================================
+
+[server]
+host = "0.0.0.0"
+port = 8000
+debug = false
+
+[database]
+data_dir = "./data"
+wal_mode = true
+
+[trading]
+# 默认交易通道: simulation | ths_auto | qmt
+default_channel = "simulation"
+# 模拟账户初始资金
+simulation_balance = 1000000.0
+
+[scheduler]
+# 开盘前分析 (09:15)
+pre_market_cron = "15 9 * * 1-5"
+# 收盘后总结 (15:15)
+post_market_cron = "15 15 * * 1-5"
+
+[logging]
+level = "INFO"
+file = "./logs/laicai.log"

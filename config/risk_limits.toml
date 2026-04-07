@@ -1,0 +1,30 @@
+# =============================================
+# 风控参数配置
+#
+# ⚠️ 注意: 以下参数为"可调"的软参数。
+# 6 条硬编码红线在 src/execution/risk_gate.py 中
+# 强制执行，无法通过此文件绕过!
+# =============================================
+
+[risk]
+# 总仓位上限 (占总资产百分比)
+max_total_position_ratio = 0.80
+
+# 单行业持仓上限
+max_sector_ratio = 0.40
+
+# 最大持股数量
+max_holding_count = 10
+
+# 止损线 (个股)
+stop_loss_percent = -0.08
+
+# 止盈线 (个股)
+take_profit_percent = 0.20
+
+[alerts]
+# 亏损预警阈值
+loss_warning_percent = -0.03
+
+# 大额交易预警 (元)
+large_order_threshold = 50000

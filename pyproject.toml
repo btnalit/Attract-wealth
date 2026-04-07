@@ -1,0 +1,91 @@
+[project]
+name = "attract-wealth"
+version = "0.1.0"
+description = "来财 - AI 驱动量化交易客户端 (基于 OpsSentry 融合 8 大开源项目)"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.10"
+authors = [{name = "btnalit"}]
+keywords = ["quantitative-trading", "ai-agents", "langgraph", "a-share"]
+
+dependencies = [
+    # === 核心框架 ===
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.30.0",
+    "pydantic>=2.0",
+    "pydantic-settings>=2.0",
+
+    # === LLM (OpenAI 兼容协议统一入口) ===
+    "openai>=1.40.0",
+
+    # === AI 编排 ===
+    "langgraph>=0.2.0",
+    "langchain-core>=0.3.0",
+
+    # === 数据库 ===
+    "aiosqlite>=0.20.0",
+
+    # === 调度 ===
+    "apscheduler>=3.10.0",
+
+    # === 工具 ===
+    "httpx>=0.27.0",
+    "python-dotenv>=1.0.0",
+    "python-jose[cryptography]>=3.3.0",
+    "passlib[bcrypt]>=1.7.4",
+    "toml>=0.10.0",
+    "rich>=13.0.0",
+]
+
+[project.optional-dependencies]
+# A 股数据源
+data = [
+    "akshare>=1.14.0",
+    "baostock>=0.8.8",
+    "tushare>=1.4.0",
+]
+# 同花顺 UI 自动化交易
+ths = [
+    "pywinauto>=0.6.8",
+    "pyautogui>=0.9.54",
+    "pillow>=10.0.0",
+]
+# miniQMT 交易 (xtquant 需从券商客户端 bin 目录手动安装)
+# qmt = ["xtquant"]
+# Redis 缓存加速
+cache = [
+    "redis[hiredis]>=5.0.0",
+]
+# 向量知识库
+knowledge = [
+    "lancedb>=0.14.0",
+]
+# 前端开发 (Python 端无额外依赖, 前端用 npm)
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.24.0",
+    "ruff>=0.6.0",
+    "pre-commit>=3.8.0",
+]
+# 全量安装
+all = [
+    "attract-wealth[data,ths,cache,knowledge,dev]",
+]
+
+[project.scripts]
+laicai = "src.main:cli_entry"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.ruff]
+target-version = "py310"
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "SIM"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
