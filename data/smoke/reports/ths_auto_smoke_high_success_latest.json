@@ -1,0 +1,193 @@
+{
+  "report_version": "1.1",
+  "channel": "ths_auto",
+  "started_at": "2026-04-08T18:52:51.601927+00:00",
+  "finished_at": "",
+  "duration_ms": 0.0,
+  "status": "FAIL",
+  "checks": [
+    {
+      "name": "preflight",
+      "ok": false,
+      "skipped": false,
+      "detail": "preflight failed: ths_auto easytrader runtime unavailable",
+      "elapsed_ms": 10625.724
+    }
+  ],
+  "snapshots": {},
+  "preflight": {
+    "ready": false,
+    "reason": "ths_auto easytrader runtime unavailable",
+    "metadata": {
+      "ths_exe_path": "D:\\同花顺软件\\同花顺\\xiadan.exe",
+      "ths_exe_exists": true,
+      "easytrader_diag_attempts": [
+        {
+          "attempt": 1,
+          "ok": false,
+          "errors": [
+            "read balance failed: ('[WinError 5] 拒绝访问。process: %d', 10988);('[WinError 5] 拒绝访问。process: %d', 10988)"
+          ],
+          "summary": {},
+          "read_diagnostics": {
+            "config": {
+              "retries": 2,
+              "retry_interval_s": 0.3
+            },
+            "balance": {
+              "ok": false,
+              "member": "balance",
+              "attempts": 2,
+              "errors": [
+                "('[WinError 5] 拒绝访问。process: %d', 10988)",
+                "('[WinError 5] 拒绝访问。process: %d', 10988)"
+              ],
+              "elapsed_ms": 328.218
+            }
+          },
+          "captcha_stats": {
+            "engine": "ddddocr",
+            "patched": true,
+            "total_requests": 0,
+            "successful_requests": 0,
+            "empty_results": 0,
+            "total_elapsed_ms": 0.0,
+            "avg_elapsed_ms": 0.0,
+            "last_result": "",
+            "last_source": "",
+            "last_elapsed_ms": 0.0,
+            "last_variant": "",
+            "last_error": "",
+            "recent": []
+          }
+        },
+        {
+          "attempt": 2,
+          "ok": false,
+          "errors": [
+            "read balance failed: ('[WinError 5] 拒绝访问。process: %d', 10988);('[WinError 5] 拒绝访问。process: %d', 10988)"
+          ],
+          "summary": {},
+          "read_diagnostics": {
+            "config": {
+              "retries": 2,
+              "retry_interval_s": 0.3
+            },
+            "balance": {
+              "ok": false,
+              "member": "balance",
+              "attempts": 2,
+              "errors": [
+                "('[WinError 5] 拒绝访问。process: %d', 10988)",
+                "('[WinError 5] 拒绝访问。process: %d', 10988)"
+              ],
+              "elapsed_ms": 313.285
+            }
+          },
+          "captcha_stats": {
+            "engine": "ddddocr",
+            "patched": true,
+            "total_requests": 0,
+            "successful_requests": 0,
+            "empty_results": 0,
+            "total_elapsed_ms": 0.0,
+            "avg_elapsed_ms": 0.0,
+            "last_result": "",
+            "last_source": "",
+            "last_elapsed_ms": 0.0,
+            "last_variant": "",
+            "last_error": "",
+            "recent": []
+          }
+        },
+        {
+          "attempt": 3,
+          "ok": false,
+          "errors": [
+            "read balance failed: ('[WinError 5] 拒绝访问。process: %d', 10988);('[WinError 5] 拒绝访问。process: %d', 10988)"
+          ],
+          "summary": {},
+          "read_diagnostics": {
+            "config": {
+              "retries": 2,
+              "retry_interval_s": 0.3
+            },
+            "balance": {
+              "ok": false,
+              "member": "balance",
+              "attempts": 2,
+              "errors": [
+                "('[WinError 5] 拒绝访问。process: %d', 10988)",
+                "('[WinError 5] 拒绝访问。process: %d', 10988)"
+              ],
+              "elapsed_ms": 330.55
+            }
+          },
+          "captcha_stats": {
+            "engine": "ddddocr",
+            "patched": true,
+            "total_requests": 0,
+            "successful_requests": 0,
+            "empty_results": 0,
+            "total_elapsed_ms": 0.0,
+            "avg_elapsed_ms": 0.0,
+            "last_result": "",
+            "last_source": "",
+            "last_elapsed_ms": 0.0,
+            "last_variant": "",
+            "last_error": "",
+            "recent": []
+          }
+        }
+      ],
+      "easytrader_diag": {
+        "ok": false,
+        "summary": {},
+        "errors": [
+          "read balance failed: ('[WinError 5] 拒绝访问。process: %d', 10988);('[WinError 5] 拒绝访问。process: %d', 10988)"
+        ],
+        "read_diagnostics": {
+          "config": {
+            "retries": 2,
+            "retry_interval_s": 0.3
+          },
+          "balance": {
+            "ok": false,
+            "member": "balance",
+            "attempts": 2,
+            "errors": [
+              "('[WinError 5] 拒绝访问。process: %d', 10988)",
+              "('[WinError 5] 拒绝访问。process: %d', 10988)"
+            ],
+            "elapsed_ms": 330.55
+          }
+        },
+        "captcha_stats": {
+          "engine": "ddddocr",
+          "patched": true,
+          "total_requests": 0,
+          "successful_requests": 0,
+          "empty_results": 0,
+          "total_elapsed_ms": 0.0,
+          "avg_elapsed_ms": 0.0,
+          "last_result": "",
+          "last_source": "",
+          "last_elapsed_ms": 0.0,
+          "last_variant": "",
+          "last_error": "",
+          "recent": []
+        }
+      }
+    }
+  },
+  "config": {
+    "include_order_probe": false,
+    "force_live_order": false,
+    "include_reconcile": false,
+    "strict_preflight": true,
+    "ticker": "000001",
+    "price": 10.0,
+    "quantity": 100,
+    "side": "BUY"
+  }
+}

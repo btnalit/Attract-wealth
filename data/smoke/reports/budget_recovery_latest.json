@@ -1,0 +1,633 @@
+{
+  "report_version": "1.0",
+  "generated_at": "2026-04-08T22:52:05.328027",
+  "duration_ms": 15656.652,
+  "params": {
+    "cycles": 20,
+    "active_steps": 2,
+    "recovery_steps": 3,
+    "interval_ms": 120,
+    "budget_usd": 1.0,
+    "exceed_cost": 1.2,
+    "recover_cost": 0.6,
+    "recovery_ratio": 0.8,
+    "cooldown_s": 0.2,
+    "action": "force_hold",
+    "min_success_rate": 0.95,
+    "max_avg_recovery_s": 5.0
+  },
+  "summary": {
+    "cycles": 20,
+    "steps_total": 100,
+    "activation_count": 20,
+    "release_count": 20,
+    "recovery_success_count": 20,
+    "recovery_success_rate": 1.0,
+    "avg_recovery_duration_s": 0.242128,
+    "p95_recovery_duration_s": 0.242927,
+    "active_elapsed_s": 0.0
+  },
+  "gate": {
+    "status": "PASS",
+    "failed_rules": [],
+    "warn_rules": []
+  },
+  "guard_final": {
+    "active": false,
+    "action": "force_hold",
+    "activated_at": 1775659924.7226436,
+    "released_at": 1775659924.96485,
+    "release_reason": "auto_recovered",
+    "last_budget_exceeded_at": 1775659924.8439603,
+    "last_cost_usd": 0.6,
+    "budget_usd": 1.0,
+    "recovery_threshold_usd": 0.8,
+    "cooldown_s": 0.2,
+    "ratio": 0.8,
+    "updated_at": 1775659925.2066414,
+    "metrics": {
+      "activation_count": 20,
+      "release_count": 20,
+      "auto_recovery_success_count": 20,
+      "recovery_duration_total_s": 4.842554,
+      "recovery_success_rate": 1.0,
+      "avg_recovery_duration_s": 0.242128,
+      "last_release_duration_s": 0.242206,
+      "last_recovery_duration_s": 0.242206,
+      "last_recovery_success_at": 1775659924.96485,
+      "release_reason_counts": {
+        "auto_recovered": 20
+      },
+      "active_elapsed_s": 0.0
+    },
+    "enabled": true
+  },
+  "events": [
+    {
+      "cycle": 1,
+      "activated_at": 1775659913.2247803,
+      "released_at": 1775659913.466705,
+      "release_reason": "auto_recovered",
+      "recovery_duration_s": 0.241925,
+      "success": true,
+      "closed": true
+    },
+    {
+      "cycle": 2,
+      "activated_at": 1775659913.8296626,
+      "released_at": 1775659914.0719185,
+      "release_reason": "auto_recovered",
+      "recovery_duration_s": 0.242256,
+      "success": true,
+      "closed": true
+    },
+    {
+      "cycle": 3,
+      "activated_at": 1775659914.4339519,
+      "released_at": 1775659914.675174,
+      "release_reason": "auto_recovered",
+      "recovery_duration_s": 0.241222,
+      "success": true,
+      "closed": true
+    },
+    {
+      "cycle": 4,
+      "activated_at": 1775659915.0377975,
+      "released_at": 1775659915.2794619,
+      "release_reason": "auto_recovered",
+      "recovery_duration_s": 0.241664,
+      "success": true,
+      "closed": true
+    },
+    {
+      "cycle": 5,
+      "activated_at": 1775659915.643217,
+      "released_at": 1775659915.885254,
+      "release_reason": "auto_recovered",
+      "recovery_duration_s": 0.242037,
+      "success": true,
+      "closed": true
+    },
+    {
+      "cycle": 6,
+      "activated_at": 1775659916.247995,
+      "released_at": 1775659916.489611,
+      "release_reason": "auto_recovered",
+      "recovery_duration_s": 0.241616,
+      "success": true,
+      "closed": true
+    },
+    {
+      "cycle": 7,
+      "activated_at": 1775659916.8528347,
+      "released_at": 1775659917.0945642,
+      "release_reason": "auto_recovered",
+      "recovery_duration_s": 0.241729,
+      "success": true,
+      "closed": true
+    },
+    {
+      "cycle": 8,
+      "activated_at": 1775659917.45681,
+      "released_at": 1775659917.6988661,
+      "release_reason": "auto_recovered",
+      "recovery_duration_s": 0.242056,
+      "success": true,
+      "closed": true
+    },
+    {
+      "cycle": 9,
+      "activated_at": 1775659918.0611677,
+      "released_at": 1775659918.3023593,
+      "release_reason": "auto_recovered",
+      "recovery_duration_s": 0.241192,
+      "success": true,
+      "closed": true
+    },
+    {
+      "cycle": 10,
+      "activated_at": 1775659918.6654663,
+      "released_at": 1775659918.911825,
+      "release_reason": "auto_recovered",
+      "recovery_duration_s": 0.246359,
+      "success": true,
+      "closed": true
+    },
+    {
+      "cycle": 11,
+      "activated_at": 1775659919.2733142,
+      "released_at": 1775659919.5162416,
+      "release_reason": "auto_recovered",
+      "recovery_duration_s": 0.242927,
+      "success": true,
+      "closed": true
+    },
+    {
+      "cycle": 12,
+      "activated_at": 1775659919.8786886,
+      "released_at": 1775659920.120615,
+      "release_reason": "auto_recovered",
+      "recovery_duration_s": 0.241926,
+      "success": true,
+      "closed": true
+    },
+    {
+      "cycle": 13,
+      "activated_at": 1775659920.4835887,
+      "released_at": 1775659920.726137,
+      "release_reason": "auto_recovered",
+      "recovery_duration_s": 0.242548,
+      "success": true,
+      "closed": true
+    },
+    {
+      "cycle": 14,
+      "activated_at": 1775659921.0893514,
+      "released_at": 1775659921.3310747,
+      "release_reason": "auto_recovered",
+      "recovery_duration_s": 0.241723,
+      "success": true,
+      "closed": true
+    },
+    {
+      "cycle": 15,
+      "activated_at": 1775659921.6933966,
+      "released_at": 1775659921.935384,
+      "release_reason": "auto_recovered",
+      "recovery_duration_s": 0.241987,
+      "success": true,
+      "closed": true
+    },
+    {
+      "cycle": 16,
+      "activated_at": 1775659922.298145,
+      "released_at": 1775659922.5404036,
+      "release_reason": "auto_recovered",
+      "recovery_duration_s": 0.242259,
+      "success": true,
+      "closed": true
+    },
+    {
+      "cycle": 17,
+      "activated_at": 1775659922.9042103,
+      "released_at": 1775659923.1459682,
+      "release_reason": "auto_recovered",
+      "recovery_duration_s": 0.241758,
+      "success": true,
+      "closed": true
+    },
+    {
+      "cycle": 18,
+      "activated_at": 1775659923.5134337,
+      "released_at": 1775659923.7549736,
+      "release_reason": "auto_recovered",
+      "recovery_duration_s": 0.24154,
+      "success": true,
+      "closed": true
+    },
+    {
+      "cycle": 19,
+      "activated_at": 1775659924.1177733,
+      "released_at": 1775659924.3593976,
+      "release_reason": "auto_recovered",
+      "recovery_duration_s": 0.241624,
+      "success": true,
+      "closed": true
+    },
+    {
+      "cycle": 20,
+      "activated_at": 1775659924.7226436,
+      "released_at": 1775659924.96485,
+      "release_reason": "auto_recovered",
+      "recovery_duration_s": 0.242206,
+      "success": true,
+      "closed": true
+    }
+  ],
+  "samples_tail": [
+    {
+      "step": 71,
+      "cycle": 15,
+      "phase": "exceed",
+      "phase_step": 1,
+      "cost_usd": 1.2,
+      "active": true,
+      "release_reason": "",
+      "recommended_action": "force_hold",
+      "should_degrade": true,
+      "degrade_flags": [
+        "llm_daily_budget_exceeded"
+      ]
+    },
+    {
+      "step": 72,
+      "cycle": 15,
+      "phase": "exceed",
+      "phase_step": 2,
+      "cost_usd": 1.2,
+      "active": true,
+      "release_reason": "",
+      "recommended_action": "force_hold",
+      "should_degrade": true,
+      "degrade_flags": [
+        "llm_daily_budget_exceeded"
+      ]
+    },
+    {
+      "step": 73,
+      "cycle": 15,
+      "phase": "recover",
+      "phase_step": 1,
+      "cost_usd": 0.6,
+      "active": false,
+      "release_reason": "auto_recovered",
+      "recommended_action": "none",
+      "should_degrade": false,
+      "degrade_flags": []
+    },
+    {
+      "step": 74,
+      "cycle": 15,
+      "phase": "recover",
+      "phase_step": 2,
+      "cost_usd": 0.6,
+      "active": false,
+      "release_reason": "auto_recovered",
+      "recommended_action": "none",
+      "should_degrade": false,
+      "degrade_flags": []
+    },
+    {
+      "step": 75,
+      "cycle": 15,
+      "phase": "recover",
+      "phase_step": 3,
+      "cost_usd": 0.6,
+      "active": false,
+      "release_reason": "auto_recovered",
+      "recommended_action": "none",
+      "should_degrade": false,
+      "degrade_flags": []
+    },
+    {
+      "step": 76,
+      "cycle": 16,
+      "phase": "exceed",
+      "phase_step": 1,
+      "cost_usd": 1.2,
+      "active": true,
+      "release_reason": "",
+      "recommended_action": "force_hold",
+      "should_degrade": true,
+      "degrade_flags": [
+        "llm_daily_budget_exceeded"
+      ]
+    },
+    {
+      "step": 77,
+      "cycle": 16,
+      "phase": "exceed",
+      "phase_step": 2,
+      "cost_usd": 1.2,
+      "active": true,
+      "release_reason": "",
+      "recommended_action": "force_hold",
+      "should_degrade": true,
+      "degrade_flags": [
+        "llm_daily_budget_exceeded"
+      ]
+    },
+    {
+      "step": 78,
+      "cycle": 16,
+      "phase": "recover",
+      "phase_step": 1,
+      "cost_usd": 0.6,
+      "active": false,
+      "release_reason": "auto_recovered",
+      "recommended_action": "none",
+      "should_degrade": false,
+      "degrade_flags": []
+    },
+    {
+      "step": 79,
+      "cycle": 16,
+      "phase": "recover",
+      "phase_step": 2,
+      "cost_usd": 0.6,
+      "active": false,
+      "release_reason": "auto_recovered",
+      "recommended_action": "none",
+      "should_degrade": false,
+      "degrade_flags": []
+    },
+    {
+      "step": 80,
+      "cycle": 16,
+      "phase": "recover",
+      "phase_step": 3,
+      "cost_usd": 0.6,
+      "active": false,
+      "release_reason": "auto_recovered",
+      "recommended_action": "none",
+      "should_degrade": false,
+      "degrade_flags": []
+    },
+    {
+      "step": 81,
+      "cycle": 17,
+      "phase": "exceed",
+      "phase_step": 1,
+      "cost_usd": 1.2,
+      "active": true,
+      "release_reason": "",
+      "recommended_action": "force_hold",
+      "should_degrade": true,
+      "degrade_flags": [
+        "llm_daily_budget_exceeded"
+      ]
+    },
+    {
+      "step": 82,
+      "cycle": 17,
+      "phase": "exceed",
+      "phase_step": 2,
+      "cost_usd": 1.2,
+      "active": true,
+      "release_reason": "",
+      "recommended_action": "force_hold",
+      "should_degrade": true,
+      "degrade_flags": [
+        "llm_daily_budget_exceeded"
+      ]
+    },
+    {
+      "step": 83,
+      "cycle": 17,
+      "phase": "recover",
+      "phase_step": 1,
+      "cost_usd": 0.6,
+      "active": false,
+      "release_reason": "auto_recovered",
+      "recommended_action": "none",
+      "should_degrade": false,
+      "degrade_flags": []
+    },
+    {
+      "step": 84,
+      "cycle": 17,
+      "phase": "recover",
+      "phase_step": 2,
+      "cost_usd": 0.6,
+      "active": false,
+      "release_reason": "auto_recovered",
+      "recommended_action": "none",
+      "should_degrade": false,
+      "degrade_flags": []
+    },
+    {
+      "step": 85,
+      "cycle": 17,
+      "phase": "recover",
+      "phase_step": 3,
+      "cost_usd": 0.6,
+      "active": false,
+      "release_reason": "auto_recovered",
+      "recommended_action": "none",
+      "should_degrade": false,
+      "degrade_flags": []
+    },
+    {
+      "step": 86,
+      "cycle": 18,
+      "phase": "exceed",
+      "phase_step": 1,
+      "cost_usd": 1.2,
+      "active": true,
+      "release_reason": "",
+      "recommended_action": "force_hold",
+      "should_degrade": true,
+      "degrade_flags": [
+        "llm_daily_budget_exceeded"
+      ]
+    },
+    {
+      "step": 87,
+      "cycle": 18,
+      "phase": "exceed",
+      "phase_step": 2,
+      "cost_usd": 1.2,
+      "active": true,
+      "release_reason": "",
+      "recommended_action": "force_hold",
+      "should_degrade": true,
+      "degrade_flags": [
+        "llm_daily_budget_exceeded"
+      ]
+    },
+    {
+      "step": 88,
+      "cycle": 18,
+      "phase": "recover",
+      "phase_step": 1,
+      "cost_usd": 0.6,
+      "active": false,
+      "release_reason": "auto_recovered",
+      "recommended_action": "none",
+      "should_degrade": false,
+      "degrade_flags": []
+    },
+    {
+      "step": 89,
+      "cycle": 18,
+      "phase": "recover",
+      "phase_step": 2,
+      "cost_usd": 0.6,
+      "active": false,
+      "release_reason": "auto_recovered",
+      "recommended_action": "none",
+      "should_degrade": false,
+      "degrade_flags": []
+    },
+    {
+      "step": 90,
+      "cycle": 18,
+      "phase": "recover",
+      "phase_step": 3,
+      "cost_usd": 0.6,
+      "active": false,
+      "release_reason": "auto_recovered",
+      "recommended_action": "none",
+      "should_degrade": false,
+      "degrade_flags": []
+    },
+    {
+      "step": 91,
+      "cycle": 19,
+      "phase": "exceed",
+      "phase_step": 1,
+      "cost_usd": 1.2,
+      "active": true,
+      "release_reason": "",
+      "recommended_action": "force_hold",
+      "should_degrade": true,
+      "degrade_flags": [
+        "llm_daily_budget_exceeded"
+      ]
+    },
+    {
+      "step": 92,
+      "cycle": 19,
+      "phase": "exceed",
+      "phase_step": 2,
+      "cost_usd": 1.2,
+      "active": true,
+      "release_reason": "",
+      "recommended_action": "force_hold",
+      "should_degrade": true,
+      "degrade_flags": [
+        "llm_daily_budget_exceeded"
+      ]
+    },
+    {
+      "step": 93,
+      "cycle": 19,
+      "phase": "recover",
+      "phase_step": 1,
+      "cost_usd": 0.6,
+      "active": false,
+      "release_reason": "auto_recovered",
+      "recommended_action": "none",
+      "should_degrade": false,
+      "degrade_flags": []
+    },
+    {
+      "step": 94,
+      "cycle": 19,
+      "phase": "recover",
+      "phase_step": 2,
+      "cost_usd": 0.6,
+      "active": false,
+      "release_reason": "auto_recovered",
+      "recommended_action": "none",
+      "should_degrade": false,
+      "degrade_flags": []
+    },
+    {
+      "step": 95,
+      "cycle": 19,
+      "phase": "recover",
+      "phase_step": 3,
+      "cost_usd": 0.6,
+      "active": false,
+      "release_reason": "auto_recovered",
+      "recommended_action": "none",
+      "should_degrade": false,
+      "degrade_flags": []
+    },
+    {
+      "step": 96,
+      "cycle": 20,
+      "phase": "exceed",
+      "phase_step": 1,
+      "cost_usd": 1.2,
+      "active": true,
+      "release_reason": "",
+      "recommended_action": "force_hold",
+      "should_degrade": true,
+      "degrade_flags": [
+        "llm_daily_budget_exceeded"
+      ]
+    },
+    {
+      "step": 97,
+      "cycle": 20,
+      "phase": "exceed",
+      "phase_step": 2,
+      "cost_usd": 1.2,
+      "active": true,
+      "release_reason": "",
+      "recommended_action": "force_hold",
+      "should_degrade": true,
+      "degrade_flags": [
+        "llm_daily_budget_exceeded"
+      ]
+    },
+    {
+      "step": 98,
+      "cycle": 20,
+      "phase": "recover",
+      "phase_step": 1,
+      "cost_usd": 0.6,
+      "active": false,
+      "release_reason": "auto_recovered",
+      "recommended_action": "none",
+      "should_degrade": false,
+      "degrade_flags": []
+    },
+    {
+      "step": 99,
+      "cycle": 20,
+      "phase": "recover",
+      "phase_step": 2,
+      "cost_usd": 0.6,
+      "active": false,
+      "release_reason": "auto_recovered",
+      "recommended_action": "none",
+      "should_degrade": false,
+      "degrade_flags": []
+    },
+    {
+      "step": 100,
+      "cycle": 20,
+      "phase": "recover",
+      "phase_step": 3,
+      "cost_usd": 0.6,
+      "active": false,
+      "release_reason": "auto_recovered",
+      "recommended_action": "none",
+      "should_degrade": false,
+      "degrade_flags": []
+    }
+  ]
+}

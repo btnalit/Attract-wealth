@@ -1,0 +1,45 @@
+{
+  "report_version": "1.0",
+  "started_at": "2026-04-08T16:41:46.305130+00:00",
+  "inputs": {
+    "exe_path": "D:\\同花顺软件\\同花顺\\xiadan.exe",
+    "broker": "ths",
+    "repo_path": "",
+    "include_orders": false
+  },
+  "probe": {
+    "ok": false,
+    "connected": true,
+    "exe_path": "D:\\同花顺软件\\同花顺\\xiadan.exe",
+    "broker": "ths",
+    "repo_path": "",
+    "errors": [
+      "('[WinError 5] 拒绝访问。process: %d', 2232)"
+    ],
+    "meta": {
+      "ok": true,
+      "reason": "connected",
+      "exe_path": "D:\\同花顺软件\\同花顺\\xiadan.exe",
+      "broker": "ths",
+      "errors": [],
+      "load_meta": {
+        "ok": true,
+        "source": "D:\\来财\\easytrader-master",
+        "attempts": [
+          {
+            "source": "pythonpath",
+            "error": "No module named 'easytrader'"
+          }
+        ]
+      }
+    },
+    "summary": {},
+    "balance": {},
+    "positions": [],
+    "orders": [],
+    "close_client": false,
+    "elapsed_ms": 3422.802
+  },
+  "status": "FAIL",
+  "finished_at": "2026-04-08T16:41:46.305147+00:00"
+}

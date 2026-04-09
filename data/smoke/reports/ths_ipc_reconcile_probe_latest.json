@@ -1,0 +1,89 @@
+{
+  "report_version": "1.1",
+  "channel": "ths_ipc",
+  "started_at": "2026-04-08T06:46:47.464705+00:00",
+  "finished_at": "2026-04-08T06:46:47.760336+00:00",
+  "duration_ms": 295.606,
+  "status": "FAIL",
+  "checks": [
+    {
+      "name": "preflight",
+      "ok": true,
+      "skipped": false,
+      "detail": "ok",
+      "elapsed_ms": 7.116
+    },
+    {
+      "name": "connect",
+      "ok": true,
+      "skipped": false,
+      "detail": "ok",
+      "elapsed_ms": 20.361
+    },
+    {
+      "name": "get_balance",
+      "ok": true,
+      "skipped": false,
+      "detail": "ok",
+      "elapsed_ms": 15.655
+    },
+    {
+      "name": "get_positions",
+      "ok": true,
+      "skipped": false,
+      "detail": "ok",
+      "elapsed_ms": 2.84
+    },
+    {
+      "name": "get_orders",
+      "ok": true,
+      "skipped": false,
+      "detail": "ok",
+      "elapsed_ms": 2.145
+    },
+    {
+      "name": "reconciliation_probe",
+      "ok": false,
+      "skipped": false,
+      "detail": "reconciliation failed: RECON_BLOCK",
+      "elapsed_ms": 246.85
+    },
+    {
+      "name": "order_probe",
+      "ok": true,
+      "skipped": true,
+      "detail": "order probe disabled",
+      "elapsed_ms": 0.012
+    }
+  ],
+  "snapshots": {
+    "balance": {
+      "total_assets": 0.0,
+      "available_cash": 0.0,
+      "frozen_cash": 0.0,
+      "market_value": 0.0,
+      "total_pnl": 0.0,
+      "daily_pnl": 0.0
+    },
+    "positions": [],
+    "orders": []
+  },
+  "preflight": {
+    "ready": true,
+    "reason": "ths_ipc bridge reachable",
+    "metadata": {
+      "host": "127.0.0.1",
+      "port": 8089
+    }
+  },
+  "config": {
+    "include_order_probe": false,
+    "force_live_order": false,
+    "include_reconcile": true,
+    "strict_preflight": false,
+    "ticker": "000001",
+    "price": 10.0,
+    "quantity": 100,
+    "side": "BUY"
+  }
+}

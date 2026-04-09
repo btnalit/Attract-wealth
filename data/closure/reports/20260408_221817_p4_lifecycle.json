@@ -1,0 +1,2002 @@
+{
+  "report_version": "1.0",
+  "started_at": "2026-04-08T14:18:34.171249+00:00",
+  "finished_at": "2026-04-08T14:18:34.677385+00:00",
+  "duration_ms": 506.104,
+  "params": {
+    "data_dir": "D:\\来财\\Attract-wealth\\data\\p4_smoke",
+    "strategy_name": "p4_lifecycle_smoke",
+    "market": "CN",
+    "strategy_template": "momentum",
+    "bars": 80,
+    "start_cash": 1000000.0,
+    "lot_size": 100,
+    "commission_rate": 0.0003,
+    "slippage_bp": 1.0,
+    "max_combinations": 128,
+    "sort_by": "net_pnl",
+    "top_k": 5,
+    "run_tag": "closure",
+    "gate_overrides_json": "{\"min_trades\":1,\"min_win_rate\":0.0}",
+    "archive_report": true,
+    "persist_best_metrics": true,
+    "check_invalid_transition": true
+  },
+  "steps": [
+    {
+      "name": "init_databases",
+      "status": "PASS",
+      "detail": "sqlite schemas initialized",
+      "payload": {
+        "data_dir": "D:\\来财\\Attract-wealth\\data\\p4_smoke"
+      },
+      "at": "2026-04-08T14:18:34.241175+00:00"
+    },
+    {
+      "name": "create_strategy_version",
+      "status": "PASS",
+      "detail": "draft strategy created",
+      "payload": {
+        "strategy_id": "4bf6cd1c-0325-409f-a928-3eb6d7dabb3c",
+        "version": 1
+      },
+      "at": "2026-04-08T14:18:34.326984+00:00"
+    },
+    {
+      "name": "invalid_transition_guard",
+      "status": "PASS",
+      "detail": "draft -> active correctly rejected",
+      "payload": {
+        "code": "STRATEGY_STATUS_TRANSITION_INVALID"
+      },
+      "at": "2026-04-08T14:18:34.327768+00:00"
+    },
+    {
+      "name": "run_baseline_backtest",
+      "status": "PASS",
+      "detail": "baseline backtest completed",
+      "payload": {
+        "bars": 80,
+        "metrics": {
+          "trade_count": 2,
+          "win_rate": 0.0,
+          "max_drawdown": 0.006283,
+          "net_pnl": 110232.878848,
+          "sharpe": 7.115308
+        }
+      },
+      "at": "2026-04-08T14:18:34.338175+00:00"
+    },
+    {
+      "name": "archive_baseline_report",
+      "status": "PASS",
+      "detail": "baseline report archived",
+      "payload": {
+        "report_id": "f10a0152-1910-492c-9bc0-e73d0cf3eb96"
+      },
+      "at": "2026-04-08T14:18:34.348632+00:00"
+    },
+    {
+      "name": "baseline_gate",
+      "status": "PASS",
+      "detail": "baseline gate passed",
+      "payload": {
+        "gate": {
+          "min_trades": 1,
+          "min_win_rate": 0.0,
+          "max_drawdown": 0.2,
+          "min_net_pnl": 0.0,
+          "min_sharpe": 0.5
+        }
+      },
+      "at": "2026-04-08T14:18:34.368729+00:00"
+    },
+    {
+      "name": "transition_candidate",
+      "status": "PASS",
+      "detail": "strategy transitioned to candidate",
+      "payload": {
+        "from": "draft",
+        "to": "candidate"
+      },
+      "at": "2026-04-08T14:18:34.400122+00:00"
+    },
+    {
+      "name": "grid_backtest",
+      "status": "PASS",
+      "detail": "grid backtest completed",
+      "payload": {
+        "total_runs": 9,
+        "sort_by": "net_pnl",
+        "sort_direction": "desc",
+        "best_index": 6,
+        "top_k": 5
+      },
+      "at": "2026-04-08T14:18:34.620049+00:00"
+    },
+    {
+      "name": "persist_best_metrics",
+      "status": "PASS",
+      "detail": "best grid metrics persisted",
+      "payload": {},
+      "at": "2026-04-08T14:18:34.649271+00:00"
+    },
+    {
+      "name": "transition_active",
+      "status": "PASS",
+      "detail": "strategy transitioned to active",
+      "payload": {
+        "from": "candidate",
+        "to": "active"
+      },
+      "at": "2026-04-08T14:18:34.675907+00:00"
+    },
+    {
+      "name": "verify_traceability",
+      "status": "PASS",
+      "detail": "backtest archives and status verified",
+      "payload": {
+        "strategy_status": "active",
+        "report_count": 10,
+        "expected_min_reports": 10
+      },
+      "at": "2026-04-08T14:18:34.677362+00:00"
+    }
+  ],
+  "result": {
+    "status": "PASS",
+    "strategy": {
+      "id": "4bf6cd1c-0325-409f-a928-3eb6d7dabb3c",
+      "name": "p4_lifecycle_smoke",
+      "version": 1,
+      "parent_id": "",
+      "origin": "BUILT_IN",
+      "content": "",
+      "parameters": {
+        "lookback": 3,
+        "position_ratio": 0.6,
+        "buy_threshold": 0.01,
+        "sell_threshold": -0.01,
+        "market": "CN",
+        "strategy_template": "momentum"
+      },
+      "metrics": {
+        "trade_count": 2,
+        "win_rate": 0.0,
+        "max_drawdown": 0.006287,
+        "net_pnl": 111711.378581,
+        "sharpe": 7.158212,
+        "market": "CN",
+        "strategy_template": "momentum",
+        "winning_trades": 0,
+        "realized_pnl": 0.0,
+        "total_return": 0.111711,
+        "turnover": 0.999478,
+        "signal_counts": {
+          "BUY": 17,
+          "SELL": 0,
+          "HOLD": 63
+        },
+        "version_gate": {
+          "passed": true,
+          "evaluated_at": 1775657914.358446,
+          "checks": [
+            {
+              "metric": "trade_count",
+              "value": 2,
+              "operator": ">=",
+              "threshold": 1,
+              "passed": true
+            },
+            {
+              "metric": "win_rate",
+              "value": 0.0,
+              "operator": ">=",
+              "threshold": 0.0,
+              "passed": true
+            },
+            {
+              "metric": "max_drawdown",
+              "value": 0.006283,
+              "operator": "<=",
+              "threshold": 0.2,
+              "passed": true
+            },
+            {
+              "metric": "net_pnl",
+              "value": 110232.878848,
+              "operator": ">=",
+              "threshold": 0.0,
+              "passed": true
+            },
+            {
+              "metric": "sharpe",
+              "value": 7.115308,
+              "operator": ">=",
+              "threshold": 0.5,
+              "passed": true
+            }
+          ],
+          "gate": {
+            "min_trades": 1,
+            "min_win_rate": 0.0,
+            "max_drawdown": 0.2,
+            "min_net_pnl": 0.0,
+            "min_sharpe": 0.5
+          },
+          "gate_context": {
+            "market": "CN",
+            "strategy_template": "momentum",
+            "rule_sources": [
+              {
+                "source": "env.defaults",
+                "rules": {
+                  "min_trades": 20.0,
+                  "min_win_rate": 0.52,
+                  "max_drawdown": 0.2,
+                  "min_net_pnl": 0.0,
+                  "min_sharpe": 0.5
+                }
+              },
+              {
+                "source": "request.overrides",
+                "rules": {
+                  "min_trades": 1,
+                  "min_win_rate": 0.0
+                }
+              }
+            ],
+            "manual_overrides": {
+              "min_trades": 1,
+              "min_win_rate": 0.0
+            }
+          }
+        },
+        "backtest_grid": {
+          "generated_at": 1775657914.6200635,
+          "sort_by": "net_pnl",
+          "sort_direction": "desc",
+          "total_runs": 9,
+          "top_k": 5,
+          "best_index": 6,
+          "best_parameters": {
+            "lookback": 3,
+            "position_ratio": 0.8
+          },
+          "gate_overrides": {
+            "min_trades": 1,
+            "min_win_rate": 0.0
+          },
+          "market": "CN",
+          "strategy_template": "momentum",
+          "run_tag": "closure"
+        },
+        "latest_backtest_report": {
+          "report_id": "b9b2e9c5-ba67-46f0-99fb-6ea8547595be",
+          "created_at": 1775657914.5384011,
+          "market": "CN",
+          "strategy_template": "momentum",
+          "run_tag": "closure_grid_006"
+        }
+      },
+      "status": "active",
+      "created_at": 1775657914.241398,
+      "updated_at": 1775657914.6499097
+    },
+    "baseline_archive": {
+      "id": "f10a0152-1910-492c-9bc0-e73d0cf3eb96",
+      "strategy_id": "4bf6cd1c-0325-409f-a928-3eb6d7dabb3c",
+      "strategy_name": "p4_lifecycle_smoke",
+      "strategy_version": 1,
+      "market": "CN",
+      "strategy_template": "momentum",
+      "run_tag": "closure_baseline",
+      "source": "smoke.baseline",
+      "bars_hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "params_hash": "32f5f3182713663bd18ee7a1440085b67344f276fbec3f4c4db4b6400f39bbc3",
+      "metrics": {
+        "trade_count": 2,
+        "winning_trades": 0,
+        "win_rate": 0.0,
+        "realized_pnl": 0.0,
+        "net_pnl": 110232.878848,
+        "total_return": 0.110233,
+        "max_drawdown": 0.006283,
+        "sharpe": 7.115308,
+        "turnover": 0.998713,
+        "signal_counts": {
+          "BUY": 17,
+          "SELL": 0,
+          "HOLD": 63
+        },
+        "market": "CN",
+        "strategy_template": "momentum"
+      },
+      "summary": {
+        "bars": 80,
+        "start_cash": 1000000.0,
+        "final_equity": 1110232.878848,
+        "final_cash": 987.291848,
+        "final_position": 98900,
+        "final_close": 11.21583
+      },
+      "trace_index": {
+        "report_id": "f10a0152-1910-492c-9bc0-e73d0cf3eb96",
+        "strategy_id": "4bf6cd1c-0325-409f-a928-3eb6d7dabb3c",
+        "strategy_name": "p4_lifecycle_smoke",
+        "strategy_version": 1,
+        "market": "CN",
+        "strategy_template": "momentum",
+        "run_tag": "closure_baseline",
+        "source": "smoke.baseline",
+        "created_at": 1775657914.3388503,
+        "trade_count": 2,
+        "win_rate": 0.0,
+        "max_drawdown": 0.006283,
+        "net_pnl": 110232.878848,
+        "bars": 80,
+        "bars_hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "params_hash": "32f5f3182713663bd18ee7a1440085b67344f276fbec3f4c4db4b6400f39bbc3"
+      },
+      "created_at": 1775657914.3388503
+    },
+    "grid": {
+      "sort_by": "net_pnl",
+      "sort_direction": "desc",
+      "total_runs": 9,
+      "top_k": 5,
+      "best": {
+        "index": 6,
+        "parameters": {
+          "lookback": 3,
+          "position_ratio": 0.8
+        },
+        "metrics": {
+          "trade_count": 2,
+          "winning_trades": 0,
+          "win_rate": 0.0,
+          "realized_pnl": 0.0,
+          "net_pnl": 111711.378581,
+          "total_return": 0.111711,
+          "max_drawdown": 0.006287,
+          "sharpe": 7.158212,
+          "turnover": 0.999478,
+          "signal_counts": {
+            "BUY": 17,
+            "SELL": 0,
+            "HOLD": 63
+          },
+          "market": "CN",
+          "strategy_template": "momentum"
+        },
+        "gate": {
+          "strategy_id": "4bf6cd1c-0325-409f-a928-3eb6d7dabb3c",
+          "strategy_name": "p4_lifecycle_smoke",
+          "version": 1,
+          "evaluated_at": 1775657914.5377936,
+          "passed": true,
+          "checks": [
+            {
+              "metric": "trade_count",
+              "value": 2,
+              "operator": ">=",
+              "threshold": 1,
+              "passed": true
+            },
+            {
+              "metric": "win_rate",
+              "value": 0.0,
+              "operator": ">=",
+              "threshold": 0.0,
+              "passed": true
+            },
+            {
+              "metric": "max_drawdown",
+              "value": 0.006287,
+              "operator": "<=",
+              "threshold": 0.2,
+              "passed": true
+            },
+            {
+              "metric": "net_pnl",
+              "value": 111711.378581,
+              "operator": ">=",
+              "threshold": 0.0,
+              "passed": true
+            },
+            {
+              "metric": "sharpe",
+              "value": 7.158212,
+              "operator": ">=",
+              "threshold": 0.5,
+              "passed": true
+            }
+          ],
+          "failed_checks": [],
+          "gate": {
+            "min_trades": 1,
+            "min_win_rate": 0.0,
+            "max_drawdown": 0.2,
+            "min_net_pnl": 0.0,
+            "min_sharpe": 0.5
+          },
+          "metrics": {
+            "trade_count": 2,
+            "winning_trades": 0,
+            "win_rate": 0.0,
+            "realized_pnl": 0.0,
+            "net_pnl": 111711.378581,
+            "total_return": 0.111711,
+            "max_drawdown": 0.006287,
+            "sharpe": 7.158212,
+            "turnover": 0.999478,
+            "signal_counts": {
+              "BUY": 17,
+              "SELL": 0,
+              "HOLD": 63
+            },
+            "market": "CN",
+            "strategy_template": "momentum"
+          },
+          "gate_context": {
+            "market": "CN",
+            "strategy_template": "momentum",
+            "rule_sources": [
+              {
+                "source": "env.defaults",
+                "rules": {
+                  "min_trades": 20.0,
+                  "min_win_rate": 0.52,
+                  "max_drawdown": 0.2,
+                  "min_net_pnl": 0.0,
+                  "min_sharpe": 0.5
+                }
+              },
+              {
+                "source": "request.overrides",
+                "rules": {
+                  "min_trades": 1,
+                  "min_win_rate": 0.0
+                }
+              }
+            ],
+            "manual_overrides": {
+              "min_trades": 1,
+              "min_win_rate": 0.0
+            }
+          }
+        },
+        "archive": {
+          "id": "b9b2e9c5-ba67-46f0-99fb-6ea8547595be",
+          "strategy_id": "4bf6cd1c-0325-409f-a928-3eb6d7dabb3c",
+          "strategy_name": "p4_lifecycle_smoke",
+          "strategy_version": 1,
+          "market": "CN",
+          "strategy_template": "momentum",
+          "run_tag": "closure_grid_006",
+          "source": "smoke.grid",
+          "bars_hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "params_hash": "9a630fe11843215a9423b4de5ef3be39b62f926feb027323e84b47edbd5e7b02",
+          "metrics": {
+            "trade_count": 2,
+            "winning_trades": 0,
+            "win_rate": 0.0,
+            "realized_pnl": 0.0,
+            "net_pnl": 111711.378581,
+            "total_return": 0.111711,
+            "max_drawdown": 0.006287,
+            "sharpe": 7.158212,
+            "turnover": 0.999478,
+            "signal_counts": {
+              "BUY": 17,
+              "SELL": 0,
+              "HOLD": 63
+            },
+            "market": "CN",
+            "strategy_template": "momentum"
+          },
+          "summary": {
+            "bars": 80,
+            "start_cash": 1000000.0,
+            "final_equity": 1111711.378581,
+            "final_cash": 222.625581,
+            "final_position": 99100,
+            "final_close": 11.21583
+          },
+          "trace_index": {
+            "report_id": "b9b2e9c5-ba67-46f0-99fb-6ea8547595be",
+            "strategy_id": "4bf6cd1c-0325-409f-a928-3eb6d7dabb3c",
+            "strategy_name": "p4_lifecycle_smoke",
+            "strategy_version": 1,
+            "market": "CN",
+            "strategy_template": "momentum",
+            "run_tag": "closure_grid_006",
+            "source": "smoke.grid",
+            "created_at": 1775657914.5384011,
+            "trade_count": 2,
+            "win_rate": 0.0,
+            "max_drawdown": 0.006287,
+            "net_pnl": 111711.378581,
+            "bars": 80,
+            "bars_hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "params_hash": "9a630fe11843215a9423b4de5ef3be39b62f926feb027323e84b47edbd5e7b02"
+          },
+          "created_at": 1775657914.5384011
+        }
+      },
+      "top_results": [
+        {
+          "index": 6,
+          "parameters": {
+            "lookback": 3,
+            "position_ratio": 0.8
+          },
+          "metrics": {
+            "trade_count": 2,
+            "winning_trades": 0,
+            "win_rate": 0.0,
+            "realized_pnl": 0.0,
+            "net_pnl": 111711.378581,
+            "total_return": 0.111711,
+            "max_drawdown": 0.006287,
+            "sharpe": 7.158212,
+            "turnover": 0.999478,
+            "signal_counts": {
+              "BUY": 17,
+              "SELL": 0,
+              "HOLD": 63
+            },
+            "market": "CN",
+            "strategy_template": "momentum"
+          },
+          "gate": {
+            "strategy_id": "4bf6cd1c-0325-409f-a928-3eb6d7dabb3c",
+            "strategy_name": "p4_lifecycle_smoke",
+            "version": 1,
+            "evaluated_at": 1775657914.5377936,
+            "passed": true,
+            "checks": [
+              {
+                "metric": "trade_count",
+                "value": 2,
+                "operator": ">=",
+                "threshold": 1,
+                "passed": true
+              },
+              {
+                "metric": "win_rate",
+                "value": 0.0,
+                "operator": ">=",
+                "threshold": 0.0,
+                "passed": true
+              },
+              {
+                "metric": "max_drawdown",
+                "value": 0.006287,
+                "operator": "<=",
+                "threshold": 0.2,
+                "passed": true
+              },
+              {
+                "metric": "net_pnl",
+                "value": 111711.378581,
+                "operator": ">=",
+                "threshold": 0.0,
+                "passed": true
+              },
+              {
+                "metric": "sharpe",
+                "value": 7.158212,
+                "operator": ">=",
+                "threshold": 0.5,
+                "passed": true
+              }
+            ],
+            "failed_checks": [],
+            "gate": {
+              "min_trades": 1,
+              "min_win_rate": 0.0,
+              "max_drawdown": 0.2,
+              "min_net_pnl": 0.0,
+              "min_sharpe": 0.5
+            },
+            "metrics": {
+              "trade_count": 2,
+              "winning_trades": 0,
+              "win_rate": 0.0,
+              "realized_pnl": 0.0,
+              "net_pnl": 111711.378581,
+              "total_return": 0.111711,
+              "max_drawdown": 0.006287,
+              "sharpe": 7.158212,
+              "turnover": 0.999478,
+              "signal_counts": {
+                "BUY": 17,
+                "SELL": 0,
+                "HOLD": 63
+              },
+              "market": "CN",
+              "strategy_template": "momentum"
+            },
+            "gate_context": {
+              "market": "CN",
+              "strategy_template": "momentum",
+              "rule_sources": [
+                {
+                  "source": "env.defaults",
+                  "rules": {
+                    "min_trades": 20.0,
+                    "min_win_rate": 0.52,
+                    "max_drawdown": 0.2,
+                    "min_net_pnl": 0.0,
+                    "min_sharpe": 0.5
+                  }
+                },
+                {
+                  "source": "request.overrides",
+                  "rules": {
+                    "min_trades": 1,
+                    "min_win_rate": 0.0
+                  }
+                }
+              ],
+              "manual_overrides": {
+                "min_trades": 1,
+                "min_win_rate": 0.0
+              }
+            }
+          },
+          "archive": {
+            "id": "b9b2e9c5-ba67-46f0-99fb-6ea8547595be",
+            "strategy_id": "4bf6cd1c-0325-409f-a928-3eb6d7dabb3c",
+            "strategy_name": "p4_lifecycle_smoke",
+            "strategy_version": 1,
+            "market": "CN",
+            "strategy_template": "momentum",
+            "run_tag": "closure_grid_006",
+            "source": "smoke.grid",
+            "bars_hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "params_hash": "9a630fe11843215a9423b4de5ef3be39b62f926feb027323e84b47edbd5e7b02",
+            "metrics": {
+              "trade_count": 2,
+              "winning_trades": 0,
+              "win_rate": 0.0,
+              "realized_pnl": 0.0,
+              "net_pnl": 111711.378581,
+              "total_return": 0.111711,
+              "max_drawdown": 0.006287,
+              "sharpe": 7.158212,
+              "turnover": 0.999478,
+              "signal_counts": {
+                "BUY": 17,
+                "SELL": 0,
+                "HOLD": 63
+              },
+              "market": "CN",
+              "strategy_template": "momentum"
+            },
+            "summary": {
+              "bars": 80,
+              "start_cash": 1000000.0,
+              "final_equity": 1111711.378581,
+              "final_cash": 222.625581,
+              "final_position": 99100,
+              "final_close": 11.21583
+            },
+            "trace_index": {
+              "report_id": "b9b2e9c5-ba67-46f0-99fb-6ea8547595be",
+              "strategy_id": "4bf6cd1c-0325-409f-a928-3eb6d7dabb3c",
+              "strategy_name": "p4_lifecycle_smoke",
+              "strategy_version": 1,
+              "market": "CN",
+              "strategy_template": "momentum",
+              "run_tag": "closure_grid_006",
+              "source": "smoke.grid",
+              "created_at": 1775657914.5384011,
+              "trade_count": 2,
+              "win_rate": 0.0,
+              "max_drawdown": 0.006287,
+              "net_pnl": 111711.378581,
+              "bars": 80,
+              "bars_hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+              "params_hash": "9a630fe11843215a9423b4de5ef3be39b62f926feb027323e84b47edbd5e7b02"
+            },
+            "created_at": 1775657914.5384011
+          }
+        },
+        {
+          "index": 9,
+          "parameters": {
+            "lookback": 5,
+            "position_ratio": 0.8
+          },
+          "metrics": {
+            "trade_count": 2,
+            "winning_trades": 0,
+            "win_rate": 0.0,
+            "realized_pnl": 0.0,
+            "net_pnl": 111711.378581,
+            "total_return": 0.111711,
+            "max_drawdown": 0.006287,
+            "sharpe": 7.158212,
+            "turnover": 0.999478,
+            "signal_counts": {
+              "BUY": 25,
+              "SELL": 0,
+              "HOLD": 55
+            },
+            "market": "CN",
+            "strategy_template": "momentum"
+          },
+          "gate": {
+            "strategy_id": "4bf6cd1c-0325-409f-a928-3eb6d7dabb3c",
+            "strategy_name": "p4_lifecycle_smoke",
+            "version": 1,
+            "evaluated_at": 1775657914.6092498,
+            "passed": true,
+            "checks": [
+              {
+                "metric": "trade_count",
+                "value": 2,
+                "operator": ">=",
+                "threshold": 1,
+                "passed": true
+              },
+              {
+                "metric": "win_rate",
+                "value": 0.0,
+                "operator": ">=",
+                "threshold": 0.0,
+                "passed": true
+              },
+              {
+                "metric": "max_drawdown",
+                "value": 0.006287,
+                "operator": "<=",
+                "threshold": 0.2,
+                "passed": true
+              },
+              {
+                "metric": "net_pnl",
+                "value": 111711.378581,
+                "operator": ">=",
+                "threshold": 0.0,
+                "passed": true
+              },
+              {
+                "metric": "sharpe",
+                "value": 7.158212,
+                "operator": ">=",
+                "threshold": 0.5,
+                "passed": true
+              }
+            ],
+            "failed_checks": [],
+            "gate": {
+              "min_trades": 1,
+              "min_win_rate": 0.0,
+              "max_drawdown": 0.2,
+              "min_net_pnl": 0.0,
+              "min_sharpe": 0.5
+            },
+            "metrics": {
+              "trade_count": 2,
+              "winning_trades": 0,
+              "win_rate": 0.0,
+              "realized_pnl": 0.0,
+              "net_pnl": 111711.378581,
+              "total_return": 0.111711,
+              "max_drawdown": 0.006287,
+              "sharpe": 7.158212,
+              "turnover": 0.999478,
+              "signal_counts": {
+                "BUY": 25,
+                "SELL": 0,
+                "HOLD": 55
+              },
+              "market": "CN",
+              "strategy_template": "momentum"
+            },
+            "gate_context": {
+              "market": "CN",
+              "strategy_template": "momentum",
+              "rule_sources": [
+                {
+                  "source": "env.defaults",
+                  "rules": {
+                    "min_trades": 20.0,
+                    "min_win_rate": 0.52,
+                    "max_drawdown": 0.2,
+                    "min_net_pnl": 0.0,
+                    "min_sharpe": 0.5
+                  }
+                },
+                {
+                  "source": "request.overrides",
+                  "rules": {
+                    "min_trades": 1,
+                    "min_win_rate": 0.0
+                  }
+                }
+              ],
+              "manual_overrides": {
+                "min_trades": 1,
+                "min_win_rate": 0.0
+              }
+            }
+          },
+          "archive": {
+            "id": "58cd097e-a741-40aa-8a0c-b09376a702a6",
+            "strategy_id": "4bf6cd1c-0325-409f-a928-3eb6d7dabb3c",
+            "strategy_name": "p4_lifecycle_smoke",
+            "strategy_version": 1,
+            "market": "CN",
+            "strategy_template": "momentum",
+            "run_tag": "closure_grid_009",
+            "source": "smoke.grid",
+            "bars_hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "params_hash": "7b4131e57ef5bd19b38bdc5093a7109375757f84b5bfd9606259da6005c58af2",
+            "metrics": {
+              "trade_count": 2,
+              "winning_trades": 0,
+              "win_rate": 0.0,
+              "realized_pnl": 0.0,
+              "net_pnl": 111711.378581,
+              "total_return": 0.111711,
+              "max_drawdown": 0.006287,
+              "sharpe": 7.158212,
+              "turnover": 0.999478,
+              "signal_counts": {
+                "BUY": 25,
+                "SELL": 0,
+                "HOLD": 55
+              },
+              "market": "CN",
+              "strategy_template": "momentum"
+            },
+            "summary": {
+              "bars": 80,
+              "start_cash": 1000000.0,
+              "final_equity": 1111711.378581,
+              "final_cash": 222.625581,
+              "final_position": 99100,
+              "final_close": 11.21583
+            },
+            "trace_index": {
+              "report_id": "58cd097e-a741-40aa-8a0c-b09376a702a6",
+              "strategy_id": "4bf6cd1c-0325-409f-a928-3eb6d7dabb3c",
+              "strategy_name": "p4_lifecycle_smoke",
+              "strategy_version": 1,
+              "market": "CN",
+              "strategy_template": "momentum",
+              "run_tag": "closure_grid_009",
+              "source": "smoke.grid",
+              "created_at": 1775657914.610197,
+              "trade_count": 2,
+              "win_rate": 0.0,
+              "max_drawdown": 0.006287,
+              "net_pnl": 111711.378581,
+              "bars": 80,
+              "bars_hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+              "params_hash": "7b4131e57ef5bd19b38bdc5093a7109375757f84b5bfd9606259da6005c58af2"
+            },
+            "created_at": 1775657914.610197
+          }
+        },
+        {
+          "index": 5,
+          "parameters": {
+            "lookback": 3,
+            "position_ratio": 0.6
+          },
+          "metrics": {
+            "trade_count": 2,
+            "winning_trades": 0,
+            "win_rate": 0.0,
+            "realized_pnl": 0.0,
+            "net_pnl": 110232.878848,
+            "total_return": 0.110233,
+            "max_drawdown": 0.006283,
+            "sharpe": 7.115308,
+            "turnover": 0.998713,
+            "signal_counts": {
+              "BUY": 17,
+              "SELL": 0,
+              "HOLD": 63
+            },
+            "market": "CN",
+            "strategy_template": "momentum"
+          },
+          "gate": {
+            "strategy_id": "4bf6cd1c-0325-409f-a928-3eb6d7dabb3c",
+            "strategy_name": "p4_lifecycle_smoke",
+            "version": 1,
+            "evaluated_at": 1775657914.511068,
+            "passed": true,
+            "checks": [
+              {
+                "metric": "trade_count",
+                "value": 2,
+                "operator": ">=",
+                "threshold": 1,
+                "passed": true
+              },
+              {
+                "metric": "win_rate",
+                "value": 0.0,
+                "operator": ">=",
+                "threshold": 0.0,
+                "passed": true
+              },
+              {
+                "metric": "max_drawdown",
+                "value": 0.006283,
+                "operator": "<=",
+                "threshold": 0.2,
+                "passed": true
+              },
+              {
+                "metric": "net_pnl",
+                "value": 110232.878848,
+                "operator": ">=",
+                "threshold": 0.0,
+                "passed": true
+              },
+              {
+                "metric": "sharpe",
+                "value": 7.115308,
+                "operator": ">=",
+                "threshold": 0.5,
+                "passed": true
+              }
+            ],
+            "failed_checks": [],
+            "gate": {
+              "min_trades": 1,
+              "min_win_rate": 0.0,
+              "max_drawdown": 0.2,
+              "min_net_pnl": 0.0,
+              "min_sharpe": 0.5
+            },
+            "metrics": {
+              "trade_count": 2,
+              "winning_trades": 0,
+              "win_rate": 0.0,
+              "realized_pnl": 0.0,
+              "net_pnl": 110232.878848,
+              "total_return": 0.110233,
+              "max_drawdown": 0.006283,
+              "sharpe": 7.115308,
+              "turnover": 0.998713,
+              "signal_counts": {
+                "BUY": 17,
+                "SELL": 0,
+                "HOLD": 63
+              },
+              "market": "CN",
+              "strategy_template": "momentum"
+            },
+            "gate_context": {
+              "market": "CN",
+              "strategy_template": "momentum",
+              "rule_sources": [
+                {
+                  "source": "env.defaults",
+                  "rules": {
+                    "min_trades": 20.0,
+                    "min_win_rate": 0.52,
+                    "max_drawdown": 0.2,
+                    "min_net_pnl": 0.0,
+                    "min_sharpe": 0.5
+                  }
+                },
+                {
+                  "source": "request.overrides",
+                  "rules": {
+                    "min_trades": 1,
+                    "min_win_rate": 0.0
+                  }
+                }
+              ],
+              "manual_overrides": {
+                "min_trades": 1,
+                "min_win_rate": 0.0
+              }
+            }
+          },
+          "archive": {
+            "id": "3a53f6e9-671f-493f-81ce-2b2942f9bf49",
+            "strategy_id": "4bf6cd1c-0325-409f-a928-3eb6d7dabb3c",
+            "strategy_name": "p4_lifecycle_smoke",
+            "strategy_version": 1,
+            "market": "CN",
+            "strategy_template": "momentum",
+            "run_tag": "closure_grid_005",
+            "source": "smoke.grid",
+            "bars_hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "params_hash": "32f5f3182713663bd18ee7a1440085b67344f276fbec3f4c4db4b6400f39bbc3",
+            "metrics": {
+              "trade_count": 2,
+              "winning_trades": 0,
+              "win_rate": 0.0,
+              "realized_pnl": 0.0,
+              "net_pnl": 110232.878848,
+              "total_return": 0.110233,
+              "max_drawdown": 0.006283,
+              "sharpe": 7.115308,
+              "turnover": 0.998713,
+              "signal_counts": {
+                "BUY": 17,
+                "SELL": 0,
+                "HOLD": 63
+              },
+              "market": "CN",
+              "strategy_template": "momentum"
+            },
+            "summary": {
+              "bars": 80,
+              "start_cash": 1000000.0,
+              "final_equity": 1110232.878848,
+              "final_cash": 987.291848,
+              "final_position": 98900,
+              "final_close": 11.21583
+            },
+            "trace_index": {
+              "report_id": "3a53f6e9-671f-493f-81ce-2b2942f9bf49",
+              "strategy_id": "4bf6cd1c-0325-409f-a928-3eb6d7dabb3c",
+              "strategy_name": "p4_lifecycle_smoke",
+              "strategy_version": 1,
+              "market": "CN",
+              "strategy_template": "momentum",
+              "run_tag": "closure_grid_005",
+              "source": "smoke.grid",
+              "created_at": 1775657914.511911,
+              "trade_count": 2,
+              "win_rate": 0.0,
+              "max_drawdown": 0.006283,
+              "net_pnl": 110232.878848,
+              "bars": 80,
+              "bars_hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+              "params_hash": "32f5f3182713663bd18ee7a1440085b67344f276fbec3f4c4db4b6400f39bbc3"
+            },
+            "created_at": 1775657914.511911
+          }
+        },
+        {
+          "index": 8,
+          "parameters": {
+            "lookback": 5,
+            "position_ratio": 0.6
+          },
+          "metrics": {
+            "trade_count": 2,
+            "winning_trades": 0,
+            "win_rate": 0.0,
+            "realized_pnl": 0.0,
+            "net_pnl": 110232.878848,
+            "total_return": 0.110233,
+            "max_drawdown": 0.006283,
+            "sharpe": 7.115308,
+            "turnover": 0.998713,
+            "signal_counts": {
+              "BUY": 25,
+              "SELL": 0,
+              "HOLD": 55
+            },
+            "market": "CN",
+            "strategy_template": "momentum"
+          },
+          "gate": {
+            "strategy_id": "4bf6cd1c-0325-409f-a928-3eb6d7dabb3c",
+            "strategy_name": "p4_lifecycle_smoke",
+            "version": 1,
+            "evaluated_at": 1775657914.5844598,
+            "passed": true,
+            "checks": [
+              {
+                "metric": "trade_count",
+                "value": 2,
+                "operator": ">=",
+                "threshold": 1,
+                "passed": true
+              },
+              {
+                "metric": "win_rate",
+                "value": 0.0,
+                "operator": ">=",
+                "threshold": 0.0,
+                "passed": true
+              },
+              {
+                "metric": "max_drawdown",
+                "value": 0.006283,
+                "operator": "<=",
+                "threshold": 0.2,
+                "passed": true
+              },
+              {
+                "metric": "net_pnl",
+                "value": 110232.878848,
+                "operator": ">=",
+                "threshold": 0.0,
+                "passed": true
+              },
+              {
+                "metric": "sharpe",
+                "value": 7.115308,
+                "operator": ">=",
+                "threshold": 0.5,
+                "passed": true
+              }
+            ],
+            "failed_checks": [],
+            "gate": {
+              "min_trades": 1,
+              "min_win_rate": 0.0,
+              "max_drawdown": 0.2,
+              "min_net_pnl": 0.0,
+              "min_sharpe": 0.5
+            },
+            "metrics": {
+              "trade_count": 2,
+              "winning_trades": 0,
+              "win_rate": 0.0,
+              "realized_pnl": 0.0,
+              "net_pnl": 110232.878848,
+              "total_return": 0.110233,
+              "max_drawdown": 0.006283,
+              "sharpe": 7.115308,
+              "turnover": 0.998713,
+              "signal_counts": {
+                "BUY": 25,
+                "SELL": 0,
+                "HOLD": 55
+              },
+              "market": "CN",
+              "strategy_template": "momentum"
+            },
+            "gate_context": {
+              "market": "CN",
+              "strategy_template": "momentum",
+              "rule_sources": [
+                {
+                  "source": "env.defaults",
+                  "rules": {
+                    "min_trades": 20.0,
+                    "min_win_rate": 0.52,
+                    "max_drawdown": 0.2,
+                    "min_net_pnl": 0.0,
+                    "min_sharpe": 0.5
+                  }
+                },
+                {
+                  "source": "request.overrides",
+                  "rules": {
+                    "min_trades": 1,
+                    "min_win_rate": 0.0
+                  }
+                }
+              ],
+              "manual_overrides": {
+                "min_trades": 1,
+                "min_win_rate": 0.0
+              }
+            }
+          },
+          "archive": {
+            "id": "9306a584-1614-4c74-9770-dc88d5e759ee",
+            "strategy_id": "4bf6cd1c-0325-409f-a928-3eb6d7dabb3c",
+            "strategy_name": "p4_lifecycle_smoke",
+            "strategy_version": 1,
+            "market": "CN",
+            "strategy_template": "momentum",
+            "run_tag": "closure_grid_008",
+            "source": "smoke.grid",
+            "bars_hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "params_hash": "f3ea1bb593bcdca9b4ce244d8917e1feab7fe5ea8c4a2e7e829af13970b60505",
+            "metrics": {
+              "trade_count": 2,
+              "winning_trades": 0,
+              "win_rate": 0.0,
+              "realized_pnl": 0.0,
+              "net_pnl": 110232.878848,
+              "total_return": 0.110233,
+              "max_drawdown": 0.006283,
+              "sharpe": 7.115308,
+              "turnover": 0.998713,
+              "signal_counts": {
+                "BUY": 25,
+                "SELL": 0,
+                "HOLD": 55
+              },
+              "market": "CN",
+              "strategy_template": "momentum"
+            },
+            "summary": {
+              "bars": 80,
+              "start_cash": 1000000.0,
+              "final_equity": 1110232.878848,
+              "final_cash": 987.291848,
+              "final_position": 98900,
+              "final_close": 11.21583
+            },
+            "trace_index": {
+              "report_id": "9306a584-1614-4c74-9770-dc88d5e759ee",
+              "strategy_id": "4bf6cd1c-0325-409f-a928-3eb6d7dabb3c",
+              "strategy_name": "p4_lifecycle_smoke",
+              "strategy_version": 1,
+              "market": "CN",
+              "strategy_template": "momentum",
+              "run_tag": "closure_grid_008",
+              "source": "smoke.grid",
+              "created_at": 1775657914.585116,
+              "trade_count": 2,
+              "win_rate": 0.0,
+              "max_drawdown": 0.006283,
+              "net_pnl": 110232.878848,
+              "bars": 80,
+              "bars_hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+              "params_hash": "f3ea1bb593bcdca9b4ce244d8917e1feab7fe5ea8c4a2e7e829af13970b60505"
+            },
+            "created_at": 1775657914.585116
+          }
+        },
+        {
+          "index": 7,
+          "parameters": {
+            "lookback": 5,
+            "position_ratio": 0.4
+          },
+          "metrics": {
+            "trade_count": 3,
+            "winning_trades": 0,
+            "win_rate": 0.0,
+            "realized_pnl": 0.0,
+            "net_pnl": 109635.156637,
+            "total_return": 0.109635,
+            "max_drawdown": 0.006286,
+            "sharpe": 7.12354,
+            "turnover": 0.999311,
+            "signal_counts": {
+              "BUY": 25,
+              "SELL": 0,
+              "HOLD": 55
+            },
+            "market": "CN",
+            "strategy_template": "momentum"
+          },
+          "gate": {
+            "strategy_id": "4bf6cd1c-0325-409f-a928-3eb6d7dabb3c",
+            "strategy_name": "p4_lifecycle_smoke",
+            "version": 1,
+            "evaluated_at": 1775657914.5595682,
+            "passed": true,
+            "checks": [
+              {
+                "metric": "trade_count",
+                "value": 3,
+                "operator": ">=",
+                "threshold": 1,
+                "passed": true
+              },
+              {
+                "metric": "win_rate",
+                "value": 0.0,
+                "operator": ">=",
+                "threshold": 0.0,
+                "passed": true
+              },
+              {
+                "metric": "max_drawdown",
+                "value": 0.006286,
+                "operator": "<=",
+                "threshold": 0.2,
+                "passed": true
+              },
+              {
+                "metric": "net_pnl",
+                "value": 109635.156637,
+                "operator": ">=",
+                "threshold": 0.0,
+                "passed": true
+              },
+              {
+                "metric": "sharpe",
+                "value": 7.12354,
+                "operator": ">=",
+                "threshold": 0.5,
+                "passed": true
+              }
+            ],
+            "failed_checks": [],
+            "gate": {
+              "min_trades": 1,
+              "min_win_rate": 0.0,
+              "max_drawdown": 0.2,
+              "min_net_pnl": 0.0,
+              "min_sharpe": 0.5
+            },
+            "metrics": {
+              "trade_count": 3,
+              "winning_trades": 0,
+              "win_rate": 0.0,
+              "realized_pnl": 0.0,
+              "net_pnl": 109635.156637,
+              "total_return": 0.109635,
+              "max_drawdown": 0.006286,
+              "sharpe": 7.12354,
+              "turnover": 0.999311,
+              "signal_counts": {
+                "BUY": 25,
+                "SELL": 0,
+                "HOLD": 55
+              },
+              "market": "CN",
+              "strategy_template": "momentum"
+            },
+            "gate_context": {
+              "market": "CN",
+              "strategy_template": "momentum",
+              "rule_sources": [
+                {
+                  "source": "env.defaults",
+                  "rules": {
+                    "min_trades": 20.0,
+                    "min_win_rate": 0.52,
+                    "max_drawdown": 0.2,
+                    "min_net_pnl": 0.0,
+                    "min_sharpe": 0.5
+                  }
+                },
+                {
+                  "source": "request.overrides",
+                  "rules": {
+                    "min_trades": 1,
+                    "min_win_rate": 0.0
+                  }
+                }
+              ],
+              "manual_overrides": {
+                "min_trades": 1,
+                "min_win_rate": 0.0
+              }
+            }
+          },
+          "archive": {
+            "id": "df537017-4f15-401f-a6f8-f299e4e429ce",
+            "strategy_id": "4bf6cd1c-0325-409f-a928-3eb6d7dabb3c",
+            "strategy_name": "p4_lifecycle_smoke",
+            "strategy_version": 1,
+            "market": "CN",
+            "strategy_template": "momentum",
+            "run_tag": "closure_grid_007",
+            "source": "smoke.grid",
+            "bars_hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "params_hash": "8748e0ca966eaf78f7ac5235954571410a68743427a5ad5713549a0ce6463969",
+            "metrics": {
+              "trade_count": 3,
+              "winning_trades": 0,
+              "win_rate": 0.0,
+              "realized_pnl": 0.0,
+              "net_pnl": 109635.156637,
+              "total_return": 0.109635,
+              "max_drawdown": 0.006286,
+              "sharpe": 7.12354,
+              "turnover": 0.999311,
+              "signal_counts": {
+                "BUY": 25,
+                "SELL": 0,
+                "HOLD": 55
+              },
+              "market": "CN",
+              "strategy_template": "momentum"
+            },
+            "summary": {
+              "bars": 80,
+              "start_cash": 1000000.0,
+              "final_equity": 1109635.156637,
+              "final_cash": 389.569637,
+              "final_position": 98900,
+              "final_close": 11.21583
+            },
+            "trace_index": {
+              "report_id": "df537017-4f15-401f-a6f8-f299e4e429ce",
+              "strategy_id": "4bf6cd1c-0325-409f-a928-3eb6d7dabb3c",
+              "strategy_name": "p4_lifecycle_smoke",
+              "strategy_version": 1,
+              "market": "CN",
+              "strategy_template": "momentum",
+              "run_tag": "closure_grid_007",
+              "source": "smoke.grid",
+              "created_at": 1775657914.5603702,
+              "trade_count": 3,
+              "win_rate": 0.0,
+              "max_drawdown": 0.006286,
+              "net_pnl": 109635.156637,
+              "bars": 80,
+              "bars_hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+              "params_hash": "8748e0ca966eaf78f7ac5235954571410a68743427a5ad5713549a0ce6463969"
+            },
+            "created_at": 1775657914.5603702
+          }
+        }
+      ]
+    },
+    "archives": {
+      "count": 10,
+      "items": [
+        {
+          "id": "58cd097e-a741-40aa-8a0c-b09376a702a6",
+          "strategy_id": "4bf6cd1c-0325-409f-a928-3eb6d7dabb3c",
+          "strategy_name": "p4_lifecycle_smoke",
+          "strategy_version": 1,
+          "market": "CN",
+          "strategy_template": "momentum",
+          "run_tag": "closure_grid_009",
+          "source": "smoke.grid",
+          "bars_hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "params_hash": "7b4131e57ef5bd19b38bdc5093a7109375757f84b5bfd9606259da6005c58af2",
+          "metrics": {
+            "trade_count": 2,
+            "winning_trades": 0,
+            "win_rate": 0.0,
+            "realized_pnl": 0.0,
+            "net_pnl": 111711.378581,
+            "total_return": 0.111711,
+            "max_drawdown": 0.006287,
+            "sharpe": 7.158212,
+            "turnover": 0.999478,
+            "signal_counts": {
+              "BUY": 25,
+              "SELL": 0,
+              "HOLD": 55
+            },
+            "market": "CN",
+            "strategy_template": "momentum"
+          },
+          "summary": {
+            "bars": 80,
+            "start_cash": 1000000.0,
+            "final_equity": 1111711.378581,
+            "final_cash": 222.625581,
+            "final_position": 99100,
+            "final_close": 11.21583
+          },
+          "trace_index": {
+            "report_id": "58cd097e-a741-40aa-8a0c-b09376a702a6",
+            "strategy_id": "4bf6cd1c-0325-409f-a928-3eb6d7dabb3c",
+            "strategy_name": "p4_lifecycle_smoke",
+            "strategy_version": 1,
+            "market": "CN",
+            "strategy_template": "momentum",
+            "run_tag": "closure_grid_009",
+            "source": "smoke.grid",
+            "created_at": 1775657914.610197,
+            "trade_count": 2,
+            "win_rate": 0.0,
+            "max_drawdown": 0.006287,
+            "net_pnl": 111711.378581,
+            "bars": 80,
+            "bars_hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "params_hash": "7b4131e57ef5bd19b38bdc5093a7109375757f84b5bfd9606259da6005c58af2"
+          },
+          "created_at": 1775657914.610197
+        },
+        {
+          "id": "9306a584-1614-4c74-9770-dc88d5e759ee",
+          "strategy_id": "4bf6cd1c-0325-409f-a928-3eb6d7dabb3c",
+          "strategy_name": "p4_lifecycle_smoke",
+          "strategy_version": 1,
+          "market": "CN",
+          "strategy_template": "momentum",
+          "run_tag": "closure_grid_008",
+          "source": "smoke.grid",
+          "bars_hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "params_hash": "f3ea1bb593bcdca9b4ce244d8917e1feab7fe5ea8c4a2e7e829af13970b60505",
+          "metrics": {
+            "trade_count": 2,
+            "winning_trades": 0,
+            "win_rate": 0.0,
+            "realized_pnl": 0.0,
+            "net_pnl": 110232.878848,
+            "total_return": 0.110233,
+            "max_drawdown": 0.006283,
+            "sharpe": 7.115308,
+            "turnover": 0.998713,
+            "signal_counts": {
+              "BUY": 25,
+              "SELL": 0,
+              "HOLD": 55
+            },
+            "market": "CN",
+            "strategy_template": "momentum"
+          },
+          "summary": {
+            "bars": 80,
+            "start_cash": 1000000.0,
+            "final_equity": 1110232.878848,
+            "final_cash": 987.291848,
+            "final_position": 98900,
+            "final_close": 11.21583
+          },
+          "trace_index": {
+            "report_id": "9306a584-1614-4c74-9770-dc88d5e759ee",
+            "strategy_id": "4bf6cd1c-0325-409f-a928-3eb6d7dabb3c",
+            "strategy_name": "p4_lifecycle_smoke",
+            "strategy_version": 1,
+            "market": "CN",
+            "strategy_template": "momentum",
+            "run_tag": "closure_grid_008",
+            "source": "smoke.grid",
+            "created_at": 1775657914.585116,
+            "trade_count": 2,
+            "win_rate": 0.0,
+            "max_drawdown": 0.006283,
+            "net_pnl": 110232.878848,
+            "bars": 80,
+            "bars_hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "params_hash": "f3ea1bb593bcdca9b4ce244d8917e1feab7fe5ea8c4a2e7e829af13970b60505"
+          },
+          "created_at": 1775657914.585116
+        },
+        {
+          "id": "df537017-4f15-401f-a6f8-f299e4e429ce",
+          "strategy_id": "4bf6cd1c-0325-409f-a928-3eb6d7dabb3c",
+          "strategy_name": "p4_lifecycle_smoke",
+          "strategy_version": 1,
+          "market": "CN",
+          "strategy_template": "momentum",
+          "run_tag": "closure_grid_007",
+          "source": "smoke.grid",
+          "bars_hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "params_hash": "8748e0ca966eaf78f7ac5235954571410a68743427a5ad5713549a0ce6463969",
+          "metrics": {
+            "trade_count": 3,
+            "winning_trades": 0,
+            "win_rate": 0.0,
+            "realized_pnl": 0.0,
+            "net_pnl": 109635.156637,
+            "total_return": 0.109635,
+            "max_drawdown": 0.006286,
+            "sharpe": 7.12354,
+            "turnover": 0.999311,
+            "signal_counts": {
+              "BUY": 25,
+              "SELL": 0,
+              "HOLD": 55
+            },
+            "market": "CN",
+            "strategy_template": "momentum"
+          },
+          "summary": {
+            "bars": 80,
+            "start_cash": 1000000.0,
+            "final_equity": 1109635.156637,
+            "final_cash": 389.569637,
+            "final_position": 98900,
+            "final_close": 11.21583
+          },
+          "trace_index": {
+            "report_id": "df537017-4f15-401f-a6f8-f299e4e429ce",
+            "strategy_id": "4bf6cd1c-0325-409f-a928-3eb6d7dabb3c",
+            "strategy_name": "p4_lifecycle_smoke",
+            "strategy_version": 1,
+            "market": "CN",
+            "strategy_template": "momentum",
+            "run_tag": "closure_grid_007",
+            "source": "smoke.grid",
+            "created_at": 1775657914.5603702,
+            "trade_count": 3,
+            "win_rate": 0.0,
+            "max_drawdown": 0.006286,
+            "net_pnl": 109635.156637,
+            "bars": 80,
+            "bars_hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "params_hash": "8748e0ca966eaf78f7ac5235954571410a68743427a5ad5713549a0ce6463969"
+          },
+          "created_at": 1775657914.5603702
+        },
+        {
+          "id": "b9b2e9c5-ba67-46f0-99fb-6ea8547595be",
+          "strategy_id": "4bf6cd1c-0325-409f-a928-3eb6d7dabb3c",
+          "strategy_name": "p4_lifecycle_smoke",
+          "strategy_version": 1,
+          "market": "CN",
+          "strategy_template": "momentum",
+          "run_tag": "closure_grid_006",
+          "source": "smoke.grid",
+          "bars_hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "params_hash": "9a630fe11843215a9423b4de5ef3be39b62f926feb027323e84b47edbd5e7b02",
+          "metrics": {
+            "trade_count": 2,
+            "winning_trades": 0,
+            "win_rate": 0.0,
+            "realized_pnl": 0.0,
+            "net_pnl": 111711.378581,
+            "total_return": 0.111711,
+            "max_drawdown": 0.006287,
+            "sharpe": 7.158212,
+            "turnover": 0.999478,
+            "signal_counts": {
+              "BUY": 17,
+              "SELL": 0,
+              "HOLD": 63
+            },
+            "market": "CN",
+            "strategy_template": "momentum"
+          },
+          "summary": {
+            "bars": 80,
+            "start_cash": 1000000.0,
+            "final_equity": 1111711.378581,
+            "final_cash": 222.625581,
+            "final_position": 99100,
+            "final_close": 11.21583
+          },
+          "trace_index": {
+            "report_id": "b9b2e9c5-ba67-46f0-99fb-6ea8547595be",
+            "strategy_id": "4bf6cd1c-0325-409f-a928-3eb6d7dabb3c",
+            "strategy_name": "p4_lifecycle_smoke",
+            "strategy_version": 1,
+            "market": "CN",
+            "strategy_template": "momentum",
+            "run_tag": "closure_grid_006",
+            "source": "smoke.grid",
+            "created_at": 1775657914.5384011,
+            "trade_count": 2,
+            "win_rate": 0.0,
+            "max_drawdown": 0.006287,
+            "net_pnl": 111711.378581,
+            "bars": 80,
+            "bars_hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "params_hash": "9a630fe11843215a9423b4de5ef3be39b62f926feb027323e84b47edbd5e7b02"
+          },
+          "created_at": 1775657914.5384011
+        },
+        {
+          "id": "3a53f6e9-671f-493f-81ce-2b2942f9bf49",
+          "strategy_id": "4bf6cd1c-0325-409f-a928-3eb6d7dabb3c",
+          "strategy_name": "p4_lifecycle_smoke",
+          "strategy_version": 1,
+          "market": "CN",
+          "strategy_template": "momentum",
+          "run_tag": "closure_grid_005",
+          "source": "smoke.grid",
+          "bars_hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "params_hash": "32f5f3182713663bd18ee7a1440085b67344f276fbec3f4c4db4b6400f39bbc3",
+          "metrics": {
+            "trade_count": 2,
+            "winning_trades": 0,
+            "win_rate": 0.0,
+            "realized_pnl": 0.0,
+            "net_pnl": 110232.878848,
+            "total_return": 0.110233,
+            "max_drawdown": 0.006283,
+            "sharpe": 7.115308,
+            "turnover": 0.998713,
+            "signal_counts": {
+              "BUY": 17,
+              "SELL": 0,
+              "HOLD": 63
+            },
+            "market": "CN",
+            "strategy_template": "momentum"
+          },
+          "summary": {
+            "bars": 80,
+            "start_cash": 1000000.0,
+            "final_equity": 1110232.878848,
+            "final_cash": 987.291848,
+            "final_position": 98900,
+            "final_close": 11.21583
+          },
+          "trace_index": {
+            "report_id": "3a53f6e9-671f-493f-81ce-2b2942f9bf49",
+            "strategy_id": "4bf6cd1c-0325-409f-a928-3eb6d7dabb3c",
+            "strategy_name": "p4_lifecycle_smoke",
+            "strategy_version": 1,
+            "market": "CN",
+            "strategy_template": "momentum",
+            "run_tag": "closure_grid_005",
+            "source": "smoke.grid",
+            "created_at": 1775657914.511911,
+            "trade_count": 2,
+            "win_rate": 0.0,
+            "max_drawdown": 0.006283,
+            "net_pnl": 110232.878848,
+            "bars": 80,
+            "bars_hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "params_hash": "32f5f3182713663bd18ee7a1440085b67344f276fbec3f4c4db4b6400f39bbc3"
+          },
+          "created_at": 1775657914.511911
+        },
+        {
+          "id": "f4d3188b-e19c-4e18-83f5-43a08fc0648f",
+          "strategy_id": "4bf6cd1c-0325-409f-a928-3eb6d7dabb3c",
+          "strategy_name": "p4_lifecycle_smoke",
+          "strategy_version": 1,
+          "market": "CN",
+          "strategy_template": "momentum",
+          "run_tag": "closure_grid_004",
+          "source": "smoke.grid",
+          "bars_hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "params_hash": "dc0f491cc38198c68b1364eb25bcb24b72d00912b3abd837f899ba1b2e046988",
+          "metrics": {
+            "trade_count": 3,
+            "winning_trades": 0,
+            "win_rate": 0.0,
+            "realized_pnl": 0.0,
+            "net_pnl": 107338.666815,
+            "total_return": 0.107339,
+            "max_drawdown": 0.006286,
+            "sharpe": 7.063421,
+            "turnover": 0.999364,
+            "signal_counts": {
+              "BUY": 17,
+              "SELL": 0,
+              "HOLD": 63
+            },
+            "market": "CN",
+            "strategy_template": "momentum"
+          },
+          "summary": {
+            "bars": 80,
+            "start_cash": 1000000.0,
+            "final_equity": 1107338.666815,
+            "final_cash": 336.245815,
+            "final_position": 98700,
+            "final_close": 11.21583
+          },
+          "trace_index": {
+            "report_id": "f4d3188b-e19c-4e18-83f5-43a08fc0648f",
+            "strategy_id": "4bf6cd1c-0325-409f-a928-3eb6d7dabb3c",
+            "strategy_name": "p4_lifecycle_smoke",
+            "strategy_version": 1,
+            "market": "CN",
+            "strategy_template": "momentum",
+            "run_tag": "closure_grid_004",
+            "source": "smoke.grid",
+            "created_at": 1775657914.4793115,
+            "trade_count": 3,
+            "win_rate": 0.0,
+            "max_drawdown": 0.006286,
+            "net_pnl": 107338.666815,
+            "bars": 80,
+            "bars_hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "params_hash": "dc0f491cc38198c68b1364eb25bcb24b72d00912b3abd837f899ba1b2e046988"
+          },
+          "created_at": 1775657914.4793115
+        },
+        {
+          "id": "34470ecf-f59e-4aea-afe1-d6a5e30efbd5",
+          "strategy_id": "4bf6cd1c-0325-409f-a928-3eb6d7dabb3c",
+          "strategy_name": "p4_lifecycle_smoke",
+          "strategy_version": 1,
+          "market": "CN",
+          "strategy_template": "momentum",
+          "run_tag": "closure_grid_003",
+          "source": "smoke.grid",
+          "bars_hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "params_hash": "035e78cc8b7a77166355c085b06c75808435f96fc156ccbc174e38a24ab5e1f9",
+          "metrics": {
+            "trade_count": 2,
+            "winning_trades": 0,
+            "win_rate": 0.0,
+            "realized_pnl": 0.0,
+            "net_pnl": 103147.155905,
+            "total_return": 0.103147,
+            "max_drawdown": 0.006285,
+            "sharpe": 6.85656,
+            "turnover": 0.999069,
+            "signal_counts": {
+              "BUY": 8,
+              "SELL": 0,
+              "HOLD": 72
+            },
+            "market": "CN",
+            "strategy_template": "momentum"
+          },
+          "summary": {
+            "bars": 80,
+            "start_cash": 1000000.0,
+            "final_equity": 1103147.155905,
+            "final_cash": 631.066905,
+            "final_position": 98300,
+            "final_close": 11.21583
+          },
+          "trace_index": {
+            "report_id": "34470ecf-f59e-4aea-afe1-d6a5e30efbd5",
+            "strategy_id": "4bf6cd1c-0325-409f-a928-3eb6d7dabb3c",
+            "strategy_name": "p4_lifecycle_smoke",
+            "strategy_version": 1,
+            "market": "CN",
+            "strategy_template": "momentum",
+            "run_tag": "closure_grid_003",
+            "source": "smoke.grid",
+            "created_at": 1775657914.45169,
+            "trade_count": 2,
+            "win_rate": 0.0,
+            "max_drawdown": 0.006285,
+            "net_pnl": 103147.155905,
+            "bars": 80,
+            "bars_hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "params_hash": "035e78cc8b7a77166355c085b06c75808435f96fc156ccbc174e38a24ab5e1f9"
+          },
+          "created_at": 1775657914.45169
+        },
+        {
+          "id": "3e434e60-5985-431c-b17a-eb5572ea6992",
+          "strategy_id": "4bf6cd1c-0325-409f-a928-3eb6d7dabb3c",
+          "strategy_name": "p4_lifecycle_smoke",
+          "strategy_version": 1,
+          "market": "CN",
+          "strategy_template": "momentum",
+          "run_tag": "closure_grid_002",
+          "source": "smoke.grid",
+          "bars_hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "params_hash": "5c8854602ea5951c3e48f4d465acc5c196dd86f2b860f364b0b8c62ffd2d4e88",
+          "metrics": {
+            "trade_count": 2,
+            "winning_trades": 0,
+            "win_rate": 0.0,
+            "realized_pnl": 0.0,
+            "net_pnl": 100147.590231,
+            "total_return": 0.100148,
+            "max_drawdown": 0.006282,
+            "sharpe": 6.793266,
+            "turnover": 0.998704,
+            "signal_counts": {
+              "BUY": 8,
+              "SELL": 0,
+              "HOLD": 72
+            },
+            "market": "CN",
+            "strategy_template": "momentum"
+          },
+          "summary": {
+            "bars": 80,
+            "start_cash": 1000000.0,
+            "final_equity": 1100147.590231,
+            "final_cash": 996.250231,
+            "final_position": 98000,
+            "final_close": 11.21583
+          },
+          "trace_index": {
+            "report_id": "3e434e60-5985-431c-b17a-eb5572ea6992",
+            "strategy_id": "4bf6cd1c-0325-409f-a928-3eb6d7dabb3c",
+            "strategy_name": "p4_lifecycle_smoke",
+            "strategy_version": 1,
+            "market": "CN",
+            "strategy_template": "momentum",
+            "run_tag": "closure_grid_002",
+            "source": "smoke.grid",
+            "created_at": 1775657914.42964,
+            "trade_count": 2,
+            "win_rate": 0.0,
+            "max_drawdown": 0.006282,
+            "net_pnl": 100147.590231,
+            "bars": 80,
+            "bars_hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "params_hash": "5c8854602ea5951c3e48f4d465acc5c196dd86f2b860f364b0b8c62ffd2d4e88"
+          },
+          "created_at": 1775657914.42964
+        },
+        {
+          "id": "cf56b0b9-1448-410f-b207-596116a5e2f6",
+          "strategy_id": "4bf6cd1c-0325-409f-a928-3eb6d7dabb3c",
+          "strategy_name": "p4_lifecycle_smoke",
+          "strategy_version": 1,
+          "market": "CN",
+          "strategy_template": "momentum",
+          "run_tag": "closure_grid_001",
+          "source": "smoke.grid",
+          "bars_hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "params_hash": "e67fe57e1f2aa2172b860fd62d2bcd991f39186c8a6d9b4c160bcce21a55482a",
+          "metrics": {
+            "trade_count": 3,
+            "winning_trades": 0,
+            "win_rate": 0.0,
+            "realized_pnl": 0.0,
+            "net_pnl": 94330.593825,
+            "total_return": 0.094331,
+            "max_drawdown": 0.006284,
+            "sharpe": 6.668286,
+            "turnover": 0.998913,
+            "signal_counts": {
+              "BUY": 8,
+              "SELL": 0,
+              "HOLD": 72
+            },
+            "market": "CN",
+            "strategy_template": "momentum"
+          },
+          "summary": {
+            "bars": 80,
+            "start_cash": 1000000.0,
+            "final_equity": 1094330.593825,
+            "final_cash": 787.168825,
+            "final_position": 97500,
+            "final_close": 11.21583
+          },
+          "trace_index": {
+            "report_id": "cf56b0b9-1448-410f-b207-596116a5e2f6",
+            "strategy_id": "4bf6cd1c-0325-409f-a928-3eb6d7dabb3c",
+            "strategy_name": "p4_lifecycle_smoke",
+            "strategy_version": 1,
+            "market": "CN",
+            "strategy_template": "momentum",
+            "run_tag": "closure_grid_001",
+            "source": "smoke.grid",
+            "created_at": 1775657914.4017956,
+            "trade_count": 3,
+            "win_rate": 0.0,
+            "max_drawdown": 0.006284,
+            "net_pnl": 94330.593825,
+            "bars": 80,
+            "bars_hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "params_hash": "e67fe57e1f2aa2172b860fd62d2bcd991f39186c8a6d9b4c160bcce21a55482a"
+          },
+          "created_at": 1775657914.4017956
+        },
+        {
+          "id": "f10a0152-1910-492c-9bc0-e73d0cf3eb96",
+          "strategy_id": "4bf6cd1c-0325-409f-a928-3eb6d7dabb3c",
+          "strategy_name": "p4_lifecycle_smoke",
+          "strategy_version": 1,
+          "market": "CN",
+          "strategy_template": "momentum",
+          "run_tag": "closure_baseline",
+          "source": "smoke.baseline",
+          "bars_hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "params_hash": "32f5f3182713663bd18ee7a1440085b67344f276fbec3f4c4db4b6400f39bbc3",
+          "metrics": {
+            "trade_count": 2,
+            "winning_trades": 0,
+            "win_rate": 0.0,
+            "realized_pnl": 0.0,
+            "net_pnl": 110232.878848,
+            "total_return": 0.110233,
+            "max_drawdown": 0.006283,
+            "sharpe": 7.115308,
+            "turnover": 0.998713,
+            "signal_counts": {
+              "BUY": 17,
+              "SELL": 0,
+              "HOLD": 63
+            },
+            "market": "CN",
+            "strategy_template": "momentum"
+          },
+          "summary": {
+            "bars": 80,
+            "start_cash": 1000000.0,
+            "final_equity": 1110232.878848,
+            "final_cash": 987.291848,
+            "final_position": 98900,
+            "final_close": 11.21583
+          },
+          "trace_index": {
+            "report_id": "f10a0152-1910-492c-9bc0-e73d0cf3eb96",
+            "strategy_id": "4bf6cd1c-0325-409f-a928-3eb6d7dabb3c",
+            "strategy_name": "p4_lifecycle_smoke",
+            "strategy_version": 1,
+            "market": "CN",
+            "strategy_template": "momentum",
+            "run_tag": "closure_baseline",
+            "source": "smoke.baseline",
+            "created_at": 1775657914.3388503,
+            "trade_count": 2,
+            "win_rate": 0.0,
+            "max_drawdown": 0.006283,
+            "net_pnl": 110232.878848,
+            "bars": 80,
+            "bars_hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "params_hash": "32f5f3182713663bd18ee7a1440085b67344f276fbec3f4c4db4b6400f39bbc3"
+          },
+          "created_at": 1775657914.3388503
+        }
+      ]
+    }
+  },
+  "status": "PASS"
+}

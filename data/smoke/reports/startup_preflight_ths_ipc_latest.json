@@ -1,0 +1,50 @@
+{
+  "checked_at": "2026-04-08T14:27:57.292761+00:00",
+  "channel": "ths_ipc",
+  "ok": false,
+  "summary": {
+    "total": 4,
+    "failed": 1,
+    "critical_failed": 1,
+    "warning_failed": 0
+  },
+  "checks": [
+    {
+      "name": "trading_channel_supported",
+      "ok": true,
+      "severity": "critical",
+      "message": "TRADING_CHANNEL=ths_ipc",
+      "hint": "可选值: qmt, simulation, ths_auto, ths_ipc",
+      "metadata": {}
+    },
+    {
+      "name": "data_dir_writable",
+      "ok": true,
+      "severity": "critical",
+      "message": "DATA_DIR=D:\\来财\\Attract-wealth\\data",
+      "hint": "确保运行账号对 DATA_DIR 具有读写权限。",
+      "metadata": {
+        "path": "D:\\来财\\Attract-wealth\\data"
+      }
+    },
+    {
+      "name": "ths_ipc_bridge",
+      "ok": false,
+      "severity": "critical",
+      "message": "127.0.0.1:8089 unreachable: timed out",
+      "hint": "先在同花顺中启动 laicai_bridge.py。",
+      "metadata": {
+        "host": "127.0.0.1",
+        "port": 8089
+      }
+    },
+    {
+      "name": "pandas_module",
+      "ok": true,
+      "severity": "warning",
+      "message": "pandas import ok",
+      "hint": "启用稳定性探针前请安装 pandas。",
+      "metadata": {}
+    }
+  ]
+}

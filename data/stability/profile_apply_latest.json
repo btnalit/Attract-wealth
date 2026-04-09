@@ -1,0 +1,37 @@
+{
+  "report_version": "1.0",
+  "started_at": "2026-04-08T10:25:16.471344+00:00",
+  "finished_at": "2026-04-08T10:25:16.486930+00:00",
+  "profile": "ths_paper_default",
+  "applied_env": {
+    "DATA_PROVIDER_RATE_LIMIT_PER_MINUTE": "120",
+    "DATA_PROVIDER_MIN_INTERVAL_MS": "120",
+    "DATA_PROVIDER_MAX_WAIT_MS": "400",
+    "DATA_PROVIDER_BACKOFF_RETRIES": "2",
+    "DATA_PROVIDER_BACKOFF_BASE_MS": "80",
+    "DATA_PROVIDER_BACKOFF_FACTOR": "2.0",
+    "DATA_PROVIDER_BACKOFF_MAX_MS": "1000",
+    "DATA_QUALITY_ERROR_WARN": "0.15",
+    "DATA_QUALITY_ERROR_BLOCK": "0.40",
+    "DATA_QUALITY_EMPTY_WARN": "0.30",
+    "DATA_QUALITY_EMPTY_BLOCK": "0.70",
+    "DATA_QUALITY_RETRY_WARN": "0.20",
+    "DATA_QUALITY_RETRY_BLOCK": "0.60",
+    "DATA_QUALITY_RATE_LIMIT_WARN": "0.20",
+    "DATA_QUALITY_RATE_LIMIT_BLOCK": "0.50",
+    "DATA_QUALITY_STALE_WARN_DAYS": "3",
+    "DATA_QUALITY_STALE_BLOCK_DAYS": "7",
+    "DATA_QUALITY_PROVIDER_ERROR_WARN": "0.50",
+    "DATA_QUALITY_PROVIDER_ERROR_BLOCK": "0.90",
+    "DATA_QUALITY_PROVIDER_MIN_REQUESTS": "3"
+  },
+  "runtime_config": {},
+  "summary": {},
+  "quality": {},
+  "tuning": {},
+  "degraded_error": "No module named 'pandas'",
+  "stability_probe": {
+    "enabled": false,
+    "returncode": null
+  }
+}

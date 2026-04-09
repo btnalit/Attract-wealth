@@ -1,0 +1,105 @@
+{
+  "report_version": "1.1",
+  "started_at": "2026-04-08T17:32:38.707925+00:00",
+  "inputs": {
+    "exe_path": "D:\\同花顺软件\\同花顺\\xiadan.exe",
+    "broker": "ths",
+    "repo_path": "",
+    "include_orders": true,
+    "include_trades": true,
+    "runtime_guard": false,
+    "require_32bit_python": false,
+    "require_process_access": true,
+    "auto_delegate_32bit": false,
+    "python32_path": ""
+  },
+  "launcher": {
+    "used_python": "D:\\来财\\Attract-wealth\\.venv\\Scripts\\python.exe",
+    "delegated_to_python32": false,
+    "python32_path": "",
+    "worker_returncode": 0,
+    "worker_mode": false
+  },
+  "runtime": {
+    "ok": true,
+    "exe_path": "D:\\同花顺软件\\同花顺\\xiadan.exe",
+    "process_name": "xiadan.exe",
+    "process_pid": 10988,
+    "process_running": true,
+    "process_running_known": true,
+    "process_access_ok": true,
+    "process_access_error": "",
+    "python_bits": 64,
+    "exe_bits": 32,
+    "needs_32bit_python": true,
+    "current_process_admin": false,
+    "require_32bit_python": false,
+    "require_process_access": true,
+    "arch_ok": true,
+    "access_gate_ok": true,
+    "hints": [
+      "当前 Python 为 64 位，建议切换到 32 位 Python 运行 easytrader。"
+    ],
+    "errors": []
+  },
+  "probe": {
+    "ok": false,
+    "connected": true,
+    "exe_path": "D:\\同花顺软件\\同花顺\\xiadan.exe",
+    "broker": "ths",
+    "repo_path": "",
+    "errors": [
+      "No module named 'pytesseract'"
+    ],
+    "meta": {
+      "ok": true,
+      "reason": "connected",
+      "exe_path": "D:\\同花顺软件\\同花顺\\xiadan.exe",
+      "broker": "ths",
+      "errors": [],
+      "load_meta": {
+        "ok": true,
+        "source": "D:\\来财\\easytrader-master",
+        "attempts": [
+          {
+            "source": "pythonpath",
+            "error": "No module named 'easytrader'"
+          }
+        ]
+      }
+    },
+    "summary": {},
+    "account": {},
+    "balance": {},
+    "positions": [],
+    "orders": [],
+    "trades": [],
+    "close_client": false,
+    "runtime_guard": false,
+    "runtime": {
+      "ok": true,
+      "exe_path": "D:\\同花顺软件\\同花顺\\xiadan.exe",
+      "process_name": "xiadan.exe",
+      "process_pid": 10988,
+      "process_running": true,
+      "process_running_known": true,
+      "process_access_ok": true,
+      "process_access_error": "",
+      "python_bits": 64,
+      "exe_bits": 32,
+      "needs_32bit_python": true,
+      "current_process_admin": false,
+      "require_32bit_python": false,
+      "require_process_access": true,
+      "arch_ok": true,
+      "access_gate_ok": true,
+      "hints": [
+        "当前 Python 为 64 位，建议切换到 32 位 Python 运行 easytrader。"
+      ],
+      "errors": []
+    },
+    "elapsed_ms": 8471.696
+  },
+  "status": "FAIL",
+  "finished_at": "2026-04-08T17:32:38.707972+00:00"
+}
