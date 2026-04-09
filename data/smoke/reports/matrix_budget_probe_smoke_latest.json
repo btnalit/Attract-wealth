@@ -1,0 +1,125 @@
+{
+  "report_version": "1.2",
+  "generated_at": "2026-04-08T20:04:57.952468",
+  "channels": [
+    "simulation"
+  ],
+  "allow_skip": true,
+  "counts": {
+    "pass": 1,
+    "skip": 0,
+    "fail": 0
+  },
+  "all_passed": true,
+  "results": [
+    {
+      "channel": "simulation",
+      "status": "PASS",
+      "gate_ok": true,
+      "returncode": 0,
+      "report": "data\\smoke\\reports\\simulation_latest.json",
+      "stdout": "[smoke] status=PASS channel=simulation output=data\\smoke\\reports\\simulation_latest.json\n[smoke] check=preflight ok=True skipped=False elapsed_ms=0.004 detail=ok\n[smoke] check=connect ok=True skipped=False elapsed_ms=0.002 detail=ok\n[smoke] check=get_balance ok=True skipped=False elapsed_ms=0.007 detail=ok\n[smoke] check=get_positions ok=True skipped=False elapsed_ms=0.001 detail=ok\n[smoke] check=get_orders ok=True skipped=False elapsed_ms=0.003 detail=ok\n[smoke] check=reconciliation_probe ok=True skipped=True elapsed_ms=0.005 detail=reconcile probe disabled\n[smoke] check=order_probe ok=True skipped=True elapsed_ms=0.003 detail=order probe disabled\n",
+      "stderr": "",
+      "checks": [
+        {
+          "name": "preflight",
+          "ok": true,
+          "skipped": false,
+          "detail": "ok",
+          "elapsed_ms": 0.004
+        },
+        {
+          "name": "connect",
+          "ok": true,
+          "skipped": false,
+          "detail": "ok",
+          "elapsed_ms": 0.002
+        },
+        {
+          "name": "get_balance",
+          "ok": true,
+          "skipped": false,
+          "detail": "ok",
+          "elapsed_ms": 0.007
+        },
+        {
+          "name": "get_positions",
+          "ok": true,
+          "skipped": false,
+          "detail": "ok",
+          "elapsed_ms": 0.001
+        },
+        {
+          "name": "get_orders",
+          "ok": true,
+          "skipped": false,
+          "detail": "ok",
+          "elapsed_ms": 0.003
+        },
+        {
+          "name": "reconciliation_probe",
+          "ok": true,
+          "skipped": true,
+          "detail": "reconcile probe disabled",
+          "elapsed_ms": 0.005
+        },
+        {
+          "name": "order_probe",
+          "ok": true,
+          "skipped": true,
+          "detail": "order probe disabled",
+          "elapsed_ms": 0.003
+        }
+      ],
+      "preflight": {
+        "ready": true,
+        "reason": "simulation ready",
+        "metadata": {}
+      }
+    }
+  ],
+  "stability_probe": {
+    "enabled": false,
+    "status": "SKIP",
+    "gate_ok": true
+  },
+  "budget_recovery_probe": {
+    "enabled": true,
+    "status": "PASS",
+    "gate_ok": true,
+    "returncode": 0,
+    "report": "data\\smoke\\reports\\budget_recovery_latest.json",
+    "stdout": "[budget-recovery-probe] output=data\\smoke\\reports\\budget_recovery_latest.json status=PASS success_rate=1.0000 avg_recovery_s=0.2415\n",
+    "stderr": "",
+    "summary": {
+      "cycles": 20,
+      "steps_total": 100,
+      "activation_count": 20,
+      "release_count": 20,
+      "recovery_success_count": 20,
+      "recovery_success_rate": 1.0,
+      "avg_recovery_duration_s": 0.241496,
+      "p95_recovery_duration_s": 0.242006,
+      "active_elapsed_s": 0.0
+    },
+    "params": {
+      "cycles": 20,
+      "active_steps": 2,
+      "recovery_steps": 3,
+      "interval_ms": 120,
+      "budget_usd": 1.0,
+      "exceed_cost": 1.2,
+      "recover_cost": 0.6,
+      "recovery_ratio": 0.8,
+      "cooldown_s": 0.2,
+      "action": "force_hold",
+      "min_success_rate": 0.95,
+      "max_avg_recovery_s": 5.0
+    },
+    "gate": {
+      "status": "PASS",
+      "failed_rules": [],
+      "warn_rules": []
+    }
+  }
+}

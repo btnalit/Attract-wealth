@@ -1,0 +1,89 @@
+{
+  "report_version": "1.1",
+  "generated_at": "2026-04-08T14:49:03.194112",
+  "channels": [
+    "ths_ipc"
+  ],
+  "allow_skip": false,
+  "counts": {
+    "pass": 1,
+    "skip": 0,
+    "fail": 0
+  },
+  "all_passed": true,
+  "results": [
+    {
+      "channel": "ths_ipc",
+      "status": "PASS",
+      "gate_ok": true,
+      "returncode": 0,
+      "report": "data\\smoke\\reports\\ths_ipc_latest.json",
+      "stdout": "[smoke] status=PASS channel=ths_ipc output=data\\smoke\\reports\\ths_ipc_latest.json\n[smoke] check=preflight ok=True skipped=False elapsed_ms=3.234 detail=ok\n[smoke] check=connect ok=True skipped=False elapsed_ms=5.842 detail=ok\n[smoke] check=get_balance ok=True skipped=False elapsed_ms=13.696 detail=ok\n[smoke] check=get_positions ok=True skipped=False elapsed_ms=2.105 detail=ok\n[smoke] check=get_orders ok=True skipped=False elapsed_ms=15.272 detail=ok\n[smoke] check=reconciliation_probe ok=True skipped=True elapsed_ms=0.01 detail=reconcile probe disabled\n[smoke] check=order_probe ok=True skipped=True elapsed_ms=0.004 detail=order probe disabled\n",
+      "stderr": "",
+      "checks": [
+        {
+          "name": "preflight",
+          "ok": true,
+          "skipped": false,
+          "detail": "ok",
+          "elapsed_ms": 3.234
+        },
+        {
+          "name": "connect",
+          "ok": true,
+          "skipped": false,
+          "detail": "ok",
+          "elapsed_ms": 5.842
+        },
+        {
+          "name": "get_balance",
+          "ok": true,
+          "skipped": false,
+          "detail": "ok",
+          "elapsed_ms": 13.696
+        },
+        {
+          "name": "get_positions",
+          "ok": true,
+          "skipped": false,
+          "detail": "ok",
+          "elapsed_ms": 2.105
+        },
+        {
+          "name": "get_orders",
+          "ok": true,
+          "skipped": false,
+          "detail": "ok",
+          "elapsed_ms": 15.272
+        },
+        {
+          "name": "reconciliation_probe",
+          "ok": true,
+          "skipped": true,
+          "detail": "reconcile probe disabled",
+          "elapsed_ms": 0.01
+        },
+        {
+          "name": "order_probe",
+          "ok": true,
+          "skipped": true,
+          "detail": "order probe disabled",
+          "elapsed_ms": 0.004
+        }
+      ],
+      "preflight": {
+        "ready": true,
+        "reason": "ths_ipc bridge reachable",
+        "metadata": {
+          "host": "127.0.0.1",
+          "port": 8089
+        }
+      }
+    }
+  ],
+  "stability_probe": {
+    "enabled": false,
+    "status": "SKIP",
+    "gate_ok": true
+  }
+}

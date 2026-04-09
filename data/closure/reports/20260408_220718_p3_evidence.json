@@ -1,0 +1,154 @@
+{
+  "report_version": "1.0",
+  "generated_at": "2026-04-08T14:07:35.186004+00:00",
+  "params": {
+    "limit": 200,
+    "ticker": "",
+    "session_id": "",
+    "phase": "",
+    "request_id": "schema-probe-4522a6d8e06e",
+    "degraded_only": false,
+    "sample_size": 20,
+    "min_completeness_rate": 0.95,
+    "max_inconsistent_rate": 0.02,
+    "allow_empty": false,
+    "fail_on_warn": true,
+    "ignore_legacy": true,
+    "seed_sample_evidence": true,
+    "sample_count": 5
+  },
+  "seed": {
+    "enabled": true,
+    "request_id": "schema-probe-4522a6d8e06e",
+    "seeded_ids": [
+      "e5d0d7c1-be39-4354-8acf-88d901a7f101",
+      "2ef3187e-0753-421c-bc38-02143e41e0d2",
+      "bd90d10d-ead6-463a-82e2-d6a16e1ce563",
+      "b0cdf408-c58f-43bc-bb7c-4d56e3f70716",
+      "a6fe8a83-e8ef-45bb-8bc5-940df1c0bc33"
+    ]
+  },
+  "required_paths": [
+    "payload.evidence_version",
+    "payload.phase",
+    "payload.timestamp",
+    "payload.session_id",
+    "payload.ticker",
+    "payload.channel",
+    "payload.decision",
+    "payload.action",
+    "payload.risk_check",
+    "payload.trace",
+    "payload.degrade_policy",
+    "payload.budget_recovery_guard",
+    "payload.context_digest",
+    "payload.llm_runtime",
+    "payload.trace.trace_id",
+    "payload.trace.request_id",
+    "payload.trace.session_id",
+    "payload.trace.phase",
+    "payload.trace.channel",
+    "payload.trace.ticker"
+  ],
+  "optional_paths": [
+    "payload.analysis_reports",
+    "payload.degrade_flags",
+    "payload.idempotency_key",
+    "payload.client_order_id",
+    "payload.status"
+  ],
+  "consistency_rules": [
+    {
+      "left": "phase",
+      "right": "payload.phase"
+    },
+    {
+      "left": "phase",
+      "right": "payload.trace.phase"
+    },
+    {
+      "left": "session_id",
+      "right": "payload.session_id"
+    },
+    {
+      "left": "session_id",
+      "right": "payload.trace.session_id"
+    },
+    {
+      "left": "channel",
+      "right": "payload.channel"
+    },
+    {
+      "left": "channel",
+      "right": "payload.trace.channel"
+    },
+    {
+      "left": "ticker",
+      "right": "payload.ticker"
+    },
+    {
+      "left": "ticker",
+      "right": "payload.trace.ticker"
+    },
+    {
+      "left": "request_id",
+      "right": "payload.trace.request_id"
+    },
+    {
+      "left": "payload.request_id",
+      "right": "payload.trace.request_id"
+    }
+  ],
+  "summary": {
+    "counts": {
+      "scanned_total": 5,
+      "skipped_legacy": 0,
+      "total": 5,
+      "complete": 5,
+      "incomplete": 0,
+      "inconsistent": 0
+    },
+    "rates": {
+      "completeness_rate": 1.0,
+      "inconsistent_rate": 0.0
+    },
+    "missing_required": {
+      "top": [],
+      "total_unique_paths": 0
+    },
+    "missing_optional": {
+      "top": [
+        {
+          "path": "payload.degrade_flags",
+          "count": 5
+        },
+        {
+          "path": "payload.idempotency_key",
+          "count": 5
+        },
+        {
+          "path": "payload.client_order_id",
+          "count": 5
+        },
+        {
+          "path": "payload.status",
+          "count": 5
+        }
+      ],
+      "total_unique_paths": 4
+    },
+    "inconsistency": {
+      "top": [],
+      "total_unique_rules": 0
+    },
+    "samples": {
+      "incomplete": [],
+      "inconsistent": []
+    }
+  },
+  "gate": {
+    "status": "PASS",
+    "failed_rules": [],
+    "warn_rules": []
+  }
+}

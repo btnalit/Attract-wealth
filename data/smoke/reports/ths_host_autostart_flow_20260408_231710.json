@@ -1,0 +1,24 @@
+{
+  "report_version": "1.0",
+  "started_at": "2026-04-08T15:17:10.165332+00:00",
+  "finished_at": "2026-04-08T15:17:14.843063+00:00",
+  "inputs": {
+    "mode": "paper",
+    "ths_root": "D:\\同花顺软件\\同花顺",
+    "install_enabled": false,
+    "probe_timeout_seconds": 3.0
+  },
+  "steps": [
+    {
+      "name": "probe_host_runtime",
+      "command": [
+        "D:\\来财\\Attract-wealth\\.venv\\Scripts\\python.exe",
+        "D:\\来财\\Attract-wealth\\scripts\\ths\\run_host_runtime_probe.py",
+        "--timeout-seconds",
+        "3.0"
+      ],
+      "returncode": 2
+    }
+  ],
+  "ok": false
+}
