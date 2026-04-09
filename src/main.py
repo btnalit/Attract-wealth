@@ -87,7 +87,17 @@ def _setup_legacy_schedule(event_engine: EventEngine):
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    channel = os.getenv("TRADING_CHANNEL", "ths_auto")
+    # 架构自检：ths_auto 强烈依赖 32 位 Python
+    import struct
+    is_32bit = struct.calcsize("P") * 8 == 32
+    if channel == "ths_auto" and not is_32bit:
+        print("\n" + "="*60)
+        print("⚠️  [THS_AUTO 架构警告]")
+        print(f"当前 Python 为 {struct.calcsize('P')*8} 位。")
+        print("ths_auto (easytrader) 依赖 32 位环境 Hook 同花顺交易端。")
+        print("64 位环境下可能出现控件读取失败/静默降级。")
+        print("✅ 建议：使用 32 位 Python 运行此服务 (如 py -3.12-32 -m src.main)")
+        print("="*60 + "\n")
     include_stability_probe = _is_true(os.getenv("STARTUP_PREFLIGHT_INCLUDE_STABILITY"), default=False)
     strict_preflight = _is_true(os.getenv("STARTUP_STRICT_PREFLIGHT"), default=False)
 
