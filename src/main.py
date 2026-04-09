@@ -13,6 +13,9 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
+# Import Routers (Must be imported before usage)
+from src.routers import trading, system, strategy, monitor, stream
+
 from src.core.autopilot_templates import load_autopilot_templates
 from src.core.event_engine import EventEngine
 from src.core.startup_preflight import run_startup_preflight
