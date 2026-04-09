@@ -1,0 +1,72 @@
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --bg-primary: 10 11 13;
+    --bg-card: 22 24 28;
+    --bg-hover: 30 33 40;
+    --border: 43 47 54;
+    --neon-cyan: 0 240 255;
+    --neon-magenta: 255 0 170;
+    --up-green: 0 255 157;
+    --down-red: 255 0 85;
+    --warn-gold: 255 215 0;
+    --info-gray: 136 142 155;
+  }
+
+  body {
+    @apply bg-bg-primary text-info-gray font-inter overflow-hidden;
+    margin: 0;
+    padding: 0;
+  }
+
+  /* Scanline animation */
+  body::before {
+    content: " ";
+    display: block;
+    @apply fixed inset-0 z-[1000] pointer-events-none;
+    background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.2) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.04), rgba(0, 255, 0, 0.01), rgba(0, 0, 255, 0.04));
+    background-size: 100% 2px, 3px 100%;
+  }
+
+  body::after {
+    content: " ";
+    display: block;
+    @apply fixed inset-0 z-[1001] pointer-events-none animate-flicker;
+    background: rgba(18, 16, 16, 0.1);
+  }
+}
+
+@layer components {
+  .scanline {
+    @apply fixed left-0 w-full h-[100px] z-[1002] opacity-10 pointer-events-none animate-scanline;
+    background: linear-gradient(0deg, rgba(0, 0, 0, 0) 0%, rgba(0, 240, 255, 0.1) 50%, rgba(0, 0, 0, 0) 100%);
+    bottom: 100%;
+  }
+
+  .cyber-border {
+    @apply relative border border-border;
+  }
+
+  .cyber-border::before {
+    content: "";
+    @apply absolute -inset-[1px] border border-neon-cyan/30 pointer-events-none;
+    clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%);
+  }
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 4px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  @apply bg-transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  @apply bg-border hover:bg-info-gray/30 transition-colors;
+}

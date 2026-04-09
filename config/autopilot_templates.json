@@ -1,0 +1,31 @@
+{
+  "templates": {
+    "balanced": {
+      "description": "默认平衡模式：常规轮询 + 尾盘扫描 + 日切",
+      "execute_orders": true,
+      "schedule": {
+        "interval_minutes": 15,
+        "tail_attack_time": "14:45",
+        "day_roll_time": "15:05"
+      }
+    },
+    "conservative": {
+      "description": "保守模式：只做分析，不自动下单",
+      "execute_orders": false,
+      "schedule": {
+        "interval_minutes": 30,
+        "tail_attack_time": "",
+        "day_roll_time": "15:05"
+      }
+    },
+    "aggressive": {
+      "description": "积极模式：高频轮询 + 尾盘扫描 + 日切",
+      "execute_orders": true,
+      "schedule": {
+        "interval_minutes": 5,
+        "tail_attack_time": "14:40",
+        "day_roll_time": "15:05"
+      }
+    }
+  }
+}

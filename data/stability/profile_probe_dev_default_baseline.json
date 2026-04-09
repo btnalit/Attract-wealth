@@ -1,0 +1,313 @@
+{
+  "report_version": "1.1",
+  "started_at": "2026-04-09T09:09:45.076100",
+  "duration_ms": 10.64,
+  "iterations": 10,
+  "success_count": 10,
+  "failed_count": 0,
+  "metrics": {
+    "current_provider": "flaky",
+    "providers": {
+      "flaky": {
+        "requests": 10,
+        "success": 10,
+        "failure": 0,
+        "empty": 0,
+        "fallback_success": 0,
+        "retries": 1,
+        "retry_success": 1,
+        "rate_limited": 0,
+        "last_error": "",
+        "last_success_ts": 1775696985.0759816,
+        "last_failure_ts": 0.0,
+        "last_latency_ms": 0.007,
+        "last_rate_limit_reason": "",
+        "throttle_sleep_ms": 0.0,
+        "backoff_sleep_ms": 10.0,
+        "enabled": true,
+        "priority": 10,
+        "error_rate": 0.0,
+        "empty_rate": 0.0,
+        "retry_rate": 0.1,
+        "rate_limited_rate": 0.0
+      },
+      "stable": {
+        "requests": 0,
+        "success": 0,
+        "failure": 0,
+        "empty": 0,
+        "fallback_success": 0,
+        "retries": 0,
+        "retry_success": 0,
+        "rate_limited": 0,
+        "last_error": "",
+        "last_success_ts": 0.0,
+        "last_failure_ts": 0.0,
+        "last_latency_ms": 0.0,
+        "last_rate_limit_reason": "",
+        "throttle_sleep_ms": 0.0,
+        "backoff_sleep_ms": 0.0,
+        "enabled": true,
+        "priority": 20,
+        "error_rate": 0.0,
+        "empty_rate": 0.0,
+        "retry_rate": 0.0,
+        "rate_limited_rate": 0.0
+      }
+    },
+    "provider_order": [
+      {
+        "name": "flaky",
+        "priority": 10,
+        "enabled": true,
+        "current": true
+      },
+      {
+        "name": "stable",
+        "priority": 20,
+        "enabled": true,
+        "current": false
+      }
+    ],
+    "requests_total": 10,
+    "success_total": 10,
+    "failure_total": 0,
+    "fallback_total": 0,
+    "empty_total": 0,
+    "stale_kline_total": 0,
+    "kline_last_age_days": null,
+    "error_rate": 0.0,
+    "empty_rate": 0.0,
+    "fallback_rate": 0.0,
+    "retries_total": 1,
+    "retry_success_total": 1,
+    "retry_rate": 0.1,
+    "retry_pressure_rate": 0.1,
+    "rate_limited_total": 0,
+    "rate_limited_rate": 0.0,
+    "throttle_sleep_ms_total": 0.0,
+    "backoff_sleep_ms_total": 10.0,
+    "methods": {
+      "get_kline": {
+        "requests": 0,
+        "success": 0,
+        "failure": 0,
+        "fallback": 0,
+        "empty": 0,
+        "retries": 0,
+        "rate_limited": 0
+      },
+      "get_fundamentals": {
+        "requests": 0,
+        "success": 0,
+        "failure": 0,
+        "fallback": 0,
+        "empty": 0,
+        "retries": 0,
+        "rate_limited": 0
+      },
+      "get_news": {
+        "requests": 10,
+        "success": 10,
+        "failure": 0,
+        "fallback": 0,
+        "empty": 0,
+        "retries": 1,
+        "rate_limited": 0
+      }
+    },
+    "local_cache": {
+      "requests": 0,
+      "hits": 0,
+      "misses": 0,
+      "hit_rate": 0.0
+    },
+    "summary": {
+      "current_provider": "flaky",
+      "requests_total": 10,
+      "error_rate": 0.0,
+      "empty_rate": 0.0,
+      "fallback_rate": 0.0,
+      "retry_rate": 0.1,
+      "retry_pressure_rate": 0.1,
+      "rate_limited_rate": 0.0,
+      "cache_hit_rate": 0.0,
+      "quality_alert_level": "none",
+      "quality_code": "DATA_QUALITY_OK",
+      "quality_action": "record",
+      "quality_event_id": "",
+      "tuning_action": "none",
+      "quality_feedback_precision": 0.0,
+      "quality_false_positive_rate": 0.0,
+      "quality_miss_rate": 0.0
+    },
+    "quality": {
+      "alert_level": "none",
+      "action": "record",
+      "code": "DATA_QUALITY_OK",
+      "thresholds": {
+        "error_warn": 0.25,
+        "error_block": 0.55,
+        "empty_warn": 0.4,
+        "empty_block": 0.8,
+        "retry_warn": 0.3,
+        "retry_block": 0.75,
+        "rate_limited_warn": 0.3,
+        "rate_limited_block": 0.7,
+        "stale_warn_days": 5,
+        "stale_block_days": 10,
+        "provider_error_warn": 0.65,
+        "provider_error_block": 0.95,
+        "provider_min_requests": 2
+      },
+      "triggered_rules": [],
+      "event_id": "",
+      "event_signature": "none|DATA_QUALITY_OK|",
+      "feedback_metrics": {
+        "true_positive": 0,
+        "false_positive": 0,
+        "false_negative": 0,
+        "feedback_total": 0,
+        "precision": 0.0,
+        "false_positive_rate": 0.0,
+        "miss_rate": 0.0,
+        "updated_at": 0.0
+      }
+    },
+    "tuning": {
+      "action": "none",
+      "quality_alert_level": "none",
+      "suggestions": [],
+      "suggested_env": {},
+      "observed": {
+        "error_rate": 0.0,
+        "retry_rate": 0.1,
+        "rate_limited_rate": 0.0
+      }
+    },
+    "quality_event": {
+      "event_id": "",
+      "signature": "none|DATA_QUALITY_OK|",
+      "timestamp": 1775696985.0760274,
+      "level": "none",
+      "code": "DATA_QUALITY_OK",
+      "action": "record",
+      "triggered_rules": [],
+      "new_event": false
+    },
+    "quality_feedback": {
+      "true_positive": 0,
+      "false_positive": 0,
+      "false_negative": 0,
+      "feedback_total": 0,
+      "precision": 0.0,
+      "false_positive_rate": 0.0,
+      "miss_rate": 0.0,
+      "updated_at": 0.0
+    },
+    "quality_events": [],
+    "runtime_config": {
+      "provider_rate_limit": {
+        "per_minute": 120,
+        "min_interval_ms": 0,
+        "max_wait_ms": 0
+      },
+      "retry_policy": {
+        "max_retries": 1,
+        "base_ms": 10,
+        "factor": 1.8,
+        "max_ms": 80
+      },
+      "quality_thresholds": {
+        "error_warn": 0.25,
+        "error_block": 0.55,
+        "empty_warn": 0.4,
+        "empty_block": 0.8,
+        "retry_warn": 0.3,
+        "retry_block": 0.75,
+        "rate_limited_warn": 0.3,
+        "rate_limited_block": 0.7,
+        "stale_warn_days": 5,
+        "stale_block_days": 10,
+        "provider_error_warn": 0.65,
+        "provider_error_block": 0.95,
+        "provider_min_requests": 2
+      },
+      "cache_ttl": {
+        "kline": 120,
+        "fundamentals": 600,
+        "news": 120
+      }
+    },
+    "cache": {}
+  },
+  "summary": {
+    "current_provider": "flaky",
+    "requests_total": 10,
+    "error_rate": 0.0,
+    "empty_rate": 0.0,
+    "fallback_rate": 0.0,
+    "retry_rate": 0.1,
+    "retry_pressure_rate": 0.1,
+    "rate_limited_rate": 0.0,
+    "cache_hit_rate": 0.0,
+    "quality_alert_level": "none",
+    "quality_code": "DATA_QUALITY_OK",
+    "quality_action": "record",
+    "quality_event_id": "",
+    "tuning_action": "none",
+    "quality_feedback_precision": 0.0,
+    "quality_false_positive_rate": 0.0,
+    "quality_miss_rate": 0.0
+  },
+  "quality": {
+    "alert_level": "none",
+    "action": "record",
+    "code": "DATA_QUALITY_OK",
+    "thresholds": {
+      "error_warn": 0.25,
+      "error_block": 0.55,
+      "empty_warn": 0.4,
+      "empty_block": 0.8,
+      "retry_warn": 0.3,
+      "retry_block": 0.75,
+      "rate_limited_warn": 0.3,
+      "rate_limited_block": 0.7,
+      "stale_warn_days": 5,
+      "stale_block_days": 10,
+      "provider_error_warn": 0.65,
+      "provider_error_block": 0.95,
+      "provider_min_requests": 2
+    },
+    "triggered_rules": [],
+    "event_id": "",
+    "event_signature": "none|DATA_QUALITY_OK|",
+    "feedback_metrics": {
+      "true_positive": 0,
+      "false_positive": 0,
+      "false_negative": 0,
+      "feedback_total": 0,
+      "precision": 0.0,
+      "false_positive_rate": 0.0,
+      "miss_rate": 0.0,
+      "updated_at": 0.0
+    }
+  },
+  "tuning": {
+    "action": "none",
+    "quality_alert_level": "none",
+    "suggestions": [],
+    "suggested_env": {},
+    "observed": {
+      "error_rate": 0.0,
+      "retry_rate": 0.1,
+      "rate_limited_rate": 0.0
+    }
+  },
+  "gate": {
+    "status": "PASS",
+    "quality_level": "none",
+    "failed_rules": [],
+    "warn_rules": []
+  }
+}

@@ -1,39 +1,90 @@
+# ============================================
 # Python
+# ============================================
 __pycache__/
 *.py[cod]
 *$py.class
 *.egg-info/
+*.egg
 dist/
 build/
+*.spec.bak
+
+# ============================================
+# Virtual Environments
+# ============================================
 .venv/
 venv/
+env/
+.pylibs/
+
+# ============================================
+# Pytest
+# ============================================
 .pytest_cache/
+_pytest_tmp/
+_pytest_tmp_runtime/
+pytest-cache-files-*/
+coverage.xml
+.htmlcov/
 
-# Environment
+# ============================================
+# Environment / Secrets (NEVER COMMIT)
+# ============================================
 .env
+.env.*
+!.env.example
 *.local
+config/ths.json
+config/app.json
+config/*.env
+*.pem
+*.key
+accounts/
+secrets/
 
+# ============================================
 # IDE
+# ============================================
 .vscode/
 .idea/
 *.swp
 *.swo
+*.sublime-*
 
+# ============================================
 # OS
+# ============================================
 .DS_Store
 Thumbs.db
+desktop.ini
 
+# ============================================
 # Node / Frontend
+# ============================================
 node_modules/
 src/frontend/dist/
+src/frontend/.vite/
 
-# 来财 运行时数据
+# ============================================
+# 来财 运行时数据 (NEVER COMMIT)
+# ============================================
 data/*.db
 data/knowledge/
+data/memory/
+data/*.csv
+data/*.parquet
 logs/
 sessions/
 
-# 敏感文件
-accounts/
-*.pem
-*.key
+# ============================================
+# 来财 研发文档 (本地记录，不上传)
+# ============================================
+docs/
+
+# ============================================
+# 来财 打包产物
+# ============================================
+scripts/installer/output/
+dist/installer/*.exe
+dist/laiCai/

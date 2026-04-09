@@ -1,67 +1,92 @@
-# 来财 (Attract-wealth) — AI 驱动量化交易客户端
+# 🐉 来财 (LaiCai) — AI 驱动的量化交易终端
 
-<p align="center">
-  <h1>🐉 来财 (Attract-wealth)</h1>
-  <p><strong>AI 驱动的量化交易研究与分析客户端</strong></p>
-  <p>融合 OpsSentry + TradingAgents + OpenHarness + OpenSpace 等 8 大开源项目</p>
-</p>
+> **Attract-wealth (来财)** 是一个基于 Python + FastAPI + React 的开源 AI 量化交易研究与分析平台。
+> 它融合了 8 大开源项目的精华，打造了一个具备**多 Agent 协作、策略自进化、三层记忆系统**的赛博朋克风格交易大脑。
 
 ---
 
 ## ✨ 核心特性
 
-- 🤖 **多 Agent 协作** — 5 类分析师 + 多空辩论研究员 + 交易员 + 风控团队 (基于 LangGraph)
-- 📊 **A 股全覆盖** — Tushare / AkShare / BaoStock 三数据源
-- 💰 **实盘交易** — 双通道架构: miniQMT 官方 API + 同花顺 UI 自动化
-- 🛡️ **硬编码风控** — 6 条不可绕过的交易安全红线
-- 🧬 **策略自进化** — 自动修复/改进/学习交易策略 (OpenSpace 引擎)
-- 🧠 **交易记忆** — HOT/WARM/COLD 三层知识沉淀
-- 🔌 **LLM 自由切换** — OpenAI 兼容协议, 支持 DeepSeek/Qwen/Kimi/GPT/Ollama
-- 🖥️ **Cyberpunk 界面** — React + Vite + TailwindCSS 赛博朋克风格
+- 🤖 **多 Agent 协作网络** — 基于 LangGraph 编排：基本面/技术/新闻/情绪分析师 → 多空辩论 → 交易决策 → 风控拦截。
+- 🧬 **策略自进化 (Evolution)** — 具备 FIX/DERIVED/CAPTURED 三大进化模式，能从交易得失中自动迭代策略。
+- 🧠 **三层记忆系统 (Memory)** — HOT (热) / WARM (温) / COLD (冷) 分层存储交易经验，支持自动晋升与遗忘。
+- 📊 **A 股多数据源** — 同时支持 AkShare, Tushare, BaoStock 数据接入与无缝切换。
+- 🛡️ **硬核风控 (RiskGate)** — 内置 6 条不可绕过的交易红线（回撤/持仓/频次/白名单），保障资金安全。
+- 🖥️ **赛博朋克控制台** — React + Vite + Tailwind 构建的 11 页专业 HUD，支持 AgentFlow 实时可视化。
+- 🔌 **LLM 自由切换** — OpenAI 兼容协议，支持 DeepSeek, Qwen, Kimi, GPT-4o, Claude 等任意模型。
+- 🪟 **Windows 原生部署** — 内置同花顺路径自适应探测器 (ThsPathResolver) 及一键安装方案 (Inno Setup)。
 
-## 🚀 快速开始
+---
+
+## 🚀 快速开始 (开发环境)
 
 ### 环境要求
 - Python 3.10+
 - Node.js 18+ (前端)
+- Git
 
-### 安装
+### 安装与运行
+
 ```bash
-# 克隆项目
+# 1. 克隆项目
 git clone https://github.com/btnalit/Attract-wealth.git
 cd Attract-wealth
 
-# 创建虚拟环境
+# 2. 创建虚拟环境
 python -m venv .venv
 .venv\Scripts\activate  # Windows
 
-# 安装依赖
-pip install -e ".[all]"
+# 3. 安装依赖
+pip install -e ".[dev]"
 
-# 配置环境变量
-cp .env.example .env
-# 编辑 .env 填入 LLM API Key 等配置
-
-# 初始化数据库
-python -m src.core.storage
-
-# 启动
+# 4. 启动后端 (API + TradingVM)
 python -m src.main
+
+# 5. (可选) 启动前端
+cd src/frontend
+npm install
+npm run dev
 ```
 
-访问 http://localhost:8000/docs 查看 API 文档。
+- 后端 API 文档: http://localhost:8000/docs
+- 前端控制台: http://localhost:5173
+
+---
 
 ## 🏗️ 技术架构
 
 ```
-核心引擎 (OpsSentry)  →  多 Agent 体系 (TradingAgents)
-       ↓                          ↓
-数据层 (TradingAgents-CN)  ←→  自进化系统 (OpenSpace)
-       ↓                          ↓
-交易执行层 (模拟/同花顺/QMT)  →  审计账本 (WAL)
-       ↓
-前端 (React Cyberpunk HUD)
+┌────────────────────────────────────────────────────────┐
+│               Frontend (React + Vite)                  │
+│  Dashboard | AgentFlow | Evolution | Strategy Matrix   │
+└──────────────────────────┬─────────────────────────────┘
+                           │ REST / SSE
+┌──────────────────────────┴─────────────────────────────┐
+│                 FastAPI Backend                          │
+│                                                        │
+│  TradingVM (LangGraph) ←→ 多 Agent 协同                 │
+│       ↕                      ↕                         │
+│  Execution Layer (Sim/THS/QMT) ←→ RiskGate (风控)      │
+│       ↕                                                 │
+│  Evolution Layer (策略进化器 + 记忆系统 + 知识库)        │
+└────────────────────────────────────────────────────────┘
 ```
+
+---
+
+## 📦 自动化构建 (CI/CD)
+
+本项目配置了 GitHub Actions 自动化流水线。当您推送 `v*` 版本标签时，GitHub 将自动在 Windows 环境中完成打包：
+
+```bash
+# 推送版本标签触发自动构建
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+构建产物将自动上传至项目的 **Releases** 页面。
+
+---
 
 ## 📝 License
 

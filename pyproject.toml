@@ -88,4 +88,5 @@ select = ["E", "F", "W", "I", "UP", "B", "SIM"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-asyncio_mode = "auto"
+cache_dir = "_pytest_tmp/.pytest_cache"
+addopts = "-ra -p no:tmpdir"

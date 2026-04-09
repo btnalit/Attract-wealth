@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
+from typing import Any
 
 from src.execution.base import (
     AccountBalance,
@@ -187,6 +188,21 @@ class SimulatorBroker(BaseBroker):
             target = datetime.strptime(date, "%Y-%m-%d").date()
             return [o for o in self._orders if o.timestamp.date() == target]
         return self._orders.copy()
+
+    async def get_trade_snapshot(self) -> dict[str, Any]:
+        balance = await self.get_balance()
+        positions = await self.get_positions()
+        orders = await self.get_orders()
+        return {
+            "balance": balance,
+            "positions": positions,
+            "orders": orders,
+            "meta": {
+                "channel": self.channel_name,
+                "orders_count": len(orders),
+                "positions_count": len(positions),
+            },
+        }
 
     def new_day(self):
         """模拟新交易日 — T+1可卖"""

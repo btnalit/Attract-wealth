@@ -1,0 +1,199 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { 
+  Search, 
+  LayoutDashboard, 
+  LineChart, 
+  Cpu, 
+  GitBranch, 
+  Database, 
+  BookOpen, 
+  Activity, 
+  Layers, 
+  BarChart3, 
+  ShieldCheck, 
+  Terminal, 
+  Settings,
+  Play,
+  Square,
+  RefreshCw,
+  Trash2
+} from 'lucide-react';
+import { cn } from '../lib/utils';
+
+interface Command {
+  id: string;
+  label: string;
+  category: string;
+  icon: React.ElementType;
+  action: () => void;
+  shortcut?: string;
+}
+
+interface CommandPaletteProps {
+  isOpen: boolean;
+  onClose: () => void;
+}
+
+export const CommandPalette: React.FC<CommandPaletteProps> = ({ isOpen, onClose }) => {
+  const [query, setQuery] = useState('');
+  const [activeIndex, setActiveIndex] = useState(0);
+  const navigate = useNavigate();
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const commands: Command[] = [
+    // Navigation
+    { id: 'nav-dashboard', label: 'Go to Dashboard', category: 'Navigation', icon: LayoutDashboard, action: () => navigate('/') },
+    { id: 'nav-market', label: 'Go to Market', category: 'Navigation', icon: LineChart, action: () => navigate('/market') },
+    { id: 'nav-agents', label: 'Go to Agent Workshop', category: 'Navigation', icon: Cpu, action: () => navigate('/agents') },
+    { id: 'nav-evolution', label: 'Go to Evolution Center', category: 'Navigation', icon: GitBranch, action: () => navigate('/evolution') },
+    { id: 'nav-memory', label: 'Go to Memory Vault', category: 'Navigation', icon: Database, action: () => navigate('/memory') },
+    { id: 'nav-knowledge', label: 'Go to Knowledge Hub', category: 'Navigation', icon: BookOpen, action: () => navigate('/knowledge') },
+    { id: 'nav-execution', label: 'Go to Execution Monitor', category: 'Navigation', icon: Activity, action: () => navigate('/execution') },
+    { id: 'nav-strategies', label: 'Go to Strategy Matrix', category: 'Navigation', icon: Layers, action: () => navigate('/strategies') },
+    { id: 'nav-backtest', label: 'Go to Backtest Lab', category: 'Navigation', icon: BarChart3, action: () => navigate('/backtest') },
+    { id: 'nav-audit', label: 'Go to Audit & Risk', category: 'Navigation', icon: ShieldCheck, action: () => navigate('/audit') },
+    { id: 'nav-logs', label: 'Go to Log Terminal', category: 'Navigation', icon: Terminal, action: () => navigate('/logs') },
+    { id: 'nav-settings', label: 'Go to System Config', category: 'Navigation', icon: Settings, action: () => navigate('/settings') },
+    
+    // Actions
+    { id: 'action-start', label: 'Start Trading', category: 'Actions', icon: Play, action: () => console.log('Start Trading') },
+    { id: 'action-stop', label: 'Stop Trading', category: 'Actions', icon: Square, action: () => console.log('Stop Trading') },
+    { id: 'action-reflect', label: 'Trigger Reflection', category: 'Actions', icon: RefreshCw, action: () => console.log('Trigger Reflection') },
+    { id: 'action-clear', label: 'Clear Logs', category: 'Actions', icon: Trash2, action: () => console.log('Clear Logs') },
+  ];
+
+  const filteredCommands = commands.filter(cmd => 
+    cmd.label.toLowerCase().includes(query.toLowerCase()) || 
+    cmd.category.toLowerCase().includes(query.toLowerCase())
+  );
+
+  useEffect(() => {
+    if (isOpen) {
+      setQuery('');
+      setActiveIndex(0);
+      setTimeout(() => inputRef.current?.focus(), 10);
+    }
+  }, [isOpen]);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (!isOpen) return;
+      
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setActiveIndex(prev => (prev + 1) % filteredCommands.length);
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setActiveIndex(prev => (prev - 1 + filteredCommands.length) % filteredCommands.length);
+      } else if (e.key === 'Enter') {
+        if (filteredCommands[activeIndex]) {
+          filteredCommands[activeIndex].action();
+          onClose();
+        }
+      } else if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+    
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, activeIndex, filteredCommands, onClose]);
+
+  if (!isOpen) return null;
+
+  return (
+    <div 
+      className="fixed inset-0 z-[100] flex items-start justify-center pt-[15vh] px-4 backdrop-blur-md bg-black/60"
+      onClick={onClose}
+    >
+      <div 
+        className="w-full max-w-2xl overflow-hidden rounded-md border border-neon-cyan/50 bg-bg-card/95 shadow-[0_0_30px_rgba(0,240,255,0.2)] animate-in fade-in zoom-in duration-200"
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Search Bar */}
+        <div className="flex items-center border-b border-border p-4">
+          <Search className="h-5 w-5 text-neon-cyan animate-pulse" />
+          <input
+            ref={inputRef}
+            type="text"
+            value={query}
+            onChange={e => setQuery(e.target.value)}
+            className="flex-1 bg-transparent px-4 py-1 text-lg text-white outline-none placeholder:text-info-gray/40 font-orbitron"
+            placeholder="TYPE A COMMAND OR SEARCH..."
+          />
+          <kbd className="hidden sm:flex h-6 items-center gap-1 rounded border border-border bg-bg-primary px-1.5 font-mono text-[10px] text-info-gray/60 uppercase">
+            ESC
+          </kbd>
+        </div>
+
+        {/* Results */}
+        <div className="max-h-[400px] overflow-y-auto custom-scrollbar p-2">
+          {filteredCommands.length > 0 ? (
+            <div className="space-y-4">
+              {['Navigation', 'Actions'].map(category => {
+                const categoryCommands = filteredCommands.filter(cmd => cmd.category === category);
+                if (categoryCommands.length === 0) return null;
+                
+                return (
+                  <div key={category}>
+                    <div className="px-3 pb-2 pt-1 text-[10px] font-bold uppercase tracking-widest text-info-gray/40">
+                      {category}
+                    </div>
+                    <div className="space-y-1">
+                      {categoryCommands.map((cmd) => {
+                        const globalIndex = filteredCommands.findIndex(c => c.id === cmd.id);
+                        const isActive = globalIndex === activeIndex;
+                        
+                        return (
+                          <div
+                            key={cmd.id}
+                            className={cn(
+                              "flex items-center gap-3 rounded px-3 py-2 cursor-pointer transition-all duration-200",
+                              isActive ? "bg-neon-cyan/20 border-l-4 border-neon-cyan text-white translate-x-1" : "text-info-gray/80 hover:bg-bg-hover hover:text-white"
+                            )}
+                            onMouseEnter={() => setActiveIndex(globalIndex)}
+                            onClick={() => {
+                              cmd.action();
+                              onClose();
+                            }}
+                          >
+                            <cmd.icon className={cn("h-4 w-4", isActive ? "text-neon-cyan" : "text-info-gray/60")} />
+                            <span className="flex-1 text-sm font-medium">{cmd.label}</span>
+                            {isActive && (
+                              <span className="text-[10px] font-mono text-neon-cyan/60">ENTER</span>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="flex flex-col items-center justify-center py-12 text-center">
+              <div className="mb-4 h-12 w-12 rounded-full bg-bg-hover flex items-center justify-center">
+                <Search className="h-6 w-6 text-info-gray/40" />
+              </div>
+              <p className="text-info-gray/60">No commands found for "{query}"</p>
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="flex items-center justify-between border-t border-border bg-bg-primary/50 px-4 py-2 text-[10px] text-info-gray/40 font-mono">
+          <div className="flex gap-3">
+            <span className="flex items-center gap-1">
+              <kbd className="rounded border border-border bg-bg-card px-1">↓↑</kbd> NAVIGATE
+            </span>
+            <span className="flex items-center gap-1">
+              <kbd className="rounded border border-border bg-bg-card px-1">ENTER</kbd> EXECUTE
+            </span>
+          </div>
+          <span>ATTRACT WEALTH CMD-SYS V1.0</span>
+        </div>
+      </div>
+    </div>
+  );
+};

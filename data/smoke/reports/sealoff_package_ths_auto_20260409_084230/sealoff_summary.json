@@ -1,0 +1,18 @@
+{
+  "generated_at": "2026-04-09T08:42:30.529659",
+  "package_dir": "D:\\\\来财\\\\Attract-wealth\\data\\smoke\\reports\\sealoff_package_ths_auto_20260409_084230",
+  "copied_reports": [
+    "D:\\\\来财\\\\Attract-wealth\\data\\smoke\\reports\\sealoff_package_ths_auto_20260409_084230\\ths_auto_smoke_strict_32bit_latest.json",
+    "D:\\\\来财\\\\Attract-wealth\\data\\smoke\\reports\\sealoff_package_ths_auto_20260409_084230\\ths_auto_smoke_strict_32bit_reconcile_latest.json"
+  ],
+  "env": {
+    "python": "C:/Users/btnal/AppData/Local/Programs/Python/Python310-32/python.exe",
+    "EASYTRADER_REPO_PATH": "D:/来财/easytrader-master",
+    "THS_EASYTRADER_GRID_STRATEGY": "copy",
+    "THS_EASYTRADER_CAPTCHA_ENGINE": "ddddocr"
+  },
+  "notes": [
+    "strict pass",
+    "strict+reconcile pass"
+  ]
+}

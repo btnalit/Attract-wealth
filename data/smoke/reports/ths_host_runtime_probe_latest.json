@@ -1,0 +1,342 @@
+{
+  "report_version": "1.1",
+  "started_at": "2026-04-08T17:28:56.740002+00:00",
+  "finished_at": "2026-04-08T17:29:58.760331+00:00",
+  "inputs": {
+    "host": "127.0.0.1",
+    "port": 8089,
+    "timeout_seconds": 60.0,
+    "interval_seconds": 1.0,
+    "allow_mock": false,
+    "enable_snapshot": true,
+    "require_snapshot": true,
+    "require_xiadan_process": true,
+    "ths_root": "D:\\同花顺软件\\同花顺",
+    "enable_easytrader_diag": true,
+    "easytrader_repo": "",
+    "easytrader_broker": "ths",
+    "easytrader_exe_path": "D:\\同花顺软件\\同花顺\\xiadan.exe",
+    "easytrader_include_orders": true,
+    "easytrader_include_trades": true,
+    "easytrader_runtime_guard": true,
+    "easytrader_require_32bit_python": true,
+    "easytrader_require_process_access": true
+  },
+  "xiadan_running": null,
+  "xiadan_process_check": {
+    "known": false,
+    "error": "access_denied"
+  },
+  "account_context": {
+    "ths_root": "D:\\同花顺软件\\同花顺",
+    "ths_root_exists": true,
+    "users_ini_exists": true,
+    "xiadan_ini_exists": true,
+    "last_userid": "194656971",
+    "last_user_name": "mx_194656971",
+    "last_user_path": "mx_194656971",
+    "ai_user_account": "mx_194656971",
+    "sim_server_name": "ģ⳴ɻ",
+    "mode_hint": "paper",
+    "error": ""
+  },
+  "samples": [
+    {
+      "reachable": false,
+      "runtime_ok": false,
+      "runtime": {},
+      "error": "timed out",
+      "response": {},
+      "sample_at": "2026-04-08T17:28:58.044111+00:00"
+    },
+    {
+      "reachable": false,
+      "runtime_ok": false,
+      "runtime": {},
+      "error": "timed out",
+      "response": {},
+      "sample_at": "2026-04-08T17:29:00.250647+00:00"
+    },
+    {
+      "reachable": false,
+      "runtime_ok": false,
+      "runtime": {},
+      "error": "timed out",
+      "response": {},
+      "sample_at": "2026-04-08T17:29:02.466775+00:00"
+    },
+    {
+      "reachable": false,
+      "runtime_ok": false,
+      "runtime": {},
+      "error": "timed out",
+      "response": {},
+      "sample_at": "2026-04-08T17:29:04.680368+00:00"
+    },
+    {
+      "reachable": false,
+      "runtime_ok": false,
+      "runtime": {},
+      "error": "timed out",
+      "response": {},
+      "sample_at": "2026-04-08T17:29:06.895027+00:00"
+    },
+    {
+      "reachable": false,
+      "runtime_ok": false,
+      "runtime": {},
+      "error": "timed out",
+      "response": {},
+      "sample_at": "2026-04-08T17:29:09.098383+00:00"
+    },
+    {
+      "reachable": false,
+      "runtime_ok": false,
+      "runtime": {},
+      "error": "timed out",
+      "response": {},
+      "sample_at": "2026-04-08T17:29:11.311630+00:00"
+    },
+    {
+      "reachable": false,
+      "runtime_ok": false,
+      "runtime": {},
+      "error": "timed out",
+      "response": {},
+      "sample_at": "2026-04-08T17:29:13.513598+00:00"
+    },
+    {
+      "reachable": false,
+      "runtime_ok": false,
+      "runtime": {},
+      "error": "timed out",
+      "response": {},
+      "sample_at": "2026-04-08T17:29:15.723177+00:00"
+    },
+    {
+      "reachable": false,
+      "runtime_ok": false,
+      "runtime": {},
+      "error": "timed out",
+      "response": {},
+      "sample_at": "2026-04-08T17:29:17.937641+00:00"
+    },
+    {
+      "reachable": false,
+      "runtime_ok": false,
+      "runtime": {},
+      "error": "timed out",
+      "response": {},
+      "sample_at": "2026-04-08T17:29:20.139721+00:00"
+    },
+    {
+      "reachable": false,
+      "runtime_ok": false,
+      "runtime": {},
+      "error": "timed out",
+      "response": {},
+      "sample_at": "2026-04-08T17:29:22.349275+00:00"
+    },
+    {
+      "reachable": false,
+      "runtime_ok": false,
+      "runtime": {},
+      "error": "timed out",
+      "response": {},
+      "sample_at": "2026-04-08T17:29:24.553202+00:00"
+    },
+    {
+      "reachable": false,
+      "runtime_ok": false,
+      "runtime": {},
+      "error": "timed out",
+      "response": {},
+      "sample_at": "2026-04-08T17:29:26.762418+00:00"
+    },
+    {
+      "reachable": false,
+      "runtime_ok": false,
+      "runtime": {},
+      "error": "timed out",
+      "response": {},
+      "sample_at": "2026-04-08T17:29:28.977450+00:00"
+    },
+    {
+      "reachable": false,
+      "runtime_ok": false,
+      "runtime": {},
+      "error": "timed out",
+      "response": {},
+      "sample_at": "2026-04-08T17:29:31.179741+00:00"
+    },
+    {
+      "reachable": false,
+      "runtime_ok": false,
+      "runtime": {},
+      "error": "timed out",
+      "response": {},
+      "sample_at": "2026-04-08T17:29:33.389384+00:00"
+    },
+    {
+      "reachable": false,
+      "runtime_ok": false,
+      "runtime": {},
+      "error": "timed out",
+      "response": {},
+      "sample_at": "2026-04-08T17:29:35.593139+00:00"
+    },
+    {
+      "reachable": false,
+      "runtime_ok": false,
+      "runtime": {},
+      "error": "timed out",
+      "response": {},
+      "sample_at": "2026-04-08T17:29:37.802324+00:00"
+    },
+    {
+      "reachable": false,
+      "runtime_ok": false,
+      "runtime": {},
+      "error": "timed out",
+      "response": {},
+      "sample_at": "2026-04-08T17:29:40.003126+00:00"
+    },
+    {
+      "reachable": false,
+      "runtime_ok": false,
+      "runtime": {},
+      "error": "timed out",
+      "response": {},
+      "sample_at": "2026-04-08T17:29:42.218052+00:00"
+    },
+    {
+      "reachable": false,
+      "runtime_ok": false,
+      "runtime": {},
+      "error": "timed out",
+      "response": {},
+      "sample_at": "2026-04-08T17:29:44.433200+00:00"
+    },
+    {
+      "reachable": false,
+      "runtime_ok": false,
+      "runtime": {},
+      "error": "timed out",
+      "response": {},
+      "sample_at": "2026-04-08T17:29:46.646275+00:00"
+    },
+    {
+      "reachable": false,
+      "runtime_ok": false,
+      "runtime": {},
+      "error": "timed out",
+      "response": {},
+      "sample_at": "2026-04-08T17:29:48.851135+00:00"
+    },
+    {
+      "reachable": false,
+      "runtime_ok": false,
+      "runtime": {},
+      "error": "timed out",
+      "response": {},
+      "sample_at": "2026-04-08T17:29:51.058477+00:00"
+    },
+    {
+      "reachable": false,
+      "runtime_ok": false,
+      "runtime": {},
+      "error": "timed out",
+      "response": {},
+      "sample_at": "2026-04-08T17:29:53.260569+00:00"
+    },
+    {
+      "reachable": false,
+      "runtime_ok": false,
+      "runtime": {},
+      "error": "timed out",
+      "response": {},
+      "sample_at": "2026-04-08T17:29:55.471528+00:00"
+    },
+    {
+      "reachable": false,
+      "runtime_ok": false,
+      "runtime": {},
+      "error": "timed out",
+      "response": {},
+      "sample_at": "2026-04-08T17:29:57.687728+00:00"
+    }
+  ],
+  "status": "FAIL",
+  "ready": false,
+  "runtime_ok": false,
+  "snapshot": {},
+  "snapshot_summary": {},
+  "snapshot_ok": false,
+  "easytrader_diag": {
+    "ok": false,
+    "summary": {},
+    "errors": [
+      "tasklist_access_denied"
+    ],
+    "meta": {
+      "ok": false,
+      "reason": "runtime_guard_failed",
+      "runtime": {
+        "ok": false,
+        "exe_path": "D:\\同花顺软件\\同花顺\\xiadan.exe",
+        "process_name": "xiadan.exe",
+        "process_pid": null,
+        "process_running": false,
+        "process_running_known": false,
+        "process_access_ok": null,
+        "process_access_error": "",
+        "python_bits": 64,
+        "exe_bits": 32,
+        "needs_32bit_python": true,
+        "current_process_admin": false,
+        "require_32bit_python": true,
+        "require_process_access": true,
+        "arch_ok": false,
+        "access_gate_ok": true,
+        "hints": [
+          "当前 Python 为 64 位，建议切换到 32 位 Python 运行 easytrader。",
+          "无法枚举 xiadan 进程（可能是权限限制），将以 easytrader 实际连接结果为准。"
+        ],
+        "errors": [
+          "tasklist_access_denied"
+        ]
+      }
+    },
+    "runtime": {
+      "ok": false,
+      "exe_path": "D:\\同花顺软件\\同花顺\\xiadan.exe",
+      "process_name": "xiadan.exe",
+      "process_pid": null,
+      "process_running": false,
+      "process_running_known": false,
+      "process_access_ok": null,
+      "process_access_error": "",
+      "python_bits": 64,
+      "exe_bits": 32,
+      "needs_32bit_python": true,
+      "current_process_admin": false,
+      "require_32bit_python": true,
+      "require_process_access": true,
+      "arch_ok": false,
+      "access_gate_ok": true,
+      "hints": [
+        "当前 Python 为 64 位，建议切换到 32 位 Python 运行 easytrader。",
+        "无法枚举 xiadan 进程（可能是权限限制），将以 easytrader 实际连接结果为准。"
+      ],
+      "errors": [
+        "tasklist_access_denied"
+      ]
+    }
+  },
+  "hints": [
+    "无法读取 xiadan.exe 进程状态（权限受限），将继续按 runtime 探针判定。",
+    "未检测到 THS IPC bridge 监听 8089，请确认宿主自动脚本已加载。",
+    "请在同花顺中打开一次“策略条件单/信号策略”触发 my_signals.py 加载后再重试。",
+    "easytrader 诊断也失败，需先排查 xiadan 进程会话、依赖和权限。"
+  ]
+}

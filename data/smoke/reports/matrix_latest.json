@@ -1,0 +1,95 @@
+{
+  "report_version": "1.1",
+  "generated_at": "2026-04-08T14:12:59.850277",
+  "channels": [
+    "ths_ipc",
+    "qmt"
+  ],
+  "allow_skip": true,
+  "counts": {
+    "pass": 0,
+    "skip": 2,
+    "fail": 0
+  },
+  "all_passed": true,
+  "results": [
+    {
+      "channel": "ths_ipc",
+      "status": "SKIP",
+      "gate_ok": true,
+      "returncode": 0,
+      "report": "data\\smoke\\reports\\ths_ipc_latest.json",
+      "stdout": "[smoke] status=SKIP channel=ths_ipc output=data\\smoke\\reports\\ths_ipc_latest.json\n[smoke] check=preflight ok=True skipped=True elapsed_ms=1210.596 detail=preflight skipped (ths_ipc bridge unavailable: timed out)\n",
+      "stderr": "",
+      "checks": [
+        {
+          "name": "preflight",
+          "ok": true,
+          "skipped": true,
+          "detail": "preflight skipped (ths_ipc bridge unavailable: timed out)",
+          "elapsed_ms": 1210.596
+        }
+      ],
+      "preflight": {
+        "ready": false,
+        "reason": "ths_ipc bridge unavailable: timed out",
+        "metadata": {
+          "host": "127.0.0.1",
+          "port": 8089
+        }
+      }
+    },
+    {
+      "channel": "qmt",
+      "status": "SKIP",
+      "gate_ok": true,
+      "returncode": 0,
+      "report": "data\\smoke\\reports\\qmt_latest.json",
+      "stdout": "[smoke] status=SKIP channel=qmt output=data\\smoke\\reports\\qmt_latest.json\n[smoke] check=preflight ok=True skipped=True elapsed_ms=0.052 detail=preflight skipped (missing QMT_ACCOUNT_ID/QMT_ACCOUNT)\n",
+      "stderr": "",
+      "checks": [
+        {
+          "name": "preflight",
+          "ok": true,
+          "skipped": true,
+          "detail": "preflight skipped (missing QMT_ACCOUNT_ID/QMT_ACCOUNT)",
+          "elapsed_ms": 0.052
+        }
+      ],
+      "preflight": {
+        "ready": false,
+        "reason": "missing QMT_ACCOUNT_ID/QMT_ACCOUNT",
+        "metadata": {
+          "account_configured": false,
+          "qmt_path": "",
+          "qmt_path_exists": false,
+          "xtquant_available": false
+        }
+      }
+    }
+  ],
+  "stability_probe": {
+    "enabled": true,
+    "status": "SKIP",
+    "gate_ok": true,
+    "returncode": 0,
+    "report": "data\\smoke\\reports\\dataflow_stability_latest.json",
+    "stdout": "[stability] output=data\\smoke\\reports\\dataflow_stability_latest.json\n[stability] status=SKIP reason=pandas not available: No module named 'pandas'\n",
+    "stderr": "",
+    "summary": {},
+    "quality": {},
+    "tuning": {},
+    "gate": {
+      "status": "SKIP",
+      "quality_level": "none",
+      "failed_rules": [],
+      "warn_rules": [
+        {
+          "rule": "dependency",
+          "detail": "pandas unavailable: No module named 'pandas'",
+          "level": "warn"
+        }
+      ]
+    }
+  }
+}
