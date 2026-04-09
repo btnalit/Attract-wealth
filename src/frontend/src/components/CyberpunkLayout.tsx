@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useHotkeys } from '../hooks/useHotkeys';
+import { useSSE } from '../hooks/useSSE';
 import { CommandPalette } from './CommandPalette';
 
 const navItems = [
@@ -95,25 +96,27 @@ export const CyberpunkLayout: React.FC = () => {
       </header>
 
       <div className="flex flex-1 overflow-hidden">
-        {/* Left Dock (64px) */}
-        <aside className="flex w-[64px] flex-col items-center border-r border-border bg-bg-card/50 py-4 z-40">
-          <nav className="flex flex-col gap-4">
+        {/* Left Dock (64px expanded to 200px) */}
+        <aside className="group/sidebar flex w-[64px] hover:w-[200px] flex-col items-start border-r border-border bg-bg-card/50 py-4 z-40 transition-all duration-300 overflow-y-auto custom-scrollbar overflow-x-hidden">
+          <nav className="flex flex-col gap-2 w-full px-3">
             {navItems.map((item) => (
               <NavLink
                 key={item.path}
                 to={item.path}
                 className={({ isActive }) => cn(
-                  "group relative flex h-10 w-10 items-center justify-center rounded-sm transition-all duration-300",
-                  "hover:bg-neon-cyan/10 border border-transparent",
+                  "group relative flex h-10 w-full items-center rounded-sm transition-all duration-300",
+                  "hover:bg-neon-cyan/10 border border-transparent px-2",
                   isActive ? "border-neon-cyan/50 bg-neon-cyan/5 text-neon-cyan shadow-[0_0_15px_rgba(0,240,255,0.2)]" : "text-info-gray/60 hover:text-white"
                 )}
-                title={item.label}
               >
                 {({ isActive }) => (
                   <>
-                    <item.icon className="h-5 w-5" />
+                    <item.icon className="h-5 w-5 min-w-[24px]" />
+                    <span className="ml-3 text-xs font-medium tracking-wider opacity-0 group-hover/sidebar:opacity-100 transition-opacity duration-300 whitespace-nowrap overflow-hidden">
+                      {item.label}
+                    </span>
                     {isActive && (
-                      <div className="absolute -left-4 h-6 w-1 rounded-r-full bg-neon-cyan shadow-[0_0_10px_rgba(0,240,255,1)]" />
+                      <div className="absolute -left-3 h-6 w-1 rounded-r-full bg-neon-cyan shadow-[0_0_10px_rgba(0,240,255,1)]" />
                     )}
                   </>
                 )}

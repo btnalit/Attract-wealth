@@ -86,7 +86,8 @@ export const KnowledgeHub: React.FC = () => {
       
       if (response.ok) {
         const result = await response.json();
-        setItems(result.data || result);
+        const newData = result.data || (Array.isArray(result) ? result : []);
+        setItems(newData.length > 0 ? newData : mockKnowledge.filter(item => item.type === type));
       } else {
         throw new Error('API not available');
       }

@@ -15,7 +15,7 @@ import {
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL || '';
+const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
 
 interface ConfigSectionProps {
   title: string;
@@ -40,6 +40,9 @@ export const SystemConfig: React.FC = () => {
   const [tushareStatus, setTushareStatus] = useState<'NONE' | 'TESTING' | 'OK' | 'ERROR'>('NONE');
   const [isSaving, setIsSaving] = useState(false);
   const [isTestingNotification, setIsTestingNotification] = useState(false);
+  const [showSuccess, setShowSuccess] = useState(false);
+  const [showError, setShowError] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
 
   // Form State
   const [tushareToken, setTushareToken] = useState('••••••••••••••••••••••••••••••••');
@@ -47,7 +50,7 @@ export const SystemConfig: React.FC = () => {
     base_url: 'https://api.openai.com/v1',
     model: 'gpt-4o-2024-05-13',
     temperature: 0.7,
-    api_key_masked: '••••••••••••••••'
+    api_key: '••••••••••••••••'
   });
   const [webhookUrl, setWebhookUrl] = useState('');
   const [dingtalkSecret, setDingtalkSecret] = useState('••••••••••••••••••••••••••••••••');
@@ -57,7 +60,7 @@ export const SystemConfig: React.FC = () => {
       try {
         const [sysRes, llmRes] = await Promise.all([
           fetch(`${API_BASE}/api/system/config`),
-          fetch(`${API_BASE}/api/system/llm/config`)
+          fetch(`${API_BASE}/api/system/llm-config`)
         ]);
         
         if (sysRes.ok) {
@@ -71,7 +74,13 @@ export const SystemConfig: React.FC = () => {
         
         if (llmRes.ok) {
           const llmData = await llmRes.json();
-          if (llmData.data) setLlmConfig(prev => ({ ...prev, ...llmData.data }));
+          const config = llmData.data || llmData;
+          setLlmConfig({
+            base_url: config.base_url || 'https://api.openai.com/v1',
+            model: config.model || 'gpt-4o-2024-05-13',
+            temperature: config.temperature ?? 0.7,
+            api_key: config.api_key || '••••••••••••••••'
+          });
         }
       } catch (e) {
         console.warn('Failed to fetch system configs, using defaults.');
@@ -80,64 +89,118 @@ export const SystemConfig: React.FC = () => {
     fetchConfigs();
   }, []);
 
-  const testTushare = async () => {
+  const testTushare = async (e: React.MouseEvent) => {
+    e.preventDefault();
     setTushareStatus('TESTING');
     try {
       const response = await fetch(`${API_BASE}/api/system/llm/config/test`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ type: 'tushare', token: tushareToken })
+        body: JSON.stringify({ 
+          type: 'tushare', 
+          token: tushareToken.includes('*') || tushareToken.includes('•') ? undefined : tushareToken 
+        })
       });
       if (response.ok) {
         setTushareStatus('OK');
       } else {
-        throw new Error();
+        setTushareStatus('ERROR');
+        const errorData = await response.json();
+        setErrorMessage(errorData.message || 'Tushare test failed.');
+        setShowError(true);
+        setTimeout(() => setShowError(false), 5000);
       }
-    } catch (e) {
-      setTimeout(() => setTushareStatus('OK'), 1000); // Fallback simulation
-    }
-  };
-
-  const testNotification = async () => {
-    setIsTestingNotification(true);
-    try {
-      await fetch(`${API_BASE}/api/system/notification/test`, { method: 'POST' });
-    } catch (e) {
+    } catch (e: any) {
       console.error(e);
-    } finally {
-      setTimeout(() => setIsTestingNotification(false), 1500);
+      setTushareStatus('ERROR');
+      setErrorMessage(e.message || 'Tushare connection error.');
+      setShowError(true);
+      setTimeout(() => setShowError(false), 5000);
     }
   };
 
-  const handleSave = async () => {
-    setIsSaving(true);
+  const testNotification = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsTestingNotification(true);
+    setShowError(false);
+    setShowSuccess(false);
     try {
-      await Promise.all([
+      const response = await fetch(`${API_BASE}/api/system/notification/test/wechat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          webhook_url: webhookUrl, 
+          channel: 'wechat' 
+        })
+      });
+      
+      const resData = await response.json();
+      if (!response.ok) {
+        throw new Error(resData.message || 'WeChat notification test failed.');
+      }
+      
+      setShowSuccess(true);
+      setTimeout(() => setShowSuccess(false), 3000);
+    } catch (e: any) {
+      console.error(e);
+      setErrorMessage(e.message || 'Notification test failed.');
+      setShowError(true);
+      setTimeout(() => setShowError(false), 5000);
+    } finally {
+      setIsTestingNotification(false);
+    }
+  };
+
+  const handleSave = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsSaving(true);
+    setShowSuccess(false);
+    setShowError(false);
+    try {
+      // 准备 LLM 配置数据，过滤掩码值
+      const finalLlmConfig = {
+        ...llmConfig,
+        api_key: (llmConfig.api_key.includes('*') || llmConfig.api_key.includes('•')) ? "" : llmConfig.api_key,
+        retain_api_key: (llmConfig.api_key.includes('*') || llmConfig.api_key.includes('•'))
+      };
+
+      const [sysRes, llmRes] = await Promise.all([
         fetch(`${API_BASE}/api/system/config`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            tushare_token: tushareToken,
+            tushare_token: tushareToken.includes('*') || tushareToken.includes('•') ? undefined : tushareToken,
             wechat_webhook: webhookUrl,
-            dingtalk_secret: dingtalkSecret
+            dingtalk_secret: dingtalkSecret.includes('*') || dingtalkSecret.includes('•') ? undefined : dingtalkSecret
           })
         }),
-        fetch(`${API_BASE}/api/system/llm/config`, {
+        fetch(`${API_BASE}/api/system/llm-config`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(llmConfig)
+          body: JSON.stringify(finalLlmConfig)
         })
       ]);
-      alert('Configuration saved successfully');
-    } catch (e) {
-      console.warn('Failed to save to API, simulation only.');
-      alert('Configuration saved (local simulation)');
+      
+      if (!sysRes.ok || !llmRes.ok) {
+        const sysErr = !sysRes.ok ? await sysRes.json() : null;
+        const llmErr = !llmRes.ok ? await llmRes.json() : null;
+        throw new Error(llmErr?.message || sysErr?.message || 'Some configurations failed to save.');
+      }
+      
+      setShowSuccess(true);
+      setTimeout(() => setShowSuccess(false), 3000);
+    } catch (e: any) {
+      console.error(e);
+      setErrorMessage(e.message || 'Failed to save configuration.');
+      setShowError(true);
+      setTimeout(() => setShowError(false), 5000);
     } finally {
       setIsSaving(false);
     }
   };
 
-  const startMcp = () => {
+  const startMcp = (e: React.MouseEvent) => {
+    e.preventDefault();
     setMcpStatus('STARTING');
     setTimeout(() => setMcpStatus('RUNNING'), 2000);
   };
@@ -174,14 +237,15 @@ export const SystemConfig: React.FC = () => {
                   onChange={(e) => setTushareToken(e.target.value)}
                 />
                 <button 
-                  onClick={testTushare}
+                  type="button"
+                  onClick={(e) => testTushare(e)}
                   className={cn(
                     "px-4 py-2 rounded text-[10px] font-mono border transition-all uppercase flex items-center gap-2",
-                    tushareStatus === 'OK' ? "bg-up-green/10 border-up-green text-up-green" : "bg-neon-cyan/10 border-neon-cyan text-neon-cyan hover:bg-neon-cyan hover:text-black"
+                    tushareStatus === 'OK' ? "bg-up-green/10 border-up-green text-up-green" : tushareStatus === 'ERROR' ? "bg-down-red/10 border-down-red text-down-red" : "bg-neon-cyan/10 border-neon-cyan text-neon-cyan hover:bg-neon-cyan hover:text-black"
                   )}
                 >
                   {tushareStatus === 'TESTING' ? <Zap className="h-3 w-3 animate-spin" /> : tushareStatus === 'OK' ? <CheckCircle2 className="h-3 w-3" /> : <Zap className="h-3 w-3" />}
-                  {tushareStatus === 'TESTING' ? '测试中...' : tushareStatus === 'OK' ? '已连接' : '测试'}
+                  {tushareStatus === 'TESTING' ? '测试中...' : tushareStatus === 'OK' ? '已连接' : tushareStatus === 'ERROR' ? '测试失败' : '测试'}
                 </button>
               </div>
             </div>
@@ -245,7 +309,8 @@ export const SystemConfig: React.FC = () => {
             </div>
             
             <button 
-              onClick={startMcp}
+              type="button"
+              onClick={(e) => startMcp(e)}
               className={cn(
                 "w-full py-3 rounded text-[10px] font-orbitron tracking-widest uppercase transition-all flex items-center justify-center gap-3",
                 mcpStatus === 'RUNNING' 
@@ -289,7 +354,8 @@ export const SystemConfig: React.FC = () => {
             </div>
 
             <button 
-              onClick={testNotification}
+              type="button"
+              onClick={(e) => testNotification(e)}
               disabled={isTestingNotification}
               className="w-full flex items-center justify-center gap-2 py-2.5 rounded text-[10px] font-mono border border-border bg-bg-primary hover:bg-bg-hover hover:border-neon-cyan/30 text-info-gray transition-all uppercase"
             >
@@ -302,56 +368,87 @@ export const SystemConfig: React.FC = () => {
         {/* LLM Model Configuration */}
         <div className="md:col-span-2">
           <ConfigSection title="LLM 智能引擎" icon={Cpu}>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
               <div className="space-y-2">
                 <label className="text-[9px] text-info-gray/50 uppercase font-bold tracking-wider">API 基准地址</label>
                 <input 
                   type="text" 
-                  className="w-full bg-bg-primary border border-border rounded px-3 py-2 text-xs text-white outline-none font-mono" 
+                  className="w-full bg-bg-primary border border-border rounded px-3 py-2 text-xs text-white outline-none font-mono focus:border-neon-cyan transition-colors" 
                   value={llmConfig.base_url}
                   onChange={(e) => setLlmConfig({ ...llmConfig, base_url: e.target.value })}
+                  placeholder="https://api.openai.com/v1"
                 />
               </div>
               <div className="space-y-2">
-                <label className="text-[9px] text-info-gray/50 uppercase font-bold tracking-wider">当前模型</label>
-                <select 
-                  className="w-full bg-bg-primary border border-border rounded px-3 py-2 text-xs text-white outline-none"
+                <label className="text-[9px] text-info-gray/50 uppercase font-bold tracking-wider">API 密钥 (API Key)</label>
+                <input 
+                  type="password" 
+                  className="w-full bg-bg-primary border border-border rounded px-3 py-2 text-xs text-white outline-none font-mono focus:border-neon-cyan transition-colors" 
+                  value={llmConfig.api_key}
+                  onChange={(e) => setLlmConfig({ ...llmConfig, api_key: e.target.value })}
+                  placeholder="sk-••••••••••••••••"
+                />
+              </div>
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="space-y-2">
+                <label className="text-[9px] text-info-gray/50 uppercase font-bold tracking-wider">当前模型 (Model Name)</label>
+                <input 
+                  type="text" 
+                  className="w-full bg-bg-primary border border-border rounded px-3 py-2 text-xs text-white outline-none font-mono focus:border-neon-cyan transition-colors" 
                   value={llmConfig.model}
                   onChange={(e) => setLlmConfig({ ...llmConfig, model: e.target.value })}
-                >
-                  <option>gpt-4o-2024-05-13</option>
-                  <option>claude-3-5-sonnet-20240620</option>
-                  <option>deepseek-coder-v2</option>
-                  <option>gpt-3.5-turbo</option>
-                </select>
+                  placeholder="gpt-4o"
+                />
               </div>
               <div className="space-y-2">
-                <label className="text-[9px] text-info-gray/50 uppercase font-bold tracking-wider">采样温度 ({llmConfig.temperature})</label>
+                <div className="flex justify-between items-center">
+                  <label className="text-[9px] text-info-gray/50 uppercase font-bold tracking-wider">采样温度 (Temperature: {llmConfig.temperature})</label>
+                  <span className={cn(
+                    "text-[10px] font-mono",
+                    llmConfig.temperature > 1.2 ? "text-warn-gold" : "text-neon-cyan"
+                  )}>{llmConfig.temperature.toFixed(1)}</span>
+                </div>
                 <input 
-                  type="range" min="0" max="1" step="0.1" 
-                  className="w-full accent-neon-cyan bg-bg-primary cursor-pointer" 
+                  type="range" min="0" max="2" step="0.1" 
+                  className="w-full accent-neon-cyan bg-bg-primary cursor-pointer h-1.5 rounded-full appearance-none" 
                   value={llmConfig.temperature}
                   onChange={(e) => setLlmConfig({ ...llmConfig, temperature: parseFloat(e.target.value) })}
                 />
                 <div className="flex justify-between text-[8px] font-mono text-info-gray/40">
                   <span>精确 (0.0)</span>
-                  <span>创造性 (1.0)</span>
+                  <span>平衡 (1.0)</span>
+                  <span>创造性 (2.0)</span>
                 </div>
               </div>
             </div>
             
-            <div className="pt-4 border-t border-border mt-4">
+            <div className="pt-4 border-t border-border mt-6">
               <div className="flex items-center gap-2">
                 <AlertCircle className="h-3 w-3 text-warn-gold" />
-                <p className="text-[10px] text-info-gray/60 italic font-light">警告: 修改 LLM 设置可能会影响实盘过程中的推理稳定性和响应延迟。</p>
+                <p className="text-[10px] text-info-gray/60 italic font-light">警告: 修改 LLM 设置可能会影响实盘过程中的推理稳定性和响应延迟。Temperature 高于 1.0 时请谨慎使用。</p>
               </div>
             </div>
           </ConfigSection>
         </div>
       </div>
 
-      <footer className="flex justify-end gap-4 pb-12">
+      <footer className="flex justify-end items-center gap-4 pb-12">
+        {showSuccess && (
+          <div className="flex items-center gap-2 text-up-green animate-in fade-in slide-in-from-right-2">
+            <CheckCircle2 className="h-4 w-4" />
+            <span className="text-xs font-bold font-orbitron uppercase tracking-widest">保存成功 / SUCCESSFUL</span>
+          </div>
+        )}
+        {showError && (
+          <div className="flex items-center gap-2 text-down-red animate-in fade-in slide-in-from-right-2">
+            <AlertCircle className="h-4 w-4" />
+            <span className="text-xs font-bold font-orbitron uppercase tracking-widest truncate max-w-[300px]">{errorMessage || '保存失败 / FAILED'}</span>
+          </div>
+        )}
         <button 
+          type="button"
           onClick={() => window.location.reload()}
           className="px-8 py-3 rounded border border-border text-[10px] font-orbitron tracking-widest text-info-gray hover:text-white transition-all uppercase flex items-center gap-2"
         >
@@ -359,7 +456,8 @@ export const SystemConfig: React.FC = () => {
           重置 / 刷新
         </button>
         <button 
-          onClick={handleSave}
+          type="button"
+          onClick={(e) => handleSave(e)}
           disabled={isSaving}
           className="px-8 py-3 rounded bg-neon-cyan border border-neon-cyan text-black text-[10px] font-orbitron tracking-widest font-bold hover:shadow-[0_0_20px_rgba(0,240,255,0.4)] transition-all uppercase flex items-center gap-2"
         >

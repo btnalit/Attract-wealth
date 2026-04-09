@@ -88,6 +88,47 @@ async def get_system_status(request: Request):
     ]
     return ok_response(channels)
 
+@router.get("/data-health")
+async def get_data_health(request: Request):
+    """获取 AkShare 数据健康监控 (T-41)"""
+    service = _get_service(request)
+    metrics = {
+        "provider": "AkShare",
+        "total_requests": 0,
+        "success_requests": 0,
+        "success_rate": 0.0,
+        "avg_latency_ms": 0.0,
+        "last_fields": [],
+        "uptime_seconds": 0,
+        "status": "unknown"
+    }
+    
+    # 尝试访问 ChinaDataAssembler 内部的 AkShareProvider
+    # 注意: _china_data 是 TradingService 的私有属性或延迟初始化属性
+    china_data = getattr(service, "_china_data", None)
+    
+    # 如果还没初始化，尝试初始化它 (延迟加载逻辑与 TradingService 内部一致)
+    if china_data is None and not getattr(service, "_china_data_disabled", False):
+        try:
+            from src.dataflows.china_data import ChinaDataAssembler
+            china_data = ChinaDataAssembler()
+            setattr(service, "_china_data", china_data)
+        except Exception as exc:
+            logger.warning(f"Failed to auto-init ChinaDataAssembler in monitor: {exc}")
+    
+    if china_data and hasattr(china_data, "provider"):
+        provider = china_data.provider
+        if hasattr(provider, "get_metrics"):
+            m = provider.get_metrics()
+            metrics.update(m)
+            metrics["status"] = "online"
+        else:
+            metrics["status"] = "metrics_not_supported"
+    else:
+        metrics["status"] = "provider_not_found"
+        
+    return ok_response(metrics)
+
 @router.get("/risk")
 async def get_risk_metrics(request: Request):
     """获取风险限额看板数据 (T-23)"""

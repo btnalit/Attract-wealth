@@ -25,7 +25,7 @@ export const AgentCard: React.FC<AgentCardProps> = ({ id, name, description, rol
       case 'error':
         return "border-down-red shadow-[0_0_20px_rgba(255,0,85,0.4)] animate-[flicker_0.5s_infinite_alternate]";
       default:
-        return "border-border grayscale opacity-60";
+        return "border-border/50 bg-bg-card/20";
     }
   };
 
@@ -40,7 +40,7 @@ export const AgentCard: React.FC<AgentCardProps> = ({ id, name, description, rol
 
   return (
     <div className={clsx(
-      "group relative flex flex-col p-6 rounded-2xl border-2 bg-bg-card/40 backdrop-blur-xl transition-all duration-500 overflow-hidden",
+      "group relative flex flex-col p-6 rounded-2xl border-2 bg-bg-card/40 backdrop-blur-xl transition-all duration-500 overflow-hidden min-h-[280px]",
       getStatusStyles()
     )}>
       {/* Background Glow */}
@@ -73,18 +73,18 @@ export const AgentCard: React.FC<AgentCardProps> = ({ id, name, description, rol
             )}
           </div>
           <div>
-            <h3 className="text-lg font-bold text-white tracking-tight font-orbitron">{name}</h3>
-            <p className="text-xs text-info-gray font-mono uppercase tracking-[0.1em]">{role}</p>
+            <h3 className="text-xl font-bold text-white tracking-tight font-orbitron">{name}</h3>
+            <p className="text-[11px] text-info-gray/80 font-mono uppercase tracking-[0.15em] mt-0.5">{role}</p>
           </div>
         </div>
         
         {/* Pulse Indicator */}
         <div className="flex flex-col items-end gap-1.5">
           <div className={clsx(
-            "px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider font-mono border",
-            status === 'thinking' ? "text-neon-cyan border-neon-cyan/30" : 
-            status === 'success' ? "text-up-green border-up-green/30" : 
-            status === 'error' ? "text-down-red border-down-red/30" : "text-info-gray border-border"
+            "px-2.5 py-1 rounded text-[10px] font-bold uppercase tracking-wider font-mono border",
+            status === 'thinking' ? "text-neon-cyan border-neon-cyan/40 bg-neon-cyan/10" : 
+            status === 'success' ? "text-up-green border-up-green/40 bg-up-green/10" : 
+            status === 'error' ? "text-down-red border-down-red/40 bg-down-red/10" : "text-info-gray border-border bg-info-gray/5"
           )}>
             {getStatusLabel()}
           </div>

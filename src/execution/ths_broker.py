@@ -13,6 +13,10 @@ import time
 from pathlib import Path
 from typing import Any
 
+import pywinauto
+import win32gui
+from pywinauto import Desktop
+
 from src.core.ths_host_autostart import read_ths_account_context
 from src.execution.base import AccountBalance, BaseBroker, OrderResult, OrderSide, OrderStatus, Position
 from src.execution.ths_auto.easytrader_adapter import (
@@ -54,12 +58,24 @@ class THSBroker(BaseBroker):
         self._is_connected = False
         self._client: Any = None
         self._connect_meta: dict[str, Any] = {}
+        self.hwnd: int | None = None
+        self.window_title: str = ""
         self._local_order_seq = 0
         self._local_orders: dict[str, OrderResult] = {}
 
     @property
     def is_connected(self) -> bool:
         return self._is_connected
+
+    def check_health(self) -> dict:
+        """检查同花顺下单窗口存活状态 (HWND 校验)"""
+        is_alive = win32gui.IsWindow(self.hwnd) if self.hwnd else False
+        return {
+            "hwnd": self.hwnd,
+            "title": self.window_title,
+            "status": "active" if is_alive else "dead",
+            "is_connected": self.is_connected and is_alive,
+        }
 
     async def connect(self) -> bool:
         """Connect to logged THS client via easytrader."""
@@ -71,6 +87,20 @@ class THSBroker(BaseBroker):
             grid_strategy=self.easytrader_grid_strategy,
             captcha_engine=self.easytrader_captcha_engine,
         )
+
+        # 查找同花顺下单窗口 (HWND 绑定)
+        try:
+            apps = pywinauto.Desktop(backend="win32").windows()
+            for app in apps:
+                title = app.window_text()
+                if any(k in title for k in ("股票", "交易")) or "xiadan" in title.lower():
+                    self.hwnd = int(app.handle)
+                    self.window_title = title
+                    logger.info("[%s] HWND 绑定成功: hwnd=%s, title=%s", self.channel_name, self.hwnd, title)
+                    break
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("[%s] HWND 自动探测失败: %s", self.channel_name, exc)
+
         self._connect_meta = meta
         self._client = client
         self._is_connected = client is not None

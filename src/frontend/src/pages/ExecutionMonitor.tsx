@@ -6,7 +6,7 @@ import {
 import { cn } from '../lib/utils';
 import { PageTitle } from '../components/PageTitle';
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL || '';
+const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
 
 // ─── Types ──────────────────────────────────────────────
 interface Channel { id: string; name: string; status: string; latency: number; throughput: number; lastSync: string; color: string }
@@ -38,6 +38,7 @@ const MOCK_FILLS: Fill[] = [
 // ─── Component ──────────────────────────────────────────
 export const ExecutionMonitor: React.FC = () => {
   const [channels, setChannels] = useState<Channel[]>(MOCK_CHANNELS);
+  const [thsInfo, setThsInfo] = useState<any>(null);
   const [orders, setOrders] = useState<Order[]>(MOCK_ORDERS);
   const [fills] = useState<Fill[]>(MOCK_FILLS);
   const [loading, setLoading] = useState(true);
@@ -45,9 +46,10 @@ export const ExecutionMonitor: React.FC = () => {
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const [statusRes, ordersRes] = await Promise.all([
+      const [statusRes, ordersRes, thsRes] = await Promise.all([
         fetch(`${API_BASE}/api/v1/monitor/status`),
         fetch(`${API_BASE}/api/trading/orders/active?limit=50`),
+        fetch(`${API_BASE}/api/trading/snapshot`)
       ]);
 
       if (statusRes.ok) {
@@ -56,11 +58,11 @@ export const ExecutionMonitor: React.FC = () => {
         setChannels(Array.isArray(raw) ? raw.map((c: any) => ({
           id: c.name?.toLowerCase().replace(/\s+/g, '_') ?? c.name,
           name: c.name,
-          status: c.status,
-          latency: Math.round(c.latency_ms),
-          throughput: c.throughput,
-          lastSync: new Date(c.last_sync * 1000).toLocaleTimeString(),
-          color: c.status === 'online' ? 'text-up-green' : 'text-warn-gold',
+          status: c.status?.toLowerCase() === 'online' ? 'online' : (c.status?.toLowerCase() === 'offline' ? 'offline' : c.status),
+          latency: Math.round(c.latency_ms || 0),
+          throughput: c.throughput || 0,
+          lastSync: c.last_sync ? new Date(c.last_sync * 1000).toLocaleTimeString() : '--',
+          color: c.status?.toLowerCase() === 'online' ? 'text-up-green' : 'text-down-red',
         })) : MOCK_CHANNELS);
       }
 
@@ -77,6 +79,11 @@ export const ExecutionMonitor: React.FC = () => {
           status: (o.status ?? 'PENDING').toUpperCase(),
           duration: o.holding_time ? `${(o.holding_time / 1000).toFixed(1)}s` : '0.0s',
         })) : MOCK_ORDERS);
+      }
+
+      if (thsRes.ok) {
+        const json = await thsRes.json();
+        setThsInfo(json.channel_info || json.data?.channel_info);
       }
     } catch (err) {
       console.warn('[ExecutionMonitor] API fetch failed, using mock:', err);
@@ -109,6 +116,52 @@ export const ExecutionMonitor: React.FC = () => {
           </button>
         </div>
       </div>
+
+      {/* THS Specific Info */}
+      {thsInfo && (
+        <div className="bg-bg-card border border-border rounded-sm p-4 border-l-4 border-l-neon-cyan/50">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="flex flex-col">
+              <div className="flex items-center gap-2 mb-1">
+                <Cpu className="h-4 w-4 text-neon-cyan" />
+                <span className="font-orbitron font-bold text-sm tracking-widest uppercase">实盘下单通道</span>
+              </div>
+              <p className="text-info-gray/60 text-[10px] font-mono">A 股实盘自动下单通道 (ths_auto)</p>
+            </div>
+            
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-6 flex-1 max-w-2xl px-4">
+              <div className="flex flex-col">
+                <span className="text-[9px] text-info-gray/50 uppercase font-mono">通道名称</span>
+                <span className="text-xs text-white font-bold">{thsInfo.name || '--'}</span>
+              </div>
+              <div className="flex flex-col">
+                <span className="text-[9px] text-info-gray/50 uppercase font-mono">HWND 句柄</span>
+                <span className="text-xs text-neon-cyan font-mono">{thsInfo.hwnd || '--'}</span>
+              </div>
+              <div className="flex flex-col">
+                <span className="text-[9px] text-info-gray/50 uppercase font-mono">窗口标题</span>
+                <span className="text-xs text-white truncate max-w-[150px]" title={thsInfo.title}>{thsInfo.title || '--'}</span>
+              </div>
+              <div className="flex flex-col">
+                <span className="text-[9px] text-info-gray/50 uppercase font-mono">连接状态</span>
+                <span className={cn(
+                  "text-xs font-bold",
+                  thsInfo.status === 'THS_NOT_FOUND' ? "text-down-red" : "text-up-green"
+                )}>
+                  {thsInfo.status || 'CONNECTED'}
+                </span>
+              </div>
+            </div>
+            
+            {thsInfo.status === 'THS_NOT_FOUND' && (
+              <div className="flex items-center gap-2 px-3 py-2 bg-down-red/10 border border-down-red/20 rounded animate-pulse">
+                <AlertOctagon className="h-4 w-4 text-down-red" />
+                <span className="text-[10px] text-down-red font-bold">未检测到同花顺，请检查安装路径</span>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Channel Status Grid */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

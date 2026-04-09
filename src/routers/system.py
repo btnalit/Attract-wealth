@@ -1,7 +1,9 @@
 ﻿from __future__ import annotations
 
 import os
+import sys
 import time
+import json
 from typing import Any
 
 from fastapi import APIRouter, Query, Request
@@ -23,6 +25,8 @@ from src.core.startup_preflight import run_startup_preflight
 from src.core.system_store import SystemStore
 from src.core.trading_ledger import TradingLedger
 from src.llm.openai_compat import get_llm_effective_config, get_llm_runtime_metrics
+from src.llm.config_provider import llm_config_provider
+from src.channels.wechat import WeChatChannel
 
 router = APIRouter()
 LLM_RUNTIME_CONFIG_KEY = "llm_runtime_config"
@@ -58,6 +62,11 @@ class THSBridgeStartRequest(BaseModel):
 class THSBridgeStopRequest(BaseModel):
     force: bool = Field(default=True, description="是否强制停止（忽略 STARTUP_KEEP_THS_BRIDGE）")
     reason: str = Field(default="api_stop", description="停止原因")
+
+
+class NotificationTestRequest(BaseModel):
+    webhook_url: str = Field(..., description="企业微信 Webhook URL")
+    channel: str = Field(default="wechat", description="通知通道 (wechat, dingtalk)")
 
 
 class LLMRuntimeConfigRequest(BaseModel):
@@ -236,6 +245,30 @@ def _llm_config_output(config: dict[str, Any]) -> dict[str, Any]:
     payload["api_key_masked"] = _mask_api_key(str(config.get("api_key", "")))
     payload["updated_at"] = time.time()
     return payload
+
+
+@router.get("/llm-config")
+async def get_llm_config():
+    """获取当前 LLM 配置单例 (T-42)"""
+    config = llm_config_provider.get_config()
+    payload = config.dict()
+    # 脱敏处理
+    payload["api_key"] = _mask_api_key(payload.get("api_key", ""))
+    payload["has_api_key"] = bool(config.api_key)
+    return ok_response(payload)
+
+
+@router.put("/llm-config")
+async def update_llm_config(req: LLMRuntimeConfigRequest):
+    """动态更新 LLM 配置单例 (T-42)"""
+    updates = req.dict(exclude_unset=True)
+    if not req.api_key and req.retain_api_key:
+        updates.pop("api_key", None)
+        
+    new_cfg = llm_config_provider.update_config(**updates)
+    payload = new_cfg.dict()
+    payload["api_key"] = _mask_api_key(payload.get("api_key", ""))
+    return ok_response(payload)
 
 
 @router.get("/runtime")
@@ -927,13 +960,71 @@ async def error_codes():
 # System Config & Notification Test API (Phase 5 QA Rework)
 # ---------------------------------------------------------------------------
 
+def _get_system_config_path() -> str:
+    """动态获取系统配置文件路径 (与 LLMConfigProvider 逻辑一致)"""
+    if hasattr(sys, '_MEIPASS'):
+        base_dir = os.path.dirname(sys.executable)
+    else:
+        # src/routers/system.py -> src/routers -> src -> Root
+        base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        if not os.path.exists(os.path.join(base_dir, 'pyproject.toml')):
+            base_dir = os.getcwd()
+    
+    config_dir = os.path.join(base_dir, 'config')
+    os.makedirs(config_dir, exist_ok=True)
+    return os.path.join(config_dir, "system_runtime.json")
+
+def _load_system_runtime_config():
+    config = {
+        "tushare_token": os.getenv("TUSHARE_TOKEN", ""),
+        "wechat_webhook": os.getenv("WECHAT_WEBHOOK_URL", ""),
+        "dingtalk_secret": os.getenv("DINGTALK_SECRET", ""),
+    }
+    path = _get_system_config_path()
+    if os.path.exists(path):
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                config.update(json.load(f))
+        except Exception:
+            pass
+    return config
+
+def _save_system_runtime_config(config: dict[str, Any]):
+    try:
+        path = _get_system_config_path()
+        # 加载现有配置，合并更新 (避免覆盖掉没传的字段)
+        current = {}
+        if os.path.exists(path):
+            with open(path, "r", encoding="utf-8") as f:
+                current = json.load(f)
+        
+        # 过滤掉掩码值 (••••)
+        updates = {k: v for k, v in config.items() if v and "•" not in str(v)}
+        current.update(updates)
+        
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(current, f, indent=4, ensure_ascii=False)
+            
+        # Sync to environment
+        if "wechat_webhook" in current:
+            os.environ["WECHAT_WEBHOOK_URL"] = current["wechat_webhook"]
+        if "tushare_token" in current:
+            os.environ["TUSHARE_TOKEN"] = current["tushare_token"]
+        if "dingtalk_secret" in current:
+            os.environ["DINGTALK_SECRET"] = current["dingtalk_secret"]
+    except Exception as e:
+        print(f"Failed to save system config: {e}")
+
+
 @router.get("/config")
 async def get_system_config(request: Request):
     """Get general system configuration for SystemConfig page."""
+    runtime_config = _load_system_runtime_config()
     config = {
         "day_roll_time": os.getenv("DAY_ROLL_TIME", "23:00"),
         "autopilot_template": os.getenv("AUTOPILOT_TEMPLATE", ""),
         "channel": getattr(request.app.state, "channel", "simulation"),
+        **runtime_config
     }
     return ok_response(config)
 
@@ -941,7 +1032,7 @@ async def get_system_config(request: Request):
 @router.put("/config")
 async def update_system_config(request: Request, body: dict[str, Any]):
     """Update general system configuration."""
-    # Persist to environment or database (simplified)
+    _save_system_runtime_config(body)
     return ok_response({"status": "updated", "config": body})
 
 
@@ -951,3 +1042,45 @@ async def test_notification():
     from src.routers.stream import publish_log
     publish_log("SYSTEM", "Test notification sent from SystemConfig page.", level="info")
     return ok_response({"status": "sent", "message": "Test notification dispatched."})
+
+
+@router.post("/notification/test/wechat")
+async def test_wechat_notification(req: NotificationTestRequest):
+    """
+    测试企业微信 Webhook 通知接口 (Phase 5 QA Rework)
+    """
+    if not req.webhook_url or not req.webhook_url.startswith("http"):
+        return JSONResponse(
+            status_code=400,
+            content=error_response(
+                "INVALID_ORDER_REQUEST",
+                "无效的企业微信 Webhook URL",
+                {"webhook_url": req.webhook_url},
+            ),
+        )
+
+    try:
+        channel = WeChatChannel(webhook_url=req.webhook_url)
+        # 发送一条测试消息
+        success = channel.send(
+            title="🔔 系统通知测试",
+            content=f"这是来自来财 (Attract-wealth) 系统配置页面的连通性测试消息。\n\n**测试时间**: {time.strftime('%Y-%m-%d %H:%M:%S')}\n**状态**: 运行中",
+            level="info",
+        )
+        if success:
+            return ok_response({"status": "sent", "message": "Test message sent to WeChat."})
+        else:
+            return JSONResponse(
+                status_code=502,
+                content=error_response(
+                    "INTERNAL_ERROR",
+                    "企业微信发送测试消息失败，请检查 Webhook 密钥或网络连通性",
+                ),
+            )
+    except Exception as exc:  # noqa: BLE001
+        return JSONResponse(
+            status_code=500,
+            content=error_response(
+                "INTERNAL_ERROR", "调用企业微信接口发生未知错误", {"error": str(exc)}
+            ),
+        )

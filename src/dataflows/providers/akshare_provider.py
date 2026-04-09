@@ -26,21 +26,54 @@ class AkShareProvider(DataProvider):
         self._spot_em_df: pd.DataFrame = None
         self._spot_em_timestamp: float = 0
 
+        # T-41: 监控指标
+        self._metrics = {
+            "total_requests": 0,
+            "success_requests": 0,
+            "total_latency_ms": 0.0,
+            "last_fields": [],
+            "start_time": time.time()
+        }
+
+    def get_metrics(self) -> Dict[str, Any]:
+        """返回监控指标 (T-41)"""
+        total = self._metrics["total_requests"]
+        success = self._metrics["success_requests"]
+        avg_latency = self._metrics["total_latency_ms"] / total if total > 0 else 0.0
+        return {
+            "total_requests": total,
+            "success_requests": success,
+            "success_rate": success / total if total > 0 else 0.0,
+            "avg_latency_ms": round(avg_latency, 2),
+            "last_fields": self._metrics["last_fields"],
+            "uptime_seconds": int(time.time() - self._metrics["start_time"])
+        }
+
     def _get_spot_board(self) -> pd.DataFrame:
         """获取东方财富整板实时行情（比一个个拼字符串单点安全100倍）"""
         now = time.time()
         if self._spot_em_df is not None and (now - self._spot_em_timestamp < self.SPOT_TTL):
             return self._spot_em_df
         
+        self._metrics["total_requests"] += 1
+        start_t = time.time()
         try:
             logger.info("📦 [AkShare] 正在向东财拉取全市场实时盘口切片...")
             df = ak.stock_zh_a_spot_em()
             self._spot_em_df = df
             self._spot_em_timestamp = now
+            
+            # 更新指标
+            self._metrics["success_requests"] += 1
+            if not df.empty:
+                self._metrics["last_fields"] = df.columns.tolist()
+            
             return df
         except Exception as e:
             logger.error(f"❌ [AkShare] Spot EM 获取失败: {e}")
             return pd.DataFrame()
+        finally:
+            self._metrics["total_latency_ms"] += (time.time() - start_t) * 1000
 
     def get_realtime_quote(self, ticker: str) -> Dict[str, Any]:
         """获取单独个股最新数据"""
@@ -85,6 +118,8 @@ class AkShareProvider(DataProvider):
             if now - hit["time"] < self.HIST_TTL:
                 return hit["data"]
                 
+        self._metrics["total_requests"] += 1
+        start_t = time.time()
         try:
             logger.info(f"📊 [AkShare] 正在拉取 {ticker} 的历史日 K 线...")
             # 注意: symbol要求根据市场补齐前缀 sh600000, sz000001
@@ -99,9 +134,13 @@ class AkShareProvider(DataProvider):
             # 格式化符合内部所需字段: date, open, high, low, close, volume
             if not df.empty:
                 df.rename(columns={"date": "date", "open": "open", "high": "high", "low": "low", "close": "close", "volume": "volume"}, inplace=True)
+                self._metrics["last_fields"] = df.columns.tolist()
                 
+            self._metrics["success_requests"] += 1
             self._cache[cache_key] = {"time": now, "data": df}
             return df
         except Exception as e:
             logger.error(f"❌ [AkShare] 拉取 {ticker} 报废: {e}")
             return pd.DataFrame()
+        finally:
+            self._metrics["total_latency_ms"] += (time.time() - start_t) * 1000

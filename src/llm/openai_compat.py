@@ -12,6 +12,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from openai import AsyncOpenAI
+from src.llm.config_provider import llm_config_provider
 
 
 @dataclass
@@ -256,7 +257,16 @@ class UnifiedLLMClient:
     """
 
     def __init__(self, config: LLMConfig | None = None, client: Any | None = None):
-        self.config = config or LLMConfig.from_env()
+        # T-42: 动态读取单例配置
+        runtime_cfg = llm_config_provider.get_config()
+        self.config = config or LLMConfig(
+            base_url=runtime_cfg.base_url,
+            api_key=runtime_cfg.api_key,
+            model=runtime_cfg.model,
+            temperature=runtime_cfg.temperature,
+            max_tokens=runtime_cfg.max_tokens,
+            timeout=runtime_cfg.timeout_s
+        )
         self._client = client or AsyncOpenAI(
             base_url=self.config.base_url,
             api_key=self.config.api_key,

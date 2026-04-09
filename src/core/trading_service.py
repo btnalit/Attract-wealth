@@ -666,6 +666,7 @@ class TradingService:
         payload: dict[str, Any] = {
             "channel": self.channel,
             "broker_connected": bool(getattr(getattr(self, "broker", None), "is_connected", False)),
+            "channel_info": self.broker.check_health() if hasattr(self.broker, "check_health") else {},
             "balance": asdict(balance),
             "positions": [asdict(item) for item in positions],
             "orders": [asdict(item) for item in orders],
