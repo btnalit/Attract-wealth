@@ -11,6 +11,7 @@ import json
 import logging
 import os
 import subprocess
+import sys
 from pathlib import Path
 from typing import Any, Optional
 
@@ -45,6 +46,15 @@ REGISTRY_PATHS = [
     ),
 ]
 
+def _get_persistent_root() -> str:
+    """获取持久化配置/数据根目录。"""
+    if getattr(sys, 'frozen', False):
+        return os.path.dirname(sys.executable)
+    return os.path.join(os.path.dirname(__file__), "..", "..")
+
+def _get_bundled_root() -> Optional[str]:
+    """获取打包资源根目录 (MEIPASS)。"""
+    return getattr(sys, "_MEIPASS", None)
 
 class ThsPathResolver:
     """
@@ -54,11 +64,22 @@ class ThsPathResolver:
     """
 
     def __init__(self, config_path: Optional[str] = None):
-        self.config_path = config_path or os.path.join(
-            os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
-            "config",
-            "ths.json",
-        )
+        if config_path:
+            self.config_path = config_path
+        else:
+            persistent_config = os.path.join(_get_persistent_root(), "config", "ths.json")
+            bundled_config = None
+            if _get_bundled_root():
+                bundled_config = os.path.join(_get_bundled_root(), "config", "ths.json")
+            
+            # 优先使用持久化路径 (用户修改过的)，否则使用打包内置的
+            if os.path.exists(persistent_config):
+                self.config_path = persistent_config
+            elif bundled_config and os.path.exists(bundled_config):
+                self.config_path = bundled_config
+            else:
+                self.config_path = persistent_config
+                
         self._cache: Optional[dict[str, Any]] = None
 
     def resolve(self) -> dict[str, Any]:

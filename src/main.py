@@ -5,7 +5,10 @@ from __future__ import annotations
 
 import logging
 import os
+import sys
+import traceback
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import Any
 
 from dotenv import load_dotenv
@@ -25,10 +28,32 @@ from src.core.system_store import SystemStore
 from src.core.ths_bridge_runtime import THSBridgeRuntime
 from src.core.trading_service import TradingService
 from src.evolution.backtest_runner import BacktestRunner
-from src.routers import strategy, system, trading
+
+# Determine base path for resources
+if hasattr(sys, "_MEIPASS"):
+    # PyInstaller bundled environment
+    BASE_DIR = Path(sys._MEIPASS)
+else:
+    # Development environment
+    BASE_DIR = Path(__file__).parent.parent
 
 load_dotenv()
+
+# Initialize logging to both console and file
+log_dir = Path(os.getenv("LOG_DIR", os.path.join(os.path.dirname(sys.executable) if getattr(sys, 'frozen', False) else os.path.dirname(__file__).split("src")[0], "logs")))
+log_dir.mkdir(parents=True, exist_ok=True)
+log_file = log_dir / "laicai_startup.log"
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    handlers=[
+        logging.StreamHandler(sys.stdout),
+        logging.FileHandler(log_file, encoding="utf-8")
+    ]
+)
 logger = logging.getLogger(__name__)
+logger.info("来财 (LaiCai) 启动中... (Frozen: %s)", getattr(sys, 'frozen', False))
 
 
 def _is_true(value: str | None, *, default: bool = False) -> bool:
@@ -169,7 +194,12 @@ app.include_router(strategy.router, prefix="/api/strategy", tags=["strategy"])
 app.include_router(monitor.router, prefix="/api/v1/monitor", tags=["monitor"])
 app.include_router(stream.router, prefix="/api/v1/stream", tags=["stream"])
 
-frontend_dist = os.path.join(os.path.dirname(__file__), "frontend", "dist")
+# Frontend distribution static files
+if hasattr(sys, "_MEIPASS"):
+    frontend_dist = os.path.join(sys._MEIPASS, "frontend", "dist")
+else:
+    frontend_dist = os.path.join(os.path.dirname(__file__), "frontend", "dist")
+
 if os.path.isdir(frontend_dist):
     app.mount("/", StaticFiles(directory=frontend_dist, html=True), name="frontend")
 
@@ -177,12 +207,36 @@ if os.path.isdir(frontend_dist):
 def cli_entry():
     import uvicorn
 
-    uvicorn.run(
-        "src.main:app",
-        host=os.getenv("API_HOST", "0.0.0.0"),
-        port=int(os.getenv("API_PORT", "8000")),
-        reload=os.getenv("DEBUG", "false").lower() == "true",
-    )
+    try:
+        host = os.getenv("API_HOST", "0.0.0.0")
+        port = int(os.getenv("API_PORT", "8000"))
+        reload = os.getenv("DEBUG", "false").lower() == "true"
+
+        # When running in bundled environment, we should use the app object directly
+        # and disable reload (since uvicorn's reload doesn't work well with PyInstaller)
+        if hasattr(sys, "_MEIPASS"):
+            uvicorn.run(
+                app,
+                host=host,
+                port=port,
+                reload=False,
+            )
+        else:
+            uvicorn.run(
+                "src.main:app",
+                host=host,
+                port=port,
+                reload=reload,
+            )
+    except Exception:
+        print("\n" + "=" * 60)
+        print("CRITICAL STARTUP ERROR")
+        print("=" * 60)
+        traceback.print_exc()
+        print("=" * 60)
+        print("Press Enter to exit...")
+        input()
+        sys.exit(1)
 
 
 if __name__ == "__main__":

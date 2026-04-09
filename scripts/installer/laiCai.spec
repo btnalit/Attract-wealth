@@ -34,21 +34,30 @@ EXCLUDES = [
 # 隐藏导入 (PyInstaller 无法自动检测的模块)
 HIDDEN_IMPORTS = [
     'fastapi', 'uvicorn', 'pydantic', 'pydantic_settings',
-    'langgraph', 'langchain', 'langchain_openai',
+    'uvicorn.logging', 'uvicorn.loops', 'uvicorn.loops.auto',
+    'uvicorn.protocols', 'uvicorn.protocols.http', 'uvicorn.protocols.http.auto',
+    'uvicorn.protocols.websockets', 'uvicorn.protocols.websockets.auto',
+    'uvicorn.lifespan', 'uvicorn.lifespan.on',
+    'langgraph', 'langgraph.graph', 'langgraph.prebuilt',
+    'langchain', 'langchain_openai', 'langchain_core',
     'akshare', 'baostock', 'tushare',
     'lancedb', 'sqlite3', 'easytrader', 'sse_starlette',
-    'aiohttp', 'requests', 'psutil',
+    'aiohttp', 'requests', 'psutil', 'pywinauto', 'pyautogui', 'pillow',
     'src.core', 'src.agents', 'src.dataflows', 'src.evolution',
     'src.execution', 'src.routers', 'src.mcp', 'src.channels',
     'src.graph', 'src.llm', 'src.frontend',
 ]
 
 # 数据文件收集
-DATAS = []
+DATAS = [
+    (str(ROOT_DIR / 'pyproject.toml'), '.'),
+]
 if CONFIG_DIR.exists():
     DATAS.append((str(CONFIG_DIR), 'config'))
 if SKILLS_DIR.exists():
     DATAS.append((str(SKILLS_DIR), 'skills'))
+if DATA_DIR.exists():
+    DATAS.append((str(DATA_DIR), 'data'))
 
 FRONTEND_DIST = SRC_DIR / 'frontend' / 'dist'
 if FRONTEND_DIST.exists():

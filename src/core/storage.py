@@ -7,9 +7,22 @@ from __future__ import annotations
 
 import os
 import sqlite3
+import sys
 from pathlib import Path
 
-DATA_DIR = Path(os.getenv("DATA_DIR", os.path.join(os.path.dirname(__file__), "..", "..", "data")))
+def _get_persistent_root() -> str:
+    """获取持久化数据存储根目录。
+    
+    在 PyInstaller 打包环境下，指向可执行文件所在目录。
+    在开发环境下，指向项目根目录。
+    """
+    if getattr(sys, 'frozen', False):
+        # 可执行文件所在目录
+        return os.path.dirname(sys.executable)
+    # 开发环境下，相对于当前文件的路径 (src/core/storage.py -> 3级向上是根目录)
+    return os.path.join(os.path.dirname(__file__), "..", "..")
+
+DATA_DIR = Path(os.getenv("DATA_DIR", os.path.join(_get_persistent_root(), "data")))
 
 MAIN_DB = DATA_DIR / "laicai.db"
 LEDGER_DB = DATA_DIR / "trading_ledger.db"
