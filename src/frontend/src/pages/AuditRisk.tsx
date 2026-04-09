@@ -1,23 +1,17 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, FC, Fragment } from 'react';
 import { 
   ShieldCheck, 
   ShieldAlert, 
   ShieldX, 
   Lock, 
-  Unlock, 
-  Zap, 
-  Bell, 
-  Clock, 
-  Activity, 
   AlertTriangle, 
   ShieldQuestion, 
-  History,
-  AlertCircle,
   Loader2,
   RefreshCw
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { PageTitle } from '../components/PageTitle';
+import { Button } from '../components/ui/button';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || '';
 
@@ -27,14 +21,14 @@ interface AuditLog { id: string; time: string; type: string; severity: string; d
 interface RiskSwitch { id: string; label: string; description: string; enabled: boolean }
 
 // --- SEVERITY CONFIG ---
-const SEVERITY_COLOR = {
+const SEVERITY_COLOR: Record<string, { text: string; glow: string }> = {
   'Low': { text: 'text-white/70', glow: 'shadow-[0_0_8px_rgba(255,255,255,0.2)] border-white/20' },
   'Medium': { text: 'text-warn-gold', glow: 'shadow-[0_0_10px_rgba(255,215,0,0.3)] border-warn-gold/30' },
   'High': { text: 'text-down-red', glow: 'shadow-[0_0_12px_rgba(255,0,85,0.4)] border-down-red/40' },
 };
 
 // --- HELPER COMPONENT: GAUGE ---
-const RiskGauge: React.FC<{ gauge: RiskGaugeData }> = ({ gauge }) => {
+const RiskGauge: FC<{ gauge: RiskGaugeData }> = ({ gauge }) => {
   const percentage = Math.min((gauge.current / gauge.threshold) * 100, 100);
   const strokeDasharray = 283; // 2 * PI * 45
   const strokeDashoffset = strokeDasharray - (percentage / 100) * strokeDasharray;
@@ -63,7 +57,7 @@ const RiskGauge: React.FC<{ gauge: RiskGaugeData }> = ({ gauge }) => {
         </svg>
         <div className="absolute inset-0 flex flex-col items-center justify-center">
           <span className="text-2xl font-orbitron font-bold text-white leading-none">{gauge.current}</span>
-          <span className="text-[10px] text-info-gray/60 mt-1 uppercase tracking-tighter">Threshold: {gauge.threshold}{gauge.unit}</span>
+          <span className="text-[10px] text-info-gray/60 mt-1 uppercase tracking-tighter">阈值: {gauge.threshold}{gauge.unit}</span>
         </div>
       </div>
       <h3 className="font-orbitron text-xs font-bold text-info-gray uppercase tracking-widest group-hover:text-neon-cyan transition-colors">
@@ -73,7 +67,7 @@ const RiskGauge: React.FC<{ gauge: RiskGaugeData }> = ({ gauge }) => {
   );
 };
 
-export const AuditRisk: React.FC = () => {
+export const AuditRisk: FC = () => {
   const [gauges, setGauges] = useState<RiskGaugeData[]>([]);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
   const [switches, setSwitches] = useState<RiskSwitch[]>([]);
@@ -89,13 +83,13 @@ export const AuditRisk: React.FC = () => {
       ]);
 
       if (riskRes.ok) {
-        const json = await riskRes.ok ? await riskRes.json() : { data: {} };
+        const json = await riskRes.json();
         const d = json.data || {};
         setGauges([
-          { label: 'Max Drawdown', current: d.max_drawdown_current * 100 || 2.4, threshold: d.max_drawdown_threshold * 100 || 10.0, color: 'text-up-green', unit: '%' },
-          { label: 'Top Position', current: d.position_limit_current * 100 || 15.0, threshold: d.position_limit_threshold * 100 || 30.0, color: 'text-neon-cyan', unit: '%' },
-          { label: 'Daily Trade Freq', current: d.trade_frequency_day || 12, threshold: 500, color: 'text-warn-gold', unit: 'req' },
-          { label: 'API Rate Limit', current: d.api_rate_limit_percent || 42.0, threshold: 100, color: 'text-neon-magenta', unit: '%' },
+          { label: '最大回撤', current: (d.max_drawdown_current || 0.024) * 100, threshold: (d.max_drawdown_threshold || 0.10) * 100, color: 'text-up-green', unit: '%' },
+          { label: '单仓限制', current: (d.position_limit_current || 0.15) * 100, threshold: (d.position_limit_threshold || 0.30) * 100, color: 'text-neon-cyan', unit: '%' },
+          { label: '每日交易频次', current: d.trade_frequency_day || 12, threshold: 500, color: 'text-warn-gold', unit: 'req' },
+          { label: 'API 速率限制', current: d.api_rate_limit_percent || 42.0, threshold: 100, color: 'text-neon-magenta', unit: '%' },
         ]);
       }
 
@@ -150,12 +144,12 @@ export const AuditRisk: React.FC = () => {
     <div className="p-6 space-y-6">
       <div className="flex justify-between items-center">
         <PageTitle 
-          title="AUDIT & RISK CONTROL" 
-          subtitle="Security verification, compliance monitoring & risk threshold management" 
+          title="审计与风控" 
+          subtitle="安全校验、合规监控与风险阈值管理" 
         />
         <Button variant="outline" size="sm" className="gap-2" onClick={fetchData}>
           <RefreshCw className={cn("h-3.5 w-3.5", loading && "animate-spin")} />
-          <span>Refresh</span>
+          <span>刷新</span>
         </Button>
       </div>
 
@@ -174,7 +168,7 @@ export const AuditRisk: React.FC = () => {
           <div className="flex justify-between items-center px-4 py-3 border-b border-border bg-bg-card/50">
             <div className="flex items-center gap-2">
               <ShieldCheck className="h-4 w-4 text-neon-cyan" />
-              <span className="font-orbitron text-sm font-bold tracking-widest uppercase text-white">Security Audit Log</span>
+              <span className="font-orbitron text-sm font-bold tracking-widest uppercase text-white">安全审计日志</span>
             </div>
             {loading && <Loader2 className="h-4 w-4 animate-spin text-info-gray" />}
           </div>
@@ -183,15 +177,15 @@ export const AuditRisk: React.FC = () => {
             <table className="w-full text-left text-xs">
               <thead className="sticky top-0 bg-bg-card border-b border-border z-10">
                 <tr className="text-info-gray uppercase font-mono tracking-tighter">
-                  <th className="px-4 py-3">Timestamp</th>
-                  <th className="px-4 py-3">Type</th>
-                  <th className="px-4 py-3">Severity</th>
-                  <th className="px-4 py-3">Description</th>
+                  <th className="px-4 py-3">时间戳</th>
+                  <th className="px-4 py-3">类型</th>
+                  <th className="px-4 py-3">严重程度</th>
+                  <th className="px-4 py-3">描述</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/30">
                 {auditLogs.map(log => (
-                  <React.Fragment key={log.id}>
+                  <Fragment key={log.id}>
                     <tr 
                       className={cn(
                         "hover:bg-bg-hover transition-colors cursor-pointer group",
@@ -208,8 +202,8 @@ export const AuditRisk: React.FC = () => {
                       <td className="px-4 py-3">
                         <div className={cn(
                           "px-2 py-0.5 rounded-sm text-[10px] font-bold border inline-flex items-center gap-1 uppercase",
-                          SEVERITY_COLOR[log.severity as keyof typeof SEVERITY_COLOR]?.text || 'text-white',
-                          SEVERITY_COLOR[log.severity as keyof typeof SEVERITY_COLOR]?.glow || ''
+                          SEVERITY_COLOR[log.severity]?.text || 'text-white',
+                          SEVERITY_COLOR[log.severity]?.glow || ''
                         )}>
                           {log.severity === 'High' && <ShieldAlert className="h-2.5 w-2.5" />}
                           {log.severity === 'Medium' && <AlertTriangle className="h-2.5 w-2.5" />}
@@ -230,7 +224,7 @@ export const AuditRisk: React.FC = () => {
                         </td>
                       </tr>
                     )}
-                  </React.Fragment>
+                  </Fragment>
                 ))}
               </tbody>
             </table>
@@ -241,7 +235,7 @@ export const AuditRisk: React.FC = () => {
         <div className="flex flex-col bg-bg-card border border-border rounded-sm overflow-hidden">
           <div className="px-4 py-3 border-b border-border bg-bg-card/50 flex items-center gap-2">
             <Lock className="h-4 w-4 text-warn-gold" />
-            <span className="font-orbitron text-sm font-bold tracking-widest uppercase text-white">Control Matrix</span>
+            <span className="font-orbitron text-sm font-bold tracking-widest uppercase text-white">风控矩阵</span>
           </div>
           
           <div className="p-4 space-y-4">
@@ -272,7 +266,7 @@ export const AuditRisk: React.FC = () => {
           <div className="mt-auto p-4 bg-bg-primary/30 border-t border-border">
             <button className="w-full flex items-center justify-center gap-2 py-2 bg-down-red/10 border border-down-red/50 text-down-red text-xs font-bold uppercase rounded-sm hover:bg-down-red/20 transition-all">
               <ShieldX className="h-4 w-4" />
-              Force Emergency Lock
+              强制紧急锁定
             </button>
           </div>
         </div>
@@ -280,15 +274,5 @@ export const AuditRisk: React.FC = () => {
     </div>
   );
 };
-
-// --- Mock Button for PageTitle ---
-const Button: React.FC<any> = ({ children, className, variant, size, ...props }) => (
-  <button className={cn("px-3 py-1.5 rounded-sm text-xs font-bold transition-all border", 
-    variant === 'outline' ? "border-border text-info-gray hover:text-white hover:border-white" : 
-    variant === 'destructive' ? "border-down-red/50 text-down-red hover:bg-down-red/10" : 
-    "bg-neon-cyan/10 border-neon-cyan/50 text-neon-cyan hover:bg-neon-cyan/20", className)} {...props}>
-    {children}
-  </button>
-);
 
 export default AuditRisk;

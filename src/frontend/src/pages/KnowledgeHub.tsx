@@ -120,9 +120,9 @@ export const KnowledgeHub: React.FC = () => {
           <div>
             <h1 className="text-2xl font-orbitron font-bold text-white tracking-wider flex items-center gap-3">
               <BookOpen className="text-neon-cyan h-6 w-6" />
-              KNOWLEDGE HUB <span className="text-neon-cyan/50 text-xs font-mono ml-2">V2.0_SEMANTIC_SEARCH</span>
+              知识库 <span className="text-neon-cyan/50 text-xs font-mono ml-2">V2.0_语义搜索</span>
             </h1>
-            <p className="text-info-gray/60 text-xs mt-1 uppercase tracking-widest">Semantic discovery of trading wisdom & rules</p>
+            <p className="text-info-gray/60 text-xs mt-1 uppercase tracking-widest">交易智慧与规则的语义发现系统</p>
           </div>
 
           {/* Search Bar */}
@@ -132,7 +132,7 @@ export const KnowledgeHub: React.FC = () => {
               <Search className="h-4 w-4 text-info-gray group-focus-within:text-neon-cyan" />
               <input 
                 type="text" 
-                placeholder="Search trading patterns, lessons, and rules..."
+                placeholder="搜索交易模式、经验教训或风控规则..."
                 className="bg-transparent border-none outline-none text-sm text-white px-3 flex-1 font-inter"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
@@ -143,7 +143,7 @@ export const KnowledgeHub: React.FC = () => {
                 disabled={isLoading}
                 className="text-[10px] font-mono bg-neon-cyan/10 border border-neon-cyan/30 text-neon-cyan px-2 py-1 rounded-sm hover:bg-neon-cyan hover:text-black transition-colors shadow-[0_0_10px_rgba(0,240,255,0.2)] flex items-center gap-1"
               >
-                {isLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : 'SEARCH'}
+                {isLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : '搜索'}
               </button>
             </div>
           </div>
@@ -166,7 +166,7 @@ export const KnowledgeHub: React.FC = () => {
                     : "text-info-gray/40 border-transparent hover:text-info-gray/80 hover:bg-white/5"
                 )}
               >
-                {tab}s
+                {tab === 'Pattern' ? '模式' : tab === 'Lesson' ? '经验' : '规则'}
               </button>
             ))}
           </div>
@@ -192,7 +192,7 @@ export const KnowledgeHub: React.FC = () => {
                   <div className="flex justify-between items-start mb-2">
                     <h3 className="font-orbitron text-white text-sm tracking-wide">{item.title}</h3>
                     <div className="flex items-center gap-2">
-                      <div className="text-[10px] text-info-gray/60 font-mono">RELEVANCE</div>
+                      <div className="text-[10px] text-info-gray/60 font-mono">语义相关度</div>
                       <div className="w-16 h-1.5 bg-bg-hover rounded-full overflow-hidden">
                         <div 
                           className="h-full bg-neon-cyan shadow-[0_0_5px_rgba(0,240,255,0.8)]" 
@@ -218,10 +218,10 @@ export const KnowledgeHub: React.FC = () => {
                     </div>
                     <div className="flex justify-end gap-3">
                       <button className="flex items-center gap-1.5 text-[10px] font-mono text-neon-cyan hover:text-white transition-colors">
-                        <Save className="h-3 w-3" /> INGEST TO MEMORY
+                        <Save className="h-3 w-3" /> 摄入记忆
                       </button>
                       <button className="flex items-center gap-1.5 text-[10px] font-mono text-up-red hover:text-white transition-colors">
-                        <Trash2 className="h-3 w-3" /> DELETE
+                        <Trash2 className="h-3 w-3" /> 删除
                       </button>
                     </div>
                   </div>
@@ -231,7 +231,7 @@ export const KnowledgeHub: React.FC = () => {
 
             {!isLoading && items.length === 0 && (
               <div className="h-64 flex flex-col items-center justify-center text-info-gray/40 italic text-sm">
-                No items found in this category.
+                当前分类下未找到匹配项。
               </div>
             )}
           </div>
@@ -242,14 +242,14 @@ export const KnowledgeHub: React.FC = () => {
           {/* Stats Panel */}
           <div className="p-4 border-b border-border bg-bg-card/40">
             <h4 className="text-[10px] font-orbitron text-neon-cyan tracking-[0.2em] uppercase mb-4 flex items-center gap-2">
-              <BarChart2 className="h-3 w-3" /> Core Statistics
+              <BarChart2 className="h-3 w-3" /> 核心统计
             </h4>
             <div className="grid grid-cols-2 gap-3">
               {[
-                { label: 'TOTAL ITEMS', value: '1,284', color: 'text-white' },
-                { label: 'NEW TODAY', value: '+12', color: 'text-up-green' },
-                { label: 'VECTORS', value: '768-D', color: 'text-info-gray' },
-                { label: 'UPTIME', value: '99.9%', color: 'text-neon-cyan' }
+                { label: '总条目', value: '1,284', color: 'text-white' },
+                { label: '今日新增', value: '+12', color: 'text-up-green' },
+                { label: '向量维度', value: '768-D', color: 'text-info-gray' },
+                { label: '在线时长', value: '99.9%', color: 'text-neon-cyan' }
               ].map(stat => (
                 <div key={stat.label} className="bg-bg-primary/50 border border-border p-3 rounded">
                   <div className="text-[8px] text-info-gray/40 font-mono mb-1">{stat.label}</div>
@@ -262,7 +262,7 @@ export const KnowledgeHub: React.FC = () => {
           {/* Vector Space Projection */}
           <div className="flex-1 p-4 flex flex-col overflow-hidden">
             <h4 className="text-[10px] font-orbitron text-neon-cyan tracking-[0.2em] uppercase mb-4 flex items-center justify-between">
-              <span>Vector Space Projection</span>
+              <span>向量空间投影</span>
               <Info className="h-3 w-3 text-info-gray/40 cursor-help" />
             </h4>
             <div className="flex-1 relative bg-bg-primary/50 border border-border rounded overflow-hidden">
@@ -293,18 +293,18 @@ export const KnowledgeHub: React.FC = () => {
 
               {/* Legend */}
               <div className="absolute bottom-2 left-2 flex gap-3 text-[8px] font-mono text-info-gray/60">
-                <div className="flex items-center gap-1"><div className="w-1.5 h-1.5 bg-neon-cyan rounded-full" /> PATTERNS</div>
-                <div className="flex items-center gap-1"><div className="w-1.5 h-1.5 bg-warn-gold rounded-full" /> LESSONS</div>
-                <div className="flex items-center gap-1"><div className="w-1.5 h-1.5 bg-up-red rounded-full" /> RULES</div>
+                <div className="flex items-center gap-1"><div className="w-1.5 h-1.5 bg-neon-cyan rounded-full" /> 模式</div>
+                <div className="flex items-center gap-1"><div className="w-1.5 h-1.5 bg-warn-gold rounded-full" /> 经验</div>
+                <div className="flex items-center gap-1"><div className="w-1.5 h-1.5 bg-up-red rounded-full" /> 规则</div>
               </div>
             </div>
           </div>
 
           <div className="p-4 bg-bg-card/40 border-t border-border">
             <div className="bg-neon-cyan/5 border border-neon-cyan/20 p-3 rounded">
-              <div className="text-[9px] font-orbitron text-neon-cyan mb-1">MOST ACTIVE ENTRY</div>
-              <div className="text-[11px] text-white font-medium mb-1">MACD Crossover Divergence</div>
-              <div className="text-[8px] text-info-gray/60">Updated 14 mins ago via Market Feed Analysis</div>
+              <div className="text-[9px] font-orbitron text-neon-cyan mb-1">最活跃条目</div>
+              <div className="text-[11px] text-white font-medium mb-1">MACD 交叉背离</div>
+              <div className="text-[8px] text-info-gray/60">更新于 14 分钟前，来自行情流分析</div>
             </div>
           </div>
         </div>

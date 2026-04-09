@@ -87,7 +87,7 @@ def _setup_legacy_schedule(event_engine: EventEngine):
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    channel = os.getenv("TRADING_CHANNEL", "simulation")
+    channel = os.getenv("TRADING_CHANNEL", "ths_auto")
     include_stability_probe = _is_true(os.getenv("STARTUP_PREFLIGHT_INCLUDE_STABILITY"), default=False)
     strict_preflight = _is_true(os.getenv("STARTUP_STRICT_PREFLIGHT"), default=False)
 
@@ -98,6 +98,14 @@ async def lifespan(app: FastAPI):
     try:
         app.state.ths_bridge_runtime = bridge_runtime
         app.state.ths_bridge = bridge_runtime.start(channel=channel)
+
+        if channel == "ths_auto":
+            from src.execution.ths_auto import probe_easytrader_readiness
+            logger.info("正在探测 ths_auto 通道就绪状态...")
+            probe = probe_easytrader_readiness()
+            app.state.ths_auto_probe = probe
+            if not probe.get("ok", False):
+                logger.warning("ths_auto 通道未完全就绪: %s", probe.get("message", "unknown"))
 
         preflight_report = run_startup_preflight(channel=channel, include_stability_probe=include_stability_probe)
         app.state.startup_preflight = preflight_report
@@ -179,7 +187,7 @@ async def system_info():
     return {
         "name": "来财 (Attract-wealth)",
         "version": "0.1.0",
-        "trading_channel": os.getenv("TRADING_CHANNEL", "simulation"),
+        "trading_channel": os.getenv("TRADING_CHANNEL", "ths_auto"),
         "llm_provider": os.getenv("LLM_BASE_URL", "未配置"),
         "llm_model": os.getenv("LLM_MODEL", "未配置"),
         "startup_preflight_ok": preflight.get("ok", False),

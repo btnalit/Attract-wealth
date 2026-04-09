@@ -32,7 +32,7 @@ const RadarChart: React.FC<{ strategy: Strategy }> = ({ strategy }) => {
     Math.min(strategy.sharpeRatio / 5, 1),
     1 - (Math.min(strategy.latency, 500) / 500),
   ];
-  const labels = ['Win Rate', 'P/L Ratio', 'Max DD', 'Sharpe', 'Latency'];
+  const labels = ['胜率', '盈亏比', '最大回撤', '夏普', '延迟'];
   const centerX = 150;
   const centerY = 150;
   const radius = 100;
@@ -49,7 +49,7 @@ const RadarChart: React.FC<{ strategy: Strategy }> = ({ strategy }) => {
 
   return (
     <div className="flex flex-col items-center bg-gray-900/50 p-4 border border-neon-cyan/30 rounded-lg shadow-[0_0_15px_rgba(0,255,255,0.1)]">
-      <h3 className="text-neon-cyan font-orbitron mb-4 text-center">Quality Radar: {strategy.name}</h3>
+      <h3 className="text-neon-cyan font-orbitron mb-4 text-center">质量雷达: {strategy.name}</h3>
       <svg width="300" height="300" className="overflow-visible">
         {[0.2, 0.4, 0.6, 0.8, 1.0].map((level) => (
           <polygon
@@ -155,25 +155,25 @@ export const StrategyMatrix: React.FC = () => {
       {/* Top Toolbar */}
       <div className="flex flex-wrap items-center justify-between gap-4 bg-gray-900/40 p-4 border border-gray-800 rounded-lg">
         <div className="flex items-center space-x-4">
-          <label className="text-xs uppercase tracking-wider text-gray-500">Sort By:</label>
+          <label className="text-xs uppercase tracking-wider text-gray-500">排序方式:</label>
           <select 
             value={sortKey} 
             onChange={(e) => setSortKey(e.target.value as keyof Strategy)}
             className="bg-black border border-gray-700 rounded px-2 py-1 text-sm text-neon-cyan focus:border-neon-cyan outline-none"
           >
-            <option value="qualityScore">Quality Score</option>
-            <option value="winRate">Win Rate</option>
-            <option value="sharpeRatio">Sharpe Ratio</option>
-            <option value="maxDrawdown">Max Drawdown</option>
+            <option value="qualityScore">质量评分</option>
+            <option value="winRate">胜率</option>
+            <option value="sharpeRatio">夏普比率</option>
+            <option value="maxDrawdown">最大回撤</option>
           </select>
 
-          <label className="text-xs uppercase tracking-wider text-gray-500 ml-4">Filter:</label>
+          <label className="text-xs uppercase tracking-wider text-gray-500 ml-4">筛选:</label>
           <div className="flex bg-black/50 border border-gray-800 rounded overflow-hidden">
-            {['ALL', 'ACTIVE', 'EVOLVING', 'RETIRED'].map(s => (
+            {['全部', '活跃', '演进中', '退役'].map(s => (
               <button
                 key={s}
-                onClick={() => setFilterStatus(s as any)}
-                className={`px-3 py-1 text-xs transition-colors ${filterStatus === s ? 'bg-neon-cyan/20 text-neon-cyan' : 'hover:bg-gray-800'}`}
+                onClick={() => setFilterStatus(s === '全部' ? 'ALL' : s === '活跃' ? 'ACTIVE' : s === '演进中' ? 'EVOLVING' : 'RETIRED')}
+                className={`px-3 py-1 text-xs transition-colors ${filterStatus === (s === '全部' ? 'ALL' : s === '活跃' ? 'ACTIVE' : s === '演进中' ? 'EVOLVING' : 'RETIRED') ? 'bg-neon-cyan/20 text-neon-cyan' : 'hover:bg-gray-800'}`}
               >
                 {s}
               </button>
@@ -187,7 +187,7 @@ export const StrategyMatrix: React.FC = () => {
         <div className="relative">
           <input
             type="text"
-            placeholder="Search Strategy..."
+            placeholder="搜索策略..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="bg-black border border-gray-700 rounded-full px-4 py-1 pl-10 text-sm focus:border-neon-cyan outline-none w-64"
@@ -204,13 +204,13 @@ export const StrategyMatrix: React.FC = () => {
             <table className="w-full text-left text-xs">
               <thead className="sticky top-0 bg-gray-900 border-b border-gray-800 text-gray-500 uppercase">
                 <tr>
-                  <th className="p-4">Name</th>
-                  <th className="p-4">Status</th>
-                  <th className="p-4">Win Rate</th>
-                  <th className="p-4">P/L</th>
-                  <th className="p-4">DD</th>
-                  <th className="p-4">Sharpe</th>
-                  <th className="p-4">Quality</th>
+                  <th className="p-4">名称</th>
+                  <th className="p-4">状态</th>
+                  <th className="p-4">胜率</th>
+                  <th className="p-4">盈亏比</th>
+                  <th className="p-4">最大回撤</th>
+                  <th className="p-4">夏普</th>
+                  <th className="p-4">质量评分</th>
                 </tr>
               </thead>
               <tbody>
@@ -264,15 +264,15 @@ export const StrategyMatrix: React.FC = () => {
             <>
               <RadarChart strategy={selectedStrategy} />
               <div className="flex-1 bg-gray-900/40 border border-gray-800 rounded-lg p-4 space-y-4 overflow-auto text-xs">
-                <h4 className="font-orbitron text-gray-400 uppercase tracking-widest border-b border-gray-800 pb-2">Technical Insight</h4>
+                <h4 className="font-orbitron text-gray-400 uppercase tracking-widest border-b border-gray-800 pb-2">技术洞察</h4>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="bg-black/40 p-2 rounded border border-gray-800">
-                    <div className="text-gray-600 mb-1">Latency</div>
+                    <div className="text-gray-600 mb-1">执行延迟</div>
                     <div className={cn(selectedStrategy.latency < 50 ? 'text-green-400' : 'text-yellow-400')}>{selectedStrategy.latency}ms</div>
                   </div>
                   <div className="bg-black/40 p-2 rounded border border-gray-800">
-                    <div className="text-gray-600 mb-1">Consistency</div>
-                    <div className="text-neon-magenta">High</div>
+                    <div className="text-gray-600 mb-1">一致性</div>
+                    <div className="text-neon-magenta">极高</div>
                   </div>
                 </div>
                 <div className="text-[11px] leading-relaxed text-gray-500 italic">
@@ -282,7 +282,7 @@ export const StrategyMatrix: React.FC = () => {
               </div>
             </>
           ) : (
-            <div className="flex-1 border border-border/30 border-dashed rounded-lg flex items-center justify-center text-info-gray/40">Select a strategy</div>
+            <div className="flex-1 border border-border/30 border-dashed rounded-lg flex items-center justify-center text-info-gray/40">请选择一个策略</div>
           )}
         </div>
       </div>
@@ -291,9 +291,9 @@ export const StrategyMatrix: React.FC = () => {
       <div className="h-40 bg-red-900/5 border border-red-500/20 rounded-lg p-4 flex flex-col">
         <div className="flex items-center justify-between mb-2">
           <h4 className="text-xs font-orbitron text-red-400 flex items-center uppercase">
-            <span className="mr-2">⚠️</span> Retirement Candidates (Quality &lt; 0.4)
+            <span className="mr-2">⚠️</span> 退役候选策略 (质量评分 &lt; 0.4)
           </h4>
-          <span className="text-[10px] text-red-500/50 font-mono">SYSTEM AUTO-DETECTION ENABLED</span>
+          <span className="text-[10px] text-red-500/50 font-mono">系统自动检测已开启</span>
         </div>
         
         <div className="flex-1 flex gap-4 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-red-500/20">
@@ -301,16 +301,16 @@ export const StrategyMatrix: React.FC = () => {
             <div key={c.id} className="min-w-[280px] bg-black/60 border border-red-500/30 rounded p-3 flex justify-between items-center group">
               <div>
                 <div className="text-sm font-bold text-gray-300">{c.name}</div>
-                <div className="text-xs text-red-500">Quality: {c.qualityScore.toFixed(2)}</div>
+                <div className="text-xs text-red-500">质量: {c.qualityScore.toFixed(2)}</div>
               </div>
               <div className="flex space-x-2">
-                <button className="px-3 py-1 bg-red-500/20 text-red-500 text-[10px] rounded border border-red-500/40 hover:bg-red-500 hover:text-white transition-all">RETIRE</button>
-                <button className="px-3 py-1 bg-gray-800 text-gray-400 text-[10px] rounded border border-gray-700 hover:bg-gray-700 transition-all">RETAIN</button>
+                <button className="px-3 py-1 bg-red-500/20 text-red-500 text-[10px] rounded border border-red-500/40 hover:bg-red-500 hover:text-white transition-all">退役</button>
+                <button className="px-3 py-1 bg-gray-800 text-gray-400 text-[10px] rounded border border-gray-700 hover:bg-gray-700 transition-all">保留</button>
               </div>
             </div>
           )) : (
             <div className="flex-1 flex items-center justify-center text-gray-600 text-xs italic">
-              No low-performance strategies detected in current cycle.
+              当前周期未检测到低绩效策略。
             </div>
           )}
         </div>

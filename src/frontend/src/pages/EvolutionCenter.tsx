@@ -1,8 +1,8 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, FC, cloneElement } from 'react';
 import { 
-  GitBranch, History, Search, Zap, Activity, Target, Shield, Clock,
-  ChevronRight, ArrowUpRight, Layers, BarChart3, ExternalLink, Info,
-  ChevronDown, AlertCircle, Eye, Crosshair, Settings2, Play, Loader2, RefreshCw
+  GitBranch, History, Search, Zap, Activity, Target, Shield,
+  Layers, Info,
+  Eye, Crosshair, Play, Loader2, RefreshCw
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { PageTitle } from '../components/PageTitle';
@@ -63,7 +63,7 @@ const MOCK_OODA: OODALog[] = [
 ];
 
 // --- Helper: Mini Sparkline ---
-const MiniSparkline: React.FC<{ data: number[], color?: string }> = ({ data, color = "#00f0ff" }) => {
+const MiniSparkline: FC<{ data: number[], color?: string }> = ({ data, color = "#00f0ff" }) => {
   const min = Math.min(...data);
   const max = Math.max(...data);
   const range = max - min;
@@ -77,11 +77,11 @@ const MiniSparkline: React.FC<{ data: number[], color?: string }> = ({ data, col
   );
 };
 
-export const EvolutionCenter: React.FC = () => {
+export const EvolutionCenter: FC = () => {
   const [activeTab, setActiveTab] = useState<'Overview' | 'Tree' | 'OODA' | 'Comparison'>('Overview');
   const [strategies, setStrategies] = useState<Strategy[]>([]);
   const [events, setEvents] = useState<EvolutionEvent[]>([]);
-  const [oodaLogs, setOodaLogs] = useState<OODALog[]>(MOCK_OODA);
+  const [oodaLogs] = useState<OODALog[]>(MOCK_OODA);
   const [loading, setLoading] = useState(true);
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
@@ -145,10 +145,10 @@ export const EvolutionCenter: React.FC = () => {
     <div className="flex h-full flex-col bg-[#0a0a12] text-gray-300 font-mono">
       {/* Header */}
       <div className="flex items-center justify-between border-b border-border bg-bg-card/50 p-4">
-        <PageTitle title="EVOLUTION CENTER" subtitle="Self-evolving strategy laboratory & OODA reflection logs" />
+        <PageTitle title="演进中心" subtitle="自进化策略实验室与 OODA 反思日志" />
         <div className="flex items-center gap-4">
           <div className="flex bg-black/50 border border-border rounded overflow-hidden p-0.5">
-            {['Overview', 'Tree', 'OODA', 'Comparison'].map(tab => (
+            {['概览', '演进树', 'OODA', '策略对比'].map(tab => (
               <button 
                 key={tab}
                 onClick={() => setActiveTab(tab as any)}
@@ -173,7 +173,7 @@ export const EvolutionCenter: React.FC = () => {
           <div className="p-3 bg-bg-card/50 border-b border-border">
             <div className="relative">
               <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-info-gray" />
-              <input type="text" placeholder="Search strategy..." className="w-full bg-black/50 border border-border rounded-full py-1 pl-7 pr-3 text-[10px] focus:border-neon-cyan outline-none" />
+              <input type="text" placeholder="搜索策略..." className="w-full bg-black/50 border border-border rounded-full py-1 pl-7 pr-3 text-[10px] focus:border-neon-cyan outline-none" />
             </div>
           </div>
           <div className="divide-y divide-border/30">
@@ -215,15 +215,15 @@ export const EvolutionCenter: React.FC = () => {
         <div className="flex-1 overflow-y-auto custom-scrollbar bg-black/20 relative">
           {loading && <div className="absolute inset-0 bg-black/20 backdrop-blur-[1px] z-10" />}
           <div className="p-6">
-            {activeTab === 'Overview' && (
+            {activeTab === '概览' && (
               <div className="space-y-8 animate-in fade-in duration-500">
                 <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
-                  <StatCard icon={<Layers />} label="Total Population" value={strategies.length.toString()} />
-                  <StatCard icon={<Activity />} label="Active Swarm" value={strategies.filter(s => s.status === 'ACTIVE').length.toString()} />
-                  <StatCard icon={<GitBranch />} label="Generations" value="12" color="text-neon-magenta" />
-                  <StatCard icon={<Zap />} label="Today Evolved" value={events.filter(e => e.timestamp.includes(new Date().toISOString().split('T')[0])).length.toString()} color="text-warn-gold" />
-                  <StatCard icon={<Target />} label="Captured Patterns" value={strategies.filter(s => s.type === 'CAPTURED').length.toString()} color="text-up-green" />
-                  <StatCard icon={<Shield />} label="Compliance Level" value="99.2%" color="text-neon-cyan" />
+                  <StatCard icon={<Layers />} label="策略总量" value={strategies.length.toString()} />
+                  <StatCard icon={<Activity />} label="活跃集群" value={strategies.filter(s => s.status === 'ACTIVE').length.toString()} />
+                  <StatCard icon={<GitBranch />} label="演进代数" value="12" color="text-neon-magenta" />
+                  <StatCard icon={<Zap />} label="今日演进" value={events.filter(e => e.timestamp.includes(new Date().toISOString().split('T')[0])).length.toString()} color="text-warn-gold" />
+                  <StatCard icon={<Target />} label="捕获模式" value={strategies.filter(s => s.type === 'CAPTURED').length.toString()} color="text-up-green" />
+                  <StatCard icon={<Shield />} label="合规等级" value="99.2%" color="text-neon-cyan" />
                 </div>
 
                 <div className="space-y-4">
@@ -257,7 +257,7 @@ export const EvolutionCenter: React.FC = () => {
                     <div className="flex justify-between items-center mb-4 border-b border-border/30 pb-2">
                       <div className="flex items-center gap-3">
                         <span className="font-orbitron text-xs font-bold text-white">{log.date}</span>
-                        <span className="text-[10px] text-info-gray uppercase">OODA Cycle #{log.id}</span>
+                        <span className="text-[10px] text-info-gray uppercase">OODA 周期 #{log.id}</span>
                       </div>
                       <div className="flex gap-4">
                         <div className="flex flex-col items-end">
@@ -272,12 +272,12 @@ export const EvolutionCenter: React.FC = () => {
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                       <div className="space-y-3">
-                        <OODAPhase label="Observe" text={log.observe} icon={<Eye />} color="text-neon-cyan" />
-                        <OODAPhase label="Orient" text={log.orient} icon={<Crosshair />} color="text-warn-gold" />
+                        <OODAPhase label="观察 (Observe)" text={log.observe} icon={<Eye />} color="text-neon-cyan" />
+                        <OODAPhase label="判断 (Orient)" text={log.orient} icon={<Crosshair />} color="text-warn-gold" />
                       </div>
                       <div className="space-y-3">
-                        <OODAPhase label="Decide" text={log.decide} icon={<Target />} color="text-neon-magenta" />
-                        <OODAPhase label="Act" text={log.act} icon={<Zap />} color="text-up-green" />
+                        <OODAPhase label="决策 (Decide)" text={log.decide} icon={<Target />} color="text-neon-magenta" />
+                        <OODAPhase label="执行 (Act)" text={log.act} icon={<Zap />} color="text-up-green" />
                       </div>
                     </div>
                   </div>
@@ -291,25 +291,25 @@ export const EvolutionCenter: React.FC = () => {
         {selectedStrategy && (
           <div className="w-[320px] border-l border-border bg-bg-card/30 p-4 space-y-6">
             <h4 className="text-xs font-bold text-white flex items-center gap-2 uppercase tracking-widest border-b border-border pb-3">
-              <Info className="h-3.5 w-3.5 text-neon-cyan" /> Strategy Specs
+              <Info className="h-3.5 w-3.5 text-neon-cyan" /> 策略参数
             </h4>
             <div className="space-y-4">
               <div>
-                <label className="text-[9px] text-info-gray uppercase mb-1 block">Description</label>
+                <label className="text-[9px] text-info-gray uppercase mb-1 block">描述</label>
                 <p className="text-[11px] text-info-gray/80 leading-relaxed italic">"{selectedStrategy.description}"</p>
               </div>
               <div className="grid grid-cols-2 gap-4">
-                <Metric label="Win Rate" value={`${selectedStrategy.winRate.toFixed(1)}%`} />
-                <Metric label="Sharpe" value={selectedStrategy.sharpe.toFixed(2)} />
-                <Metric label="Max DD" value={`${(selectedStrategy.maxDrawdown * 100).toFixed(1)}%`} />
-                <Metric label="Created" value={new Date(selectedStrategy.createdAt).toLocaleDateString()} />
+                <Metric label="胜率" value={`${selectedStrategy.winRate.toFixed(1)}%`} />
+                <Metric label="夏普比率" value={selectedStrategy.sharpe.toFixed(2)} />
+                <Metric label="最大回撤" value={`${(selectedStrategy.maxDrawdown * 100).toFixed(1)}%`} />
+                <Metric label="创建时间" value={new Date(selectedStrategy.createdAt).toLocaleDateString()} />
               </div>
               <div className="pt-4 space-y-2">
                 <button className="w-full py-2 bg-neon-cyan/10 border border-neon-cyan/50 text-neon-cyan text-[10px] font-bold uppercase rounded-sm hover:bg-neon-cyan/20 flex items-center justify-center gap-2">
-                  <Play className="h-3 w-3" /> Execute Backtest
+                  <Play className="h-3 w-3" /> 执行回测
                 </button>
                 <button className="w-full py-2 bg-white/5 border border-border text-white text-[10px] font-bold uppercase rounded-sm hover:bg-white/10 flex items-center justify-center gap-2">
-                  <GitBranch className="h-3 w-3" /> View Version Diff
+                  <GitBranch className="h-3 w-3" /> 查看版本差异
                 </button>
               </div>
             </div>
@@ -320,26 +320,26 @@ export const EvolutionCenter: React.FC = () => {
   );
 };
 
-const StatCard: React.FC<any> = ({ icon, label, value, color = "text-white" }) => (
+const StatCard: FC<any> = ({ icon, label, value, color = "text-white" }) => (
   <div className="bg-bg-card border border-border rounded p-3 flex flex-col gap-1 group hover:border-neon-cyan/30 transition-all">
     <div className="flex items-center gap-2 text-info-gray/60 group-hover:text-neon-cyan transition-colors">
-      {React.cloneElement(icon, { className: "h-3.5 w-3.5" })}
+      {cloneElement(icon, { className: "h-3.5 w-3.5" })}
       <span className="text-[9px] font-bold uppercase tracking-tighter">{label}</span>
     </div>
     <span className={cn("text-lg font-orbitron font-bold", color)}>{value}</span>
   </div>
 );
 
-const OODAPhase: React.FC<any> = ({ label, text, icon, color }) => (
+const OODAPhase: FC<any> = ({ label, text, icon, color }) => (
   <div className="space-y-1">
     <label className={cn("text-[9px] font-bold uppercase flex items-center gap-1.5 tracking-widest", color)}>
-      {React.cloneElement(icon, { className: "h-3 w-3" })} {label}
+      {cloneElement(icon, { className: "h-3 w-3" })} {label}
     </label>
     <p className="text-[11px] text-info-gray/90 bg-bg-primary/50 p-2 border border-border/30 rounded-sm">{text}</p>
   </div>
 );
 
-const Metric: React.FC<any> = ({ label, value }) => (
+const Metric: FC<any> = ({ label, value }) => (
   <div className="bg-black/40 p-2 rounded border border-border">
     <div className="text-[9px] text-info-gray/60 uppercase mb-0.5">{label}</div>
     <div className="text-xs font-bold text-white">{value}</div>

@@ -73,7 +73,7 @@ export const useSSE = (enabled: boolean = true) => {
             setActiveNode(nodeId);
             // QA FIX: Update status based on transition data if provided
             const status = (data.status as AgentStatus) || 'thinking';
-            updateAgentStatus(nodeId, status, data.ticker as string | undefined, status === 'completed' ? 100 : 50);
+            updateAgentStatus(nodeId, status, data.ticker as string | undefined, status === 'success' ? 100 : 50);
           }
           break;
         case 'log_message':

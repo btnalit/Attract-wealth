@@ -64,7 +64,7 @@ class TradingService:
         risk_gate: Optional[RiskGate] = None,
         broker: Optional[Any] = None,
     ):
-        self.channel = (trading_channel or os.getenv("TRADING_CHANNEL", "simulation")).strip().lower()
+        self.channel = (trading_channel or os.getenv("TRADING_CHANNEL", "ths_auto")).strip().lower()
         self.vm = vm or self._create_vm_with_fallback()
         self.risk_gate = risk_gate or RiskGate()
         self.broker = broker or create_broker(self.channel)

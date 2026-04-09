@@ -43,24 +43,24 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ isOpen, onClose 
 
   const commands: Command[] = [
     // Navigation
-    { id: 'nav-dashboard', label: 'Go to Dashboard', category: 'Navigation', icon: LayoutDashboard, action: () => navigate('/') },
-    { id: 'nav-market', label: 'Go to Market', category: 'Navigation', icon: LineChart, action: () => navigate('/market') },
-    { id: 'nav-agents', label: 'Go to Agent Workshop', category: 'Navigation', icon: Cpu, action: () => navigate('/agents') },
-    { id: 'nav-evolution', label: 'Go to Evolution Center', category: 'Navigation', icon: GitBranch, action: () => navigate('/evolution') },
-    { id: 'nav-memory', label: 'Go to Memory Vault', category: 'Navigation', icon: Database, action: () => navigate('/memory') },
-    { id: 'nav-knowledge', label: 'Go to Knowledge Hub', category: 'Navigation', icon: BookOpen, action: () => navigate('/knowledge') },
-    { id: 'nav-execution', label: 'Go to Execution Monitor', category: 'Navigation', icon: Activity, action: () => navigate('/execution') },
-    { id: 'nav-strategies', label: 'Go to Strategy Matrix', category: 'Navigation', icon: Layers, action: () => navigate('/strategies') },
-    { id: 'nav-backtest', label: 'Go to Backtest Lab', category: 'Navigation', icon: BarChart3, action: () => navigate('/backtest') },
-    { id: 'nav-audit', label: 'Go to Audit & Risk', category: 'Navigation', icon: ShieldCheck, action: () => navigate('/audit') },
-    { id: 'nav-logs', label: 'Go to Log Terminal', category: 'Navigation', icon: Terminal, action: () => navigate('/logs') },
-    { id: 'nav-settings', label: 'Go to System Config', category: 'Navigation', icon: Settings, action: () => navigate('/settings') },
+    { id: 'nav-dashboard', label: '跳转到控制面板', category: '导航', icon: LayoutDashboard, action: () => navigate('/') },
+    { id: 'nav-market', label: '跳转到行情终端', category: '导航', icon: LineChart, action: () => navigate('/market') },
+    { id: 'nav-agents', label: '跳转到智能体车间', category: '导航', icon: Cpu, action: () => navigate('/agents') },
+    { id: 'nav-evolution', label: '跳转到演进中心', category: '导航', icon: GitBranch, action: () => navigate('/evolution') },
+    { id: 'nav-memory', label: '跳转到记忆金库', category: '导航', icon: Database, action: () => navigate('/memory') },
+    { id: 'nav-knowledge', label: '跳转到知识库', category: '导航', icon: BookOpen, action: () => navigate('/knowledge') },
+    { id: 'nav-execution', label: '跳转到执行监控', category: '导航', icon: Activity, action: () => navigate('/execution') },
+    { id: 'nav-strategies', label: '跳转到策略矩阵', category: '导航', icon: Layers, action: () => navigate('/strategies') },
+    { id: 'nav-backtest', label: '跳转到回测实验室', category: '导航', icon: BarChart3, action: () => navigate('/backtest') },
+    { id: 'nav-audit', label: '跳转到审计与风控', category: '导航', icon: ShieldCheck, action: () => navigate('/audit') },
+    { id: 'nav-logs', label: '跳转到日志终端', category: '导航', icon: Terminal, action: () => navigate('/logs') },
+    { id: 'nav-settings', label: '跳转到系统设置', category: '导航', icon: Settings, action: () => navigate('/settings') },
     
     // Actions
-    { id: 'action-start', label: 'Start Trading', category: 'Actions', icon: Play, action: () => console.log('Start Trading') },
-    { id: 'action-stop', label: 'Stop Trading', category: 'Actions', icon: Square, action: () => console.log('Stop Trading') },
-    { id: 'action-reflect', label: 'Trigger Reflection', category: 'Actions', icon: RefreshCw, action: () => console.log('Trigger Reflection') },
-    { id: 'action-clear', label: 'Clear Logs', category: 'Actions', icon: Trash2, action: () => console.log('Clear Logs') },
+    { id: 'action-start', label: '启动交易系统', category: '操作', icon: Play, action: () => console.log('Start Trading') },
+    { id: 'action-stop', label: '停止交易系统', category: '操作', icon: Square, action: () => console.log('Stop Trading') },
+    { id: 'action-reflect', label: '触发自我反思', category: '操作', icon: RefreshCw, action: () => console.log('Trigger Reflection') },
+    { id: 'action-clear', label: '清空终端日志', category: '操作', icon: Trash2, action: () => console.log('Clear Logs') },
   ];
 
   const filteredCommands = commands.filter(cmd => 
@@ -120,7 +120,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ isOpen, onClose 
             value={query}
             onChange={e => setQuery(e.target.value)}
             className="flex-1 bg-transparent px-4 py-1 text-lg text-white outline-none placeholder:text-info-gray/40 font-orbitron"
-            placeholder="TYPE A COMMAND OR SEARCH..."
+            placeholder="输入指令或进行搜索..."
           />
           <kbd className="hidden sm:flex h-6 items-center gap-1 rounded border border-border bg-bg-primary px-1.5 font-mono text-[10px] text-info-gray/60 uppercase">
             ESC
@@ -131,7 +131,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ isOpen, onClose 
         <div className="max-h-[400px] overflow-y-auto custom-scrollbar p-2">
           {filteredCommands.length > 0 ? (
             <div className="space-y-4">
-              {['Navigation', 'Actions'].map(category => {
+              {['导航', '操作'].map(category => {
                 const categoryCommands = filteredCommands.filter(cmd => cmd.category === category);
                 if (categoryCommands.length === 0) return null;
                 
@@ -176,7 +176,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ isOpen, onClose 
               <div className="mb-4 h-12 w-12 rounded-full bg-bg-hover flex items-center justify-center">
                 <Search className="h-6 w-6 text-info-gray/40" />
               </div>
-              <p className="text-info-gray/60">No commands found for "{query}"</p>
+              <p className="text-info-gray/60">未找到指令 "{query}"</p>
             </div>
           )}
         </div>
@@ -185,13 +185,13 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ isOpen, onClose 
         <div className="flex items-center justify-between border-t border-border bg-bg-primary/50 px-4 py-2 text-[10px] text-info-gray/40 font-mono">
           <div className="flex gap-3">
             <span className="flex items-center gap-1">
-              <kbd className="rounded border border-border bg-bg-card px-1">↓↑</kbd> NAVIGATE
+              <kbd className="rounded border border-border bg-bg-card px-1">↓↑</kbd> 导航
             </span>
             <span className="flex items-center gap-1">
-              <kbd className="rounded border border-border bg-bg-card px-1">ENTER</kbd> EXECUTE
+              <kbd className="rounded border border-border bg-bg-card px-1">ENTER</kbd> 执行
             </span>
           </div>
-          <span>ATTRACT WEALTH CMD-SYS V1.0</span>
+          <span>来财 命令控制台 V1.0</span>
         </div>
       </div>
     </div>

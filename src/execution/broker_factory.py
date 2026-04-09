@@ -9,11 +9,12 @@ from src.execution.qmt_broker import QMTBroker
 from src.execution.simulator import SimulatorBroker
 from src.execution.ths_broker import THSBroker
 from src.execution.ths_ipc.broker import THSIPCBroker
+from src.core.ths_path_resolver import resolve_ths_path
 
 
 def create_broker(channel: Optional[str] = None) -> BaseBroker:
     """Create execution broker by channel."""
-    selected = (channel or os.getenv("TRADING_CHANNEL", "simulation")).strip().lower()
+    selected = (channel or os.getenv("TRADING_CHANNEL", "ths_auto")).strip().lower()
 
     if selected == "simulation":
         initial_balance = float(os.getenv("SIM_INITIAL_BALANCE", "1000000"))
@@ -25,8 +26,20 @@ def create_broker(channel: Optional[str] = None) -> BaseBroker:
         return THSIPCBroker(host=host, port=port)
 
     if selected == "ths_auto":
-        exe_path = os.getenv("THS_EXE_PATH", r"D:\同花顺软件\同花顺\xiadan.exe")
-        return THSBroker(exe_path=exe_path)
+        # Phase 6: 自适应 THS 路径探测
+        ths_info = resolve_ths_path()
+        if ths_info.get("found") and ths_info.get("exe_path"):
+            exe_path = ths_info["exe_path"]
+        else:
+            exe_path = os.getenv("THS_EXE_PATH", "")
+        if exe_path and os.path.isfile(exe_path):
+            return THSBroker(exe_path=exe_path)
+        # Fallback to simulation if THS not found
+        import logging
+        logging.getLogger(__name__).warning(
+            "THS 路径未找到 (source=%s)，降级到 simulation 模式", ths_info.get("source", "unknown")
+        )
+        return SimulatorBroker(initial_balance=1000000)
 
     if selected == "qmt":
         account_id = os.getenv("QMT_ACCOUNT_ID", "").strip() or os.getenv("QMT_ACCOUNT", "").strip()

@@ -1,5 +1,5 @@
-import React, { memo } from 'react';
-import { Handle, Position, NodeProps } from '@xyflow/react';
+import { memo } from 'react';
+import { Handle, Position, type NodeProps, type Node } from '@xyflow/react';
 import { useAgentStore, AgentStatus } from '../store/agentStore';
 import { Terminal, Activity, CheckCircle, AlertCircle, Loader2 } from 'lucide-react';
 import { clsx } from 'clsx';
@@ -23,7 +23,7 @@ const StatusIcon = ({ status }: { status?: AgentStatus }) => {
   }
 };
 
-const AgentNode = ({ data, isConnectable }: NodeProps<NodeData>) => {
+const AgentNode = ({ data, isConnectable }: NodeProps<Node<NodeData>>) => {
   const { agents, activeNodeId } = useAgentStore();
   const agentState = agents[data.id];
   const isActive = activeNodeId === data.id;
@@ -59,7 +59,7 @@ const AgentNode = ({ data, isConnectable }: NodeProps<NodeData>) => {
       <div className="space-y-2">
         <div className="flex justify-between text-[10px] text-info-gray uppercase font-mono">
           <span>{agentState?.ticker || '---'}</span>
-          <span>{status}</span>
+          <span>{status === 'thinking' ? '思考中' : status === 'success' ? '成功' : status === 'error' ? '错误' : '空闲'}</span>
         </div>
 
         {/* Progress Bar */}

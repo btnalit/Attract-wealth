@@ -1,9 +1,6 @@
 import { useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 
-type HotkeyConfig = {
-  [key: string]: () => void;
-};
 
 export const useHotkeys = (onOpenCommandPalette: () => void) => {
   const navigate = useNavigate();

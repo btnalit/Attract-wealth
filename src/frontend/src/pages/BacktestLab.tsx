@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Play, Settings, TrendingUp, Info, BarChart, RotateCcw, Plus, Trash2, Loader2 } from 'lucide-react';
+import { Play, Settings, TrendingUp, BarChart, RotateCcw, Plus, Trash2, Loader2 } from 'lucide-react';
 import { cn } from '../lib/utils';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || '';
@@ -12,12 +12,12 @@ interface Metric {
 }
 
 const mockMetrics: Metric[] = [
-  { label: 'TOTAL RETURN', value: '+42.84%', subValue: '¥428,400', color: 'text-up-green' },
-  { label: 'ANNUALIZED', value: '28.5%', subValue: 'Compound', color: 'text-white' },
-  { label: 'MAX DRAWDOWN', value: '-8.12%', subValue: 'Low Risk', color: 'text-up-red' },
-  { label: 'SHARPE RATIO', value: '1.84', subValue: 'Excellent', color: 'text-neon-cyan' },
-  { label: 'WIN RATE', value: '62.4%', subValue: '124/198 Trades', color: 'text-info-gray' },
-  { label: 'PROFIT FACTOR', value: '2.14', subValue: 'High Quality', color: 'text-warn-gold' },
+  { label: '总收益', value: '+42.84%', subValue: '¥428,400', color: 'text-up-green' },
+  { label: '年化收益', value: '28.5%', subValue: '复利', color: 'text-white' },
+  { label: '最大回撤', value: '-8.12%', subValue: '低风险', color: 'text-up-red' },
+  { label: '夏普比率', value: '1.84', subValue: '卓越', color: 'text-neon-cyan' },
+  { label: '胜率', value: '62.4%', subValue: '124/198 交易', color: 'text-info-gray' },
+  { label: '盈亏因子', value: '2.14', subValue: '高质量', color: 'text-warn-gold' },
 ];
 
 export const BacktestLab: React.FC = () => {
@@ -124,9 +124,9 @@ export const BacktestLab: React.FC = () => {
       <div className="p-6 border-b border-border bg-bg-card/30">
         <h1 className="text-2xl font-orbitron font-bold text-white tracking-wider flex items-center gap-3">
           <BarChart className="text-neon-cyan h-6 w-6" />
-          BACKTEST LAB <span className="text-neon-cyan/50 text-xs font-mono ml-2">SIM_ENGINE_V4.2</span>
+          回测实验室 <span className="text-neon-cyan/50 text-xs font-mono ml-2">SIM_ENGINE_V4.2</span>
         </h1>
-        <p className="text-info-gray/60 text-xs mt-1 uppercase tracking-widest italic">Historical verification of algorithmic strategies</p>
+        <p className="text-info-gray/60 text-xs mt-1 uppercase tracking-widest italic">量化策略的历史回测验证</p>
       </div>
 
       <div className="flex-1 flex overflow-hidden">
@@ -134,13 +134,13 @@ export const BacktestLab: React.FC = () => {
         <aside className="w-[340px] border-r border-border bg-bg-card/20 p-6 overflow-y-auto custom-scrollbar">
           <div className="space-y-6">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-[10px] font-orbitron text-neon-cyan tracking-[0.2em] uppercase">Control Panel</h2>
+              <h2 className="text-[10px] font-orbitron text-neon-cyan tracking-[0.2em] uppercase">控制面板</h2>
               <Settings className="h-3 w-3 text-info-gray/40" />
             </div>
 
             {/* Strategy Selection */}
             <div className="space-y-2">
-              <label className="text-[10px] text-info-gray uppercase font-bold tracking-wider">Algorithm</label>
+              <label className="text-[10px] text-info-gray uppercase font-bold tracking-wider">选择算法</label>
               <select 
                 value={strategyId}
                 onChange={(e) => setStrategyId(e.target.value)}
@@ -156,7 +156,7 @@ export const BacktestLab: React.FC = () => {
             {/* Time Range */}
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <label className="text-[10px] text-info-gray uppercase font-bold tracking-wider">Start</label>
+                <label className="text-[10px] text-info-gray uppercase font-bold tracking-wider">开始日期</label>
                 <input 
                   type="date" 
                   value={startDate}
@@ -165,7 +165,7 @@ export const BacktestLab: React.FC = () => {
                 />
               </div>
               <div className="space-y-2">
-                <label className="text-[10px] text-info-gray uppercase font-bold tracking-wider">End</label>
+                <label className="text-[10px] text-info-gray uppercase font-bold tracking-wider">结束日期</label>
                 <input 
                   type="date" 
                   value={endDate}
@@ -177,7 +177,7 @@ export const BacktestLab: React.FC = () => {
 
             {/* Capital */}
             <div className="space-y-2">
-              <label className="text-[10px] text-info-gray uppercase font-bold tracking-wider">Initial Capital (¥)</label>
+              <label className="text-[10px] text-info-gray uppercase font-bold tracking-wider">初始资金 (¥)</label>
               <input 
                 type="number" 
                 value={initialCapital}
@@ -189,7 +189,7 @@ export const BacktestLab: React.FC = () => {
             {/* Parameters */}
             <div className="space-y-3">
               <div className="flex justify-between items-center">
-                <label className="text-[10px] text-info-gray uppercase font-bold tracking-wider">Strategy Params</label>
+                <label className="text-[10px] text-info-gray uppercase font-bold tracking-wider">策略参数</label>
                 <button onClick={addParam} className="p-1 hover:text-neon-cyan transition-colors"><Plus className="h-3 w-3" /></button>
               </div>
               <div className="space-y-2">
@@ -240,7 +240,7 @@ export const BacktestLab: React.FC = () => {
               )}
               <div className="flex items-center gap-2">
                 {isRunning ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
-                {isRunning ? `RUNNING... ${progress}%` : "RUN BACKTEST"}
+                {isRunning ? `正在运行... ${progress}%` : "运行回测"}
               </div>
             </button>
           </div>
@@ -252,11 +252,11 @@ export const BacktestLab: React.FC = () => {
           <div className="bg-bg-card/40 border border-border rounded-lg p-6 relative">
             <div className="flex justify-between items-center mb-6">
               <h3 className="text-xs font-orbitron tracking-widest text-white flex items-center gap-2">
-                <TrendingUp className="h-4 w-4 text-neon-cyan" /> EQUITY CURVE
+                <TrendingUp className="h-4 w-4 text-neon-cyan" /> 权益曲线
               </h3>
               <div className="flex items-center gap-4 text-[10px] font-mono">
-                <div className="flex items-center gap-2"><div className="w-2 h-2 bg-neon-cyan" /> STRATEGY</div>
-                <div className="flex items-center gap-2"><div className="w-2 h-2 bg-info-gray/30" /> BENCHMARK</div>
+                <div className="flex items-center gap-2"><div className="w-2 h-2 bg-neon-cyan" /> 当前策略</div>
+                <div className="flex items-center gap-2"><div className="w-2 h-2 bg-info-gray/30" /> 基准指数</div>
               </div>
             </div>
 
@@ -316,15 +316,15 @@ export const BacktestLab: React.FC = () => {
           <div className="bg-bg-card/20 border border-border/50 rounded-lg p-6">
             <div className="flex justify-between items-center mb-6">
               <div>
-                <h3 className="text-xs font-orbitron tracking-widest text-white uppercase">Monte Carlo Simulation</h3>
-                <p className="text-[9px] text-info-gray/40 mt-1 uppercase">Stochastic resampling for robustness testing</p>
+                <h3 className="text-xs font-orbitron tracking-widest text-white uppercase">蒙特卡洛模拟</h3>
+                <p className="text-[9px] text-info-gray/40 mt-1 uppercase">随机重采样鲁棒性测试</p>
               </div>
               <button 
                 onClick={() => setShowMonteCarlo(!showMonteCarlo)}
                 className="flex items-center gap-2 bg-bg-primary border border-border px-4 py-1.5 rounded text-[10px] text-info-gray hover:text-white hover:border-neon-cyan transition-all uppercase"
               >
                 <RotateCcw className={cn("h-3 w-3", showMonteCarlo && "animate-spin")} />
-                Run Monte Carlo
+                运行蒙特卡洛
               </button>
             </div>
 
@@ -346,14 +346,14 @@ export const BacktestLab: React.FC = () => {
                   </svg>
                   <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                     <div className="bg-bg-card/80 border border-neon-cyan/40 px-6 py-3 rounded-md shadow-lg backdrop-blur-sm animate-in fade-in zoom-in duration-500">
-                      <div className="text-[10px] font-orbitron text-neon-cyan mb-2 text-center">SIMULATION COMPLETE (N=5000)</div>
+                      <div className="text-[10px] font-orbitron text-neon-cyan mb-2 text-center">模拟完成 (N=5000)</div>
                       <div className="flex gap-8">
                         <div>
-                          <div className="text-[8px] text-info-gray/60 font-mono uppercase">95% Conf. Interval</div>
+                          <div className="text-[8px] text-info-gray/60 font-mono uppercase">95% 置信区间</div>
                           <div className="text-sm font-bold text-white">¥902,450 - ¥1,124,000</div>
                         </div>
                         <div>
-                          <div className="text-[8px] text-info-gray/60 font-mono uppercase">Prob. of Ruin</div>
+                          <div className="text-[8px] text-info-gray/60 font-mono uppercase">破产概率</div>
                           <div className="text-sm font-bold text-up-green">0.12%</div>
                         </div>
                       </div>
@@ -363,7 +363,7 @@ export const BacktestLab: React.FC = () => {
               ) : (
                 <div className="h-full flex flex-col items-center justify-center text-info-gray/20">
                   <RotateCcw className="h-8 w-8 mb-2 opacity-10" />
-                  <span className="text-[10px] font-orbitron uppercase tracking-widest">Awaiting Simulation</span>
+                  <span className="text-[10px] font-orbitron uppercase tracking-widest">等待模拟运行</span>
                 </div>
               )}
             </div>

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState, FC } from 'react';
 import { 
   Terminal, 
   Trash2, 
@@ -7,33 +7,32 @@ import {
   ShieldCheck, 
   Zap,
   LayoutGrid,
-  ChevronRight,
-  Menu
+  ChevronRight
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { TerminalLog } from '../components/TerminalLog';
 import { useAgentStore } from '../store/agentStore';
 
-const AGENTS = ['Collector', 'Analyst', 'Trader', 'Risk', 'System'] as const;
+const AGENTS = ['数据采集', '分析员', '交易者', '风控', '系统'] as const;
 
-export const LogTerminal: React.FC = () => {
+export const LogTerminal: FC = () => {
   const { logs, clearLogs } = useAgentStore();
   const [activeAgent, setActiveAgent] = useState<string | null>(null);
 
   // Map store nodeId to the side menu categories
-  const mappedLogs = logs.map((l, i) => ({
+  const mappedLogs = logs.map((l, i): any => ({
     id: `LOG_${i}`,
     timestamp: l.timestamp,
-    agent: l.nodeId.includes('Analyst') ? 'Analyst' : 
-           l.nodeId.includes('Collector') ? 'Collector' :
-           l.nodeId.includes('Trader') ? 'Trader' :
-           l.nodeId.includes('Risk') ? 'Risk' : 'System',
-    level: l.type,
+    agent: l.nodeId.includes('Analyst') ? '分析员' : 
+           l.nodeId.includes('Collector') ? '数据采集' :
+           l.nodeId.includes('Trader') ? '交易者' :
+           l.nodeId.includes('Risk') ? '风控' : '系统',
+    level: l.type === 'input' ? 'info' : (l.type === 'output' ? 'info' : l.type),
     message: l.message
   }));
 
   const filteredLogs = activeAgent 
-    ? mappedLogs.filter(l => l.agent === activeAgent) 
+    ? mappedLogs.filter((l: any) => l.agent === activeAgent) 
     : mappedLogs;
 
   return (
@@ -42,7 +41,7 @@ export const LogTerminal: React.FC = () => {
       <aside className="w-64 border-r border-border bg-bg-card/30 flex flex-col z-10 p-4 space-y-6">
         <div>
           <h2 className="font-orbitron text-xs font-bold text-info-gray uppercase tracking-[0.2em] mb-4">
-            Agent Cluster
+            智能体集群
           </h2>
           <nav className="space-y-2">
             <button 
@@ -54,7 +53,7 @@ export const LogTerminal: React.FC = () => {
             >
               <div className="flex items-center gap-2">
                 <LayoutGrid className="h-3.5 w-3.5" />
-                <span>ALL AGENTS</span>
+                <span>所有智能体</span>
               </div>
               <ChevronRight className="h-3 w-3" />
             </button>
@@ -68,19 +67,19 @@ export const LogTerminal: React.FC = () => {
                 )}
               >
                 <div className="flex items-center gap-2">
-                  {agent === 'Collector' && <Zap className="h-3.5 w-3.5" />}
-                  {agent === 'Analyst' && <Layers className="h-3.5 w-3.5" />}
-                  {agent === 'Trader' && <Terminal className="h-3.5 w-3.5" />}
-                  {agent === 'Risk' && <ShieldCheck className="h-3.5 w-3.5" />}
-                  {agent === 'System' && <Cpu className="h-3.5 w-3.5" />}
+                  {agent === '数据采集' && <Zap className="h-3.5 w-3.5" />}
+                  {agent === '分析员' && <Layers className="h-3.5 w-3.5" />}
+                  {agent === '交易者' && <Terminal className="h-3.5 w-3.5" />}
+                  {agent === '风控' && <ShieldCheck className="h-3.5 w-3.5" />}
+                  {agent === '系统' && <Cpu className="h-3.5 w-3.5" />}
                   <span>{agent.toUpperCase()}</span>
                 </div>
                 <div className={cn(
                   "w-1.5 h-1.5 rounded-full animate-pulse",
-                  agent === 'Collector' ? 'bg-neon-cyan' :
-                  agent === 'Analyst' ? 'bg-neon-magenta' :
-                  agent === 'Trader' ? 'bg-up-green' :
-                  agent === 'Risk' ? 'bg-down-red' : 'bg-white'
+                  agent === '数据采集' ? 'bg-neon-cyan' :
+                  agent === '分析员' ? 'bg-neon-magenta' :
+                  agent === '交易者' ? 'bg-up-green' :
+                  agent === '风控' ? 'bg-down-red' : 'bg-white'
                 )} />
               </button>
             ))}
@@ -93,7 +92,7 @@ export const LogTerminal: React.FC = () => {
             className="w-full flex items-center justify-center gap-2 py-2 border border-border hover:border-down-red hover:text-down-red text-[10px] font-bold uppercase transition-all rounded-sm"
           >
             <Trash2 className="h-3 w-3" />
-            Wipe Buffer
+            清空日志缓存
           </button>
         </div>
       </aside>
@@ -104,9 +103,9 @@ export const LogTerminal: React.FC = () => {
           <div className="flex items-center gap-3">
             <Terminal className="h-4 w-4 text-neon-cyan" />
             <h1 className="font-orbitron text-sm font-bold tracking-[0.3em] uppercase text-white">
-              Distributed Log Terminal
+              分布式日志终端
               <span className="ml-3 text-info-gray/40 font-mono font-normal tracking-normal lowercase italic text-xs">
-                (live stream via SSE)
+                (通过 SSE 实时推送)
               </span>
             </h1>
           </div>

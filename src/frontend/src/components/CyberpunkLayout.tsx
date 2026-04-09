@@ -24,18 +24,18 @@ import { useHotkeys } from '../hooks/useHotkeys';
 import { CommandPalette } from './CommandPalette';
 
 const navItems = [
-  { icon: LayoutDashboard, path: '/', label: 'Dashboard' },
-  { icon: LineChart, path: '/market', label: 'Market' },
-  { icon: Cpu, path: '/agents', label: 'Agents' },
-  { icon: GitBranch, path: '/evolution', label: 'Evolution' },
-  { icon: Database, path: '/memory', label: 'Memory' },
-  { icon: BookOpen, path: '/knowledge', label: 'Knowledge' },
-  { icon: Activity, path: '/execution', label: 'Execution' },
-  { icon: Layers, path: '/strategies', label: 'Strategies' },
-  { icon: BarChart3, path: '/backtest', label: 'Backtest' },
-  { icon: ShieldCheck, path: '/audit', label: 'Audit' },
-  { icon: Terminal, path: '/logs', label: 'Logs' },
-  { icon: Settings, path: '/settings', label: 'Settings' },
+  { icon: LayoutDashboard, path: '/', label: '控制面板' },
+  { icon: LineChart, path: '/market', label: '行情终端' },
+  { icon: Cpu, path: '/agents', label: '智能体车间' },
+  { icon: GitBranch, path: '/evolution', label: '进化中心' },
+  { icon: Database, path: '/memory', label: '记忆库' },
+  { icon: BookOpen, path: '/knowledge', label: '知识库' },
+  { icon: Activity, path: '/execution', label: '执行监控' },
+  { icon: Layers, path: '/strategies', label: '策略矩阵' },
+  { icon: BarChart3, path: '/backtest', label: '回测实验室' },
+  { icon: ShieldCheck, path: '/audit', label: '审计与风控' },
+  { icon: Terminal, path: '/logs', label: '日志终端' },
+  { icon: Settings, path: '/settings', label: '系统设置' },
 ];
 
 export const CyberpunkLayout: React.FC = () => {
@@ -69,22 +69,22 @@ export const CyberpunkLayout: React.FC = () => {
             className="ml-8 flex h-8 items-center rounded-sm border border-border bg-bg-primary/50 px-3 transition-colors hover:border-neon-cyan/50 cursor-pointer group"
           >
             <Search className="h-4 w-4 text-info-gray group-hover:text-neon-cyan" />
-            <span className="ml-2 text-xs text-info-gray/60 uppercase group-hover:text-info-gray">CMD+K SEARCH...</span>
+            <span className="ml-2 text-xs text-info-gray/60 uppercase group-hover:text-info-gray">CMD+K 搜索...</span>
           </button>
         </div>
 
         <div className="flex items-center gap-6">
           <div className="flex gap-4 text-[10px] font-mono tracking-tighter uppercase">
             <div className="flex flex-col items-end">
-              <span className="text-info-gray/50">CPU LOAD</span>
+              <span className="text-info-gray/50">CPU 负载</span>
               <span className="text-up-green">12.4%</span>
             </div>
             <div className="flex flex-col items-end border-l border-border pl-4">
-              <span className="text-info-gray/50">MEM USAGE</span>
+              <span className="text-info-gray/50">内存使用</span>
               <span className="text-warn-gold">4.2 GB</span>
             </div>
             <div className="flex flex-col items-end border-l border-border pl-4">
-              <span className="text-info-gray/50">ACTIVE AGENTS</span>
+              <span className="text-info-gray/50">运行中的智能体</span>
               <span className="text-neon-cyan">6 / 8</span>
             </div>
           </div>
@@ -109,9 +109,13 @@ export const CyberpunkLayout: React.FC = () => {
                 )}
                 title={item.label}
               >
-                <item.icon className="h-5 w-5" />
-                {({ isActive }) => isActive && (
-                  <div className="absolute -left-4 h-6 w-1 rounded-r-full bg-neon-cyan shadow-[0_0_10px_rgba(0,240,255,1)]" />
+                {({ isActive }) => (
+                  <>
+                    <item.icon className="h-5 w-5" />
+                    {isActive && (
+                      <div className="absolute -left-4 h-6 w-1 rounded-r-full bg-neon-cyan shadow-[0_0_10px_rgba(0,240,255,1)]" />
+                    )}
+                  </>
                 )}
               </NavLink>
             ))}
@@ -129,19 +133,19 @@ export const CyberpunkLayout: React.FC = () => {
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-1.5">
             <div className="h-2 w-2 rounded-full bg-up-green shadow-[0_0_5px_rgba(0,255,157,0.8)]" />
-            <span className="text-info-gray/80">API: CONNECTED</span>
+            <span className="text-info-gray/80">API: 已连接</span>
           </div>
           <div className="flex items-center gap-1.5">
             <div className="h-2 w-2 rounded-full bg-up-green shadow-[0_0_5px_rgba(0,255,157,0.8)] animate-pulse" />
-            <span className="text-info-gray/80">WS: STREAMING</span>
+            <span className="text-info-gray/80">WS: 推流中</span>
           </div>
           <div className="flex items-center gap-1.5">
             <div className="h-2 w-2 rounded-full bg-neon-cyan shadow-[0_0_5px_rgba(0,240,255,0.8)]" />
-            <span className="text-info-gray/80">SSE: SYNCED</span>
+            <span className="text-info-gray/80">SSE: 已同步</span>
           </div>
           <div className="ml-4 flex items-center gap-1 text-info-gray/40">
             <Zap className="h-3 w-3" />
-            <span>LAST SIGNAL: 12ms AGO</span>
+            <span>最后信号: 12ms</span>
           </div>
         </div>
 

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { Search, Download, Trash2, Anchor, Filter } from 'lucide-react';
+import { Search, Download, Trash2, Anchor } from 'lucide-react';
 import { cn } from '../lib/utils';
 
 export interface LogEntry {
@@ -69,7 +69,7 @@ export const TerminalLog: React.FC<TerminalLogProps> = ({ logs, onClear, classNa
             <Search className="h-3 w-3 text-info-gray" />
             <input 
               type="text" 
-              placeholder="GREP FILTER..." 
+              placeholder="正则表达式过滤..." 
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="bg-transparent border-none outline-none text-white w-48 placeholder:text-info-gray/30"
@@ -119,7 +119,7 @@ export const TerminalLog: React.FC<TerminalLogProps> = ({ logs, onClear, classNa
         }}
       >
         {displayLogs.length === 0 ? (
-          <div className="text-info-gray/40 italic py-4">NO LOGS MATCHING CRITERIA...</div>
+          <div className="text-info-gray/40 italic py-4">未找到匹配条件的日志...</div>
         ) : (
           displayLogs.map((log) => (
             <div key={log.id} className="flex gap-3 hover:bg-white/5 py-0.5 px-1 rounded transition-colors group">
@@ -146,11 +146,11 @@ export const TerminalLog: React.FC<TerminalLogProps> = ({ logs, onClear, classNa
 
       {/* Terminal Footer Status */}
       <div className="px-3 py-1 bg-bg-card border-t border-border flex justify-between items-center text-[10px] text-info-gray/50">
-        <div>TOTAL: {logs.length} | FILTERED: {filteredLogs.length} | DISPLAYING: {displayLogs.length}</div>
+        <div>总数: {logs.length} | 已过滤: {filteredLogs.length} | 当前显示: {displayLogs.length}</div>
         <div className="flex gap-4">
-          <span>LINE: {filteredLogs.length}</span>
+          <span>行数: {filteredLogs.length}</span>
           <span>UTF-8</span>
-          <span className="text-neon-cyan animate-pulse">TERMINAL ACTIVE</span>
+          <span className="text-neon-cyan animate-pulse">终端已激活</span>
         </div>
       </div>
     </div>

@@ -27,6 +27,7 @@ interface AgentState {
   updateAgentStatus: (nodeId: string, status: AgentStatus, ticker?: string, progress?: number) => void;
   setActiveNode: (nodeId: string | null) => void;
   addLog: (log: AgentLog) => void;
+  clearLogs: () => void;
   updatePnl: (pnl: number) => void;
   resetGraph: () => void;
 }
@@ -56,6 +57,8 @@ export const useAgentStore = create<AgentState>((set) => ({
   addLog: (log) => set((state) => ({ 
     logs: [log, ...state.logs].slice(0, 100) // Keep last 100 logs
   })),
+
+  clearLogs: () => set({ logs: [] }),
 
   updatePnl: (pnl) => set({ pnl }),
 

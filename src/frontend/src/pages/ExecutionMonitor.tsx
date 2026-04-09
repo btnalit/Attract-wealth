@@ -39,7 +39,7 @@ const MOCK_FILLS: Fill[] = [
 export const ExecutionMonitor: React.FC = () => {
   const [channels, setChannels] = useState<Channel[]>(MOCK_CHANNELS);
   const [orders, setOrders] = useState<Order[]>(MOCK_ORDERS);
-  const [fills, setFills] = useState<Fill[]>(MOCK_FILLS);
+  const [fills] = useState<Fill[]>(MOCK_FILLS);
   const [loading, setLoading] = useState(true);
 
   const fetchData = useCallback(async () => {
@@ -91,21 +91,21 @@ export const ExecutionMonitor: React.FC = () => {
     <div className="p-6 space-y-6">
       <div className="flex justify-between items-end">
         <PageTitle 
-          title="EXECUTION MONITOR" 
-          subtitle="Real-time order management & channel synchronization" 
+          title="执行监控" 
+          subtitle="实时订单管理与通道状态同步" 
         />
         <div className="flex gap-3 h-10">
           <button className="flex items-center gap-2 px-4 py-2 bg-bg-card border border-border rounded-sm hover:border-neon-cyan hover:bg-bg-hover transition-all text-sm group">
             <RefreshCw className="h-4 w-4 group-hover:rotate-180 transition-transform duration-500" />
-            <span>SYNC PORTFOLIO</span>
+            <span>同步持仓</span>
           </button>
           <button className="flex items-center gap-2 px-4 py-2 bg-bg-card border border-border rounded-sm hover:border-up-green hover:bg-bg-hover transition-all text-sm">
             <Cpu className="h-4 w-4" />
-            <span>TO SIMULATOR</span>
+            <span>切换到模拟器</span>
           </button>
           <button className="flex items-center gap-2 px-4 py-2 bg-down-red/20 border border-down-red/50 rounded-sm hover:bg-down-red/40 transition-all text-sm text-down-red font-bold">
             <AlertOctagon className="h-4 w-4 animate-pulse" />
-            <span>EMERGENCY HALT</span>
+            <span>紧急停机</span>
           </button>
         </div>
       </div>
@@ -133,23 +133,23 @@ export const ExecutionMonitor: React.FC = () => {
 
             <div className="grid grid-cols-2 gap-4 text-xs font-mono">
               <div className="flex flex-col">
-                <span className="text-info-gray/50 uppercase">Latency</span>
+                <span className="text-info-gray/50 uppercase">延迟</span>
                 <span className={cn("text-lg", channel.latency > 50 ? "text-warn-gold" : "text-up-green")}>
                   {channel.latency} <span className="text-[10px] text-info-gray/50">ms</span>
                 </span>
               </div>
               <div className="flex flex-col">
-                <span className="text-info-gray/50 uppercase">Throughput</span>
+                <span className="text-info-gray/50 uppercase">吞吐量</span>
                 <span className="text-lg text-white">
                   {channel.throughput} <span className="text-[10px] text-info-gray/50">cmd/s</span>
                 </span>
               </div>
               <div className="flex flex-col">
-                <span className="text-info-gray/50 uppercase">Last Sync</span>
+                <span className="text-info-gray/50 uppercase">上次同步</span>
                 <span className="text-white">{channel.lastSync}</span>
               </div>
               <div className="flex flex-col">
-                <span className="text-info-gray/50 uppercase">Load Level</span>
+                <span className="text-info-gray/50 uppercase">负载等级</span>
                 <div className="flex gap-0.5 mt-1.5 h-1.5 items-end">
                   {[...Array(10)].map((_, i) => (
                     <div 
@@ -179,11 +179,11 @@ export const ExecutionMonitor: React.FC = () => {
           <div className="flex justify-between items-center px-4 py-3 border-b border-border bg-bg-card/50">
             <div className="flex items-center gap-2">
               <Activity className="h-4 w-4 text-neon-cyan" />
-              <span className="font-orbitron text-sm font-bold tracking-widest uppercase">Active Order Queue</span>
+              <span className="font-orbitron text-sm font-bold tracking-widest uppercase">活跃订单队列</span>
             </div>
             <button className="flex items-center gap-1.5 px-3 py-1 bg-down-red/10 border border-down-red/30 rounded-sm text-[10px] font-bold text-down-red hover:bg-down-red/20 transition-all uppercase">
               <Ban className="h-3 w-3" />
-              Cancel All
+              全部撤单
             </button>
           </div>
           
@@ -191,13 +191,13 @@ export const ExecutionMonitor: React.FC = () => {
             <table className="w-full text-left text-xs">
               <thead className="sticky top-0 bg-bg-card border-b border-border z-10">
                 <tr className="text-info-gray uppercase font-mono tracking-tighter">
-                  <th className="px-4 py-3">Order ID</th>
-                  <th className="px-4 py-3">Security</th>
-                  <th className="px-4 py-3">Side</th>
-                  <th className="px-4 py-3 text-right">Price</th>
-                  <th className="px-4 py-3 text-right">Qty</th>
-                  <th className="px-4 py-3">Status</th>
-                  <th className="px-4 py-3">Time</th>
+                  <th className="px-4 py-3">订单 ID</th>
+                  <th className="px-4 py-3">证券名称</th>
+                  <th className="px-4 py-3">方向</th>
+                  <th className="px-4 py-3 text-right">价格</th>
+                  <th className="px-4 py-3 text-right">数量</th>
+                  <th className="px-4 py-3">状态</th>
+                  <th className="px-4 py-3">持有时间</th>
                   <th className="px-4 py-3"></th>
                 </tr>
               </thead>
@@ -247,14 +247,14 @@ export const ExecutionMonitor: React.FC = () => {
         <div className="flex flex-col bg-bg-card border border-border rounded-sm overflow-hidden">
           <div className="px-4 py-3 border-b border-border bg-bg-card/50 flex items-center gap-2">
             <Clock className="h-4 w-4 text-neon-cyan" />
-            <span className="font-orbitron text-sm font-bold tracking-widest uppercase">Execution Return</span>
+            <span className="font-orbitron text-sm font-bold tracking-widest uppercase">执行回报流</span>
           </div>
           
           <div className="flex-1 overflow-auto p-4 space-y-3 custom-scrollbar">
             {loading && fills.length === 0 ? (
               <div className="flex items-center justify-center h-full text-info-gray/40">
                 <Loader2 className="h-6 w-6 animate-spin mr-2" />
-                <span>Streaming...</span>
+                <span>推送中...</span>
               </div>
             ) : fills.map((fill, i) => (
               <div key={i} className="bg-bg-primary/50 border border-border/50 rounded p-3 flex flex-col gap-2 relative overflow-hidden group">
@@ -271,7 +271,7 @@ export const ExecutionMonitor: React.FC = () => {
                       "text-[10px] font-bold uppercase",
                       fill.side === 'BUY' ? "text-up-green" : "text-down-red"
                     )}>
-                      Execution Success
+                      执行成功
                     </span>
                   </div>
                   <span className="text-[10px] text-info-gray/50 font-mono">{fill.time}</span>
@@ -279,11 +279,11 @@ export const ExecutionMonitor: React.FC = () => {
                 
                 <div className="grid grid-cols-2 gap-2 text-[11px] font-mono">
                   <div className="flex justify-between border-r border-border/50 pr-2">
-                    <span className="text-info-gray/50 uppercase">AVG Price</span>
+                    <span className="text-info-gray/50 uppercase">均价</span>
                     <span className="text-white font-bold">{fill.avgPrice.toFixed(2)}</span>
                   </div>
                   <div className="flex justify-between pl-2">
-                    <span className="text-info-gray/50 uppercase">Filled Qty</span>
+                    <span className="text-info-gray/50 uppercase">成交数量</span>
                     <span className="text-white font-bold">{fill.qty}</span>
                   </div>
                 </div>
@@ -295,23 +295,10 @@ export const ExecutionMonitor: React.FC = () => {
           </div>
           
           <div className="p-3 bg-bg-primary/30 border-t border-border flex justify-between items-center text-[10px] text-info-gray/40">
-            <span>REAL-TIME STREAM ACTIVE</span>
+            <span>实时数据流已激活</span>
             <div className="flex items-center gap-1.5">
               <div className="h-1.5 w-1.5 rounded-full bg-up-green animate-ping" />
-              <span>SYNCED</span>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-};
-
-export default ExecutionMonitor;
-an>
-            <div className="flex items-center gap-1.5">
-              <div className="h-1.5 w-1.5 rounded-full bg-up-green animate-ping" />
-              <span>SYNCED</span>
+              <span>已同步</span>
             </div>
           </div>
         </div>

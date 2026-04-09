@@ -147,25 +147,25 @@ export const SystemConfig: React.FC = () => {
       <header className="mb-12">
         <h1 className="text-3xl font-orbitron font-extrabold text-white tracking-widest flex items-center gap-4">
           <Settings className="text-neon-cyan h-8 w-8 animate-pulse" />
-          SYSTEM CONFIGURATION <span className="text-neon-cyan/50 text-[10px] font-mono tracking-normal ml-4 border border-neon-cyan/30 px-2 py-0.5 rounded uppercase">V1.0.4-STABLE</span>
+          系统配置 <span className="text-neon-cyan/50 text-[10px] font-mono tracking-normal ml-4 border border-neon-cyan/30 px-2 py-0.5 rounded uppercase">V1.0.4-稳定版</span>
         </h1>
-        <p className="text-info-gray/60 text-xs mt-2 uppercase tracking-[0.2em] font-light">Global architecture, data-flow & communication protocols</p>
+        <p className="text-info-gray/60 text-xs mt-2 uppercase tracking-[0.2em] font-light">全局架构、数据流与通信协议管理</p>
       </header>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
         {/* Data Source Configuration */}
-        <ConfigSection title="Data Source Protocols" icon={Database}>
+        <ConfigSection title="数据源协议" icon={Database}>
           <div className="space-y-4">
             <div className="p-3 bg-bg-primary/50 border border-border rounded flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <Globe className="h-4 w-4 text-up-green" />
                 <span className="text-xs font-mono text-white">AkShare (Standard)</span>
               </div>
-              <span className="text-[9px] text-up-green/80 font-mono uppercase bg-up-green/5 px-1.5 py-0.5 rounded border border-up-green/20">Active</span>
+              <span className="text-[9px] text-up-green/80 font-mono uppercase bg-up-green/5 px-1.5 py-0.5 rounded border border-up-green/20">已激活</span>
             </div>
 
             <div className="space-y-2">
-              <label className="text-[9px] text-info-gray/50 uppercase font-bold tracking-wider">Tushare Pro Token</label>
+              <label className="text-[9px] text-info-gray/50 uppercase font-bold tracking-wider">Tushare Pro 令牌</label>
               <div className="flex gap-2">
                 <input 
                   type="password" 
@@ -181,7 +181,7 @@ export const SystemConfig: React.FC = () => {
                   )}
                 >
                   {tushareStatus === 'TESTING' ? <Zap className="h-3 w-3 animate-spin" /> : tushareStatus === 'OK' ? <CheckCircle2 className="h-3 w-3" /> : <Zap className="h-3 w-3" />}
-                  {tushareStatus === 'TESTING' ? 'Testing...' : tushareStatus === 'OK' ? 'Connected' : 'Test'}
+                  {tushareStatus === 'TESTING' ? '测试中...' : tushareStatus === 'OK' ? '已连接' : '测试'}
                 </button>
               </div>
             </div>
@@ -191,13 +191,13 @@ export const SystemConfig: React.FC = () => {
                 <Globe className="h-4 w-4 text-info-gray/40" />
                 <span className="text-xs font-mono text-info-gray/60">BaoStock (Optional)</span>
               </div>
-              <span className="text-[9px] text-info-gray/40 font-mono uppercase bg-bg-hover px-1.5 py-0.5 rounded border border-border">Disabled</span>
+              <span className="text-[9px] text-info-gray/40 font-mono uppercase bg-bg-hover px-1.5 py-0.5 rounded border border-border">已禁用</span>
             </div>
           </div>
         </ConfigSection>
 
         {/* Trading Channels */}
-        <ConfigSection title="Execution Channels" icon={Zap}>
+        <ConfigSection title="执行通道" icon={Zap}>
           <div className="space-y-4">
             <div className="space-y-3 p-4 bg-bg-primary/50 border border-border rounded">
               <div className="flex items-center justify-between">
@@ -207,7 +207,7 @@ export const SystemConfig: React.FC = () => {
                 </div>
               </div>
               <div className="space-y-2">
-                <label className="text-[9px] text-info-gray/50 uppercase font-mono">Main Window Handle (HWND)</label>
+                <label className="text-[9px] text-info-gray/50 uppercase font-mono">主窗口句柄 (HWND)</label>
                 <input type="text" className="w-full bg-bg-primary border border-border/50 rounded px-2 py-1.5 text-xs text-neon-cyan font-mono" defaultValue="0x002A14" />
               </div>
             </div>
@@ -215,15 +215,15 @@ export const SystemConfig: React.FC = () => {
             <div className="space-y-3 p-4 bg-bg-primary/50 border border-border rounded opacity-60 grayscale">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <span className="text-xs font-mono text-info-gray">MiniQMT Integration</span>
-                  <span className="text-[8px] bg-warn-gold/20 text-warn-gold px-1.5 py-0.5 rounded border border-warn-gold/30">PAUSED</span>
+                  <span className="text-xs font-mono text-info-gray">MiniQMT 集成</span>
+                  <span className="text-[8px] bg-warn-gold/20 text-warn-gold px-1.5 py-0.5 rounded border border-warn-gold/30">暂停</span>
                 </div>
                 <div className="h-4 w-8 bg-bg-hover border border-border rounded-full flex items-center justify-start px-1 cursor-not-allowed">
                   <div className="h-2 w-2 rounded-full bg-info-gray/30" />
                 </div>
               </div>
               <div className="space-y-2">
-                <label className="text-[9px] text-info-gray/50 uppercase font-mono">Session Identifier</label>
+                <label className="text-[9px] text-info-gray/50 uppercase font-mono">会话标识符</label>
                 <input type="text" disabled className="w-full bg-bg-primary/30 border border-border/20 rounded px-2 py-1.5 text-xs text-info-gray/30 font-mono" placeholder="WAITING_AUTH..." />
               </div>
             </div>
@@ -231,15 +231,15 @@ export const SystemConfig: React.FC = () => {
         </ConfigSection>
 
         {/* MCP Server Config */}
-        <ConfigSection title="MCP Protocol Core" icon={Cpu}>
+        <ConfigSection title="MCP 协议核心" icon={Cpu}>
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <label className="text-[9px] text-info-gray/50 uppercase font-mono tracking-wider">Host Interface</label>
+                <label className="text-[9px] text-info-gray/50 uppercase font-mono tracking-wider">主机接口</label>
                 <input type="text" className="w-full bg-bg-primary border border-border rounded px-3 py-2 text-xs text-white outline-none font-mono" defaultValue="localhost" />
               </div>
               <div className="space-y-2">
-                <label className="text-[9px] text-info-gray/50 uppercase font-mono tracking-wider">Port</label>
+                <label className="text-[9px] text-info-gray/50 uppercase font-mono tracking-wider">端口</label>
                 <input type="text" className="w-full bg-bg-primary border border-border rounded px-3 py-2 text-xs text-white outline-none font-mono" defaultValue="8080" />
               </div>
             </div>
@@ -254,21 +254,21 @@ export const SystemConfig: React.FC = () => {
               )}
             >
               <Power className={cn("h-3 w-3", mcpStatus === 'STARTING' && "animate-spin")} />
-              {mcpStatus === 'RUNNING' ? 'MCP CORE OPERATIONAL' : mcpStatus === 'STARTING' ? 'INITIALIZING PROTOCOL...' : 'START MCP SERVER'}
+              {mcpStatus === 'RUNNING' ? 'MCP 核心运行中' : mcpStatus === 'STARTING' ? '协议初始化中...' : '启动 MCP 服务'}
             </button>
             
             <div className="flex items-center gap-2 text-[9px] font-mono text-info-gray/40">
               <div className={cn("h-1.5 w-1.5 rounded-full", mcpStatus === 'RUNNING' ? "bg-up-green animate-pulse" : "bg-bg-hover")} />
-              STATUS: {mcpStatus} (RELAY_SYSTEM_V2)
+              状态: {mcpStatus} (中继系统 V2)
             </div>
           </div>
         </ConfigSection>
 
         {/* Messaging Configuration */}
-        <ConfigSection title="Alert & Messaging" icon={MessageSquare}>
+        <ConfigSection title="告警与消息" icon={MessageSquare}>
           <div className="space-y-4">
             <div className="space-y-2">
-              <label className="text-[9px] text-info-gray/50 uppercase font-bold tracking-wider">WeChat Webhook (Enterprise)</label>
+              <label className="text-[9px] text-info-gray/50 uppercase font-bold tracking-wider">企业微信 Webhook</label>
               <input 
                 type="text" 
                 className="w-full bg-bg-primary border border-border rounded px-3 py-2 text-xs text-white outline-none focus:border-neon-cyan transition-colors" 
@@ -279,7 +279,7 @@ export const SystemConfig: React.FC = () => {
             </div>
             
             <div className="space-y-2">
-              <label className="text-[9px] text-info-gray/50 uppercase font-bold tracking-wider">DingTalk Secret Key</label>
+              <label className="text-[9px] text-info-gray/50 uppercase font-bold tracking-wider">钉钉密钥</label>
               <input 
                 type="password" 
                 className="w-full bg-bg-primary border border-border rounded px-3 py-2 text-xs text-white outline-none focus:border-neon-cyan transition-colors" 
@@ -294,17 +294,17 @@ export const SystemConfig: React.FC = () => {
               className="w-full flex items-center justify-center gap-2 py-2.5 rounded text-[10px] font-mono border border-border bg-bg-primary hover:bg-bg-hover hover:border-neon-cyan/30 text-info-gray transition-all uppercase"
             >
               {isTestingNotification ? <Loader2 className="h-3 w-3 animate-spin" /> : <Send className="h-3 w-3" />}
-              Test Notification Channel
+              测试通知通道
             </button>
           </div>
         </ConfigSection>
 
         {/* LLM Model Configuration */}
         <div className="md:col-span-2">
-          <ConfigSection title="LLM Intelligence Engine" icon={Cpu}>
+          <ConfigSection title="LLM 智能引擎" icon={Cpu}>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               <div className="space-y-2">
-                <label className="text-[9px] text-info-gray/50 uppercase font-bold tracking-wider">API Base URL</label>
+                <label className="text-[9px] text-info-gray/50 uppercase font-bold tracking-wider">API 基准地址</label>
                 <input 
                   type="text" 
                   className="w-full bg-bg-primary border border-border rounded px-3 py-2 text-xs text-white outline-none font-mono" 
@@ -313,7 +313,7 @@ export const SystemConfig: React.FC = () => {
                 />
               </div>
               <div className="space-y-2">
-                <label className="text-[9px] text-info-gray/50 uppercase font-bold tracking-wider">Active Model</label>
+                <label className="text-[9px] text-info-gray/50 uppercase font-bold tracking-wider">当前模型</label>
                 <select 
                   className="w-full bg-bg-primary border border-border rounded px-3 py-2 text-xs text-white outline-none"
                   value={llmConfig.model}
@@ -326,7 +326,7 @@ export const SystemConfig: React.FC = () => {
                 </select>
               </div>
               <div className="space-y-2">
-                <label className="text-[9px] text-info-gray/50 uppercase font-bold tracking-wider">Temperature ({llmConfig.temperature})</label>
+                <label className="text-[9px] text-info-gray/50 uppercase font-bold tracking-wider">采样温度 ({llmConfig.temperature})</label>
                 <input 
                   type="range" min="0" max="1" step="0.1" 
                   className="w-full accent-neon-cyan bg-bg-primary cursor-pointer" 
@@ -334,8 +334,8 @@ export const SystemConfig: React.FC = () => {
                   onChange={(e) => setLlmConfig({ ...llmConfig, temperature: parseFloat(e.target.value) })}
                 />
                 <div className="flex justify-between text-[8px] font-mono text-info-gray/40">
-                  <span>PRECISE (0.0)</span>
-                  <span>CREATIVE (1.0)</span>
+                  <span>精确 (0.0)</span>
+                  <span>创造性 (1.0)</span>
                 </div>
               </div>
             </div>
@@ -343,7 +343,7 @@ export const SystemConfig: React.FC = () => {
             <div className="pt-4 border-t border-border mt-4">
               <div className="flex items-center gap-2">
                 <AlertCircle className="h-3 w-3 text-warn-gold" />
-                <p className="text-[10px] text-info-gray/60 italic font-light">Warning: Modifying LLM settings may impact reasoning stability and response latency in live trading sessions.</p>
+                <p className="text-[10px] text-info-gray/60 italic font-light">警告: 修改 LLM 设置可能会影响实盘过程中的推理稳定性和响应延迟。</p>
               </div>
             </div>
           </ConfigSection>
@@ -356,7 +356,7 @@ export const SystemConfig: React.FC = () => {
           className="px-8 py-3 rounded border border-border text-[10px] font-orbitron tracking-widest text-info-gray hover:text-white transition-all uppercase flex items-center gap-2"
         >
           <RefreshCw className="h-3 w-3" />
-          Reset / Refresh
+          重置 / 刷新
         </button>
         <button 
           onClick={handleSave}
@@ -364,7 +364,7 @@ export const SystemConfig: React.FC = () => {
           className="px-8 py-3 rounded bg-neon-cyan border border-neon-cyan text-black text-[10px] font-orbitron tracking-widest font-bold hover:shadow-[0_0_20px_rgba(0,240,255,0.4)] transition-all uppercase flex items-center gap-2"
         >
           {isSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
-          {isSaving ? 'SAVING...' : 'Save Configuration'}
+          {isSaving ? '保存中...' : '保存配置'}
         </button>
       </footer>
     </div>
