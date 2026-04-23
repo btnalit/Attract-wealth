@@ -74,8 +74,16 @@ class DebateResearcher:
         ticker = state["ticker"]
         session_id = str(state.get("session_id", ""))
         reports_dict = state.get("analysis_reports", {})
+
+        def _dump_payload(value: Any) -> Any:
+            if hasattr(value, "model_dump"):
+                return value.model_dump()
+            if isinstance(value, dict):
+                return dict(value)
+            return value
+
         reports_text = json.dumps(
-            {k: v.dict() if hasattr(v, "dict") else v for k, v in reports_dict.items()},
+            {k: _dump_payload(v) for k, v in reports_dict.items()},
             ensure_ascii=False,
             indent=2,
         )

@@ -1,66 +1,102 @@
 """
-来财 (Attract-wealth) — 风控经理
-
-拦截并不合规、超额或者属于黑名单的交易请求。
+Rule-based risk manager used inside the agent trading graph.
 """
+from __future__ import annotations
+
 import logging
+from typing import Any
+
+from src.core.trading_ledger import LedgerEntry, TradingLedger
 from src.core.trading_vm import AgentState
-from src.core.trading_ledger import TradingLedger, LedgerEntry
 
 logger = logging.getLogger(__name__)
 
 
 class RiskManager:
-    """系统风控阀门 (Rule-Based 为主)"""
+    """Risk gate for agent decision output."""
 
     def __init__(self, max_single_stock_percent: float = 30.0):
-        self.max_single_stock_percent = max_single_stock_percent
+        self.max_single_stock_percent = float(max_single_stock_percent)
         self.ledger = TradingLedger()
 
+    @staticmethod
+    def _to_float(value: Any) -> float:
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return 0.0
+
+    def _estimate_existing_position_percent(self, portfolio: dict[str, Any], ticker: str) -> float:
+        total_assets = self._to_float(portfolio.get("total_assets", 0.0))
+        if total_assets <= 0:
+            return 0.0
+
+        positions = portfolio.get("positions", {}) if isinstance(portfolio.get("positions", {}), dict) else {}
+        position_info = positions.get(str(ticker or ""), {}) if isinstance(positions, dict) else {}
+        market_value = self._to_float(position_info.get("market_value", 0.0))
+        if market_value <= 0:
+            return 0.0
+
+        return market_value / total_assets * 100.0
+
     def check_risk(self, state: AgentState) -> dict:
-        """同步方法执行硬性风控检查"""
-        decision_data = state.get("trading_decision", {})
-        action = decision_data.get("action", "HOLD")
-        percentage = decision_data.get("percentage", 0)
-        ticker = state.get("ticker", "")
-        
-        if action == "HOLD" or percentage <= 0:
+        decision_data = state.get("trading_decision", {}) if isinstance(state.get("trading_decision", {}), dict) else {}
+        action = str(decision_data.get("action", "HOLD")).upper()
+        requested_percent = self._to_float(decision_data.get("percentage", 0.0))
+        ticker = str(state.get("ticker", "")).strip()
+
+        if action == "HOLD" or requested_percent <= 0:
             return {"risk_check": {"passed": True, "reason": "No Action"}}
-            
-        context = state.get("context", {})
-        portfolio = context.get("portfolio", {})
-        
-        # 风控规则 1: 黑名单拦截 (示例)
-        if ticker in ["300059", "600000"]:  # 伪示例黑名单
-            self._log_rejection(state, "触发黑名单")
-            return self._reject_state("触发黑名单退市警报")
-            
-        # 风控规则 2: 买入仓位限制
+
+        context = state.get("context", {}) if isinstance(state.get("context", {}), dict) else {}
+        portfolio = context.get("portfolio", {}) if isinstance(context.get("portfolio", {}), dict) else {}
+
+        # Rule 1: hard blacklist check.
+        if ticker in {"300059", "600000"}:
+            reason = "Ticker is in blacklist"
+            self._log_rejection(state, reason)
+            return self._reject_state(reason)
+
+        # Rule 2: per-order position ratio limit.
+        if action == "BUY" and requested_percent > self.max_single_stock_percent:
+            reason = (
+                f"Requested position {requested_percent:.2f}% exceeds max single-stock limit "
+                f"{self.max_single_stock_percent:.2f}%"
+            )
+            self._log_rejection(state, reason)
+            return self._reject_state(reason)
+
+        # Rule 3: existing position + requested buy should not exceed single-stock limit.
         if action == "BUY":
-            if percentage > self.max_single_stock_percent:
-                reason = f"试图动用 {percentage}% 资金，超名单一股票上限 ({self.max_single_stock_percent}%)"
+            existing_percent = self._estimate_existing_position_percent(portfolio, ticker)
+            projected_percent = requested_percent + existing_percent
+            if projected_percent > self.max_single_stock_percent:
+                reason = (
+                    f"Projected position {projected_percent:.2f}% exceeds max single-stock limit "
+                    f"{self.max_single_stock_percent:.2f}% (existing {existing_percent:.2f}% + requested {requested_percent:.2f}%)"
+                )
                 self._log_rejection(state, reason)
                 return self._reject_state(reason)
-                
-            # TODO: 获取该股目前已持仓市值计算，如果 买入量 + 已持有 > 30% 总资产，也应拒绝
-            
-        logger.info(f"风控放行了 Trader 对于 {ticker} 的决定: {action} {percentage}%")
+
+        logger.info("Risk check passed: ticker=%s action=%s requested=%.2f%%", ticker, action, requested_percent)
         return {"risk_check": {"passed": True, "reason": "All checks cleared"}}
 
     def _reject_state(self, reason: str) -> dict:
         return {
-            "decision": "HOLD",  # 强行覆盖 Trader 决定
+            "decision": "HOLD",
             "risk_check": {
                 "passed": False,
-                "reason": reason
-            }
+                "reason": reason,
+            },
         }
 
     def _log_rejection(self, state: AgentState, reason: str):
-        ticker = state["ticker"]
-        self.ledger.record_entry(LedgerEntry(
-            category="SYSTEM",
-            action="RISK_REJECT",
-            detail=f"Risk Rejection on {ticker}: {reason}",
-            metadata={"ticker": ticker, "reason": reason}
-        ))
+        ticker = str(state.get("ticker", ""))
+        self.ledger.record_entry(
+            LedgerEntry(
+                category="SYSTEM",
+                action="RISK_REJECT",
+                detail=f"Risk rejection on {ticker}: {reason}",
+                metadata={"ticker": ticker, "reason": reason},
+            )
+        )

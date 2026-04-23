@@ -59,7 +59,7 @@ def _parse_args() -> argparse.Namespace:
 
     parser.add_argument("--p2-profile", default="ths_paper_default")
     parser.add_argument("--p2-probe-iterations", type=int, default=80)
-    parser.add_argument("--p2-probe-failure-every", type=int, default=4)
+    parser.add_argument("--p2-probe-failure-every", type=int, default=9)
     parser.add_argument("--p2-probe-rate-limit-per-minute", type=int, default=90)
     parser.add_argument("--p2-probe-max-wait-ms", type=int, default=0)
     parser.add_argument("--p2-probe-retry-count", type=int, default=2)

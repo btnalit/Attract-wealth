@@ -1,9 +1,7 @@
 ﻿from __future__ import annotations
 
 import os
-import sys
 import time
-import json
 from typing import Any
 
 from fastapi import APIRouter, Query, Request
@@ -25,8 +23,8 @@ from src.core.startup_preflight import run_startup_preflight
 from src.core.system_store import SystemStore
 from src.core.trading_ledger import TradingLedger
 from src.llm.openai_compat import get_llm_effective_config, get_llm_runtime_metrics
-from src.llm.config_provider import llm_config_provider
-from src.channels.wechat import WeChatChannel
+from src.services.dataflow_service import DataflowService
+from src.services.system_config_service import SystemConfigService
 
 router = APIRouter()
 LLM_RUNTIME_CONFIG_KEY = "llm_runtime_config"
@@ -51,6 +49,11 @@ class DataflowQualityFeedbackRequest(BaseModel):
     event_id: str = Field(default="", description="可选，质量告警事件 ID")
     source: str = Field(default="api", description="反馈来源")
     note: str = Field(default="", description="备注")
+
+
+class DataflowProviderSwitchRequest(BaseModel):
+    provider: str = Field(..., description="目标数据源名称，例如 akshare / baostock")
+    persist: bool = Field(default=False, description="是否持久化为默认主数据源")
 
 
 class THSBridgeStartRequest(BaseModel):
@@ -178,6 +181,24 @@ def _get_system_store_or_none(request: Request) -> SystemStore | None:
     return None
 
 
+def _get_system_config_service(request: Request) -> SystemConfigService:
+    service = getattr(request.app.state, "system_config_service", None)
+    if isinstance(service, SystemConfigService):
+        return service
+    service = SystemConfigService()
+    request.app.state.system_config_service = service
+    return service
+
+
+def _get_dataflow_service(request: Request) -> DataflowService:
+    service = getattr(request.app.state, "dataflow_service", None)
+    if isinstance(service, DataflowService):
+        return service
+    service = DataflowService()
+    request.app.state.dataflow_service = service
+    return service
+
+
 def _get_ths_bridge_runtime(request: Request):
     runtime = getattr(request.app.state, "ths_bridge_runtime", None)
     if runtime is None:
@@ -247,28 +268,29 @@ def _llm_config_output(config: dict[str, Any]) -> dict[str, Any]:
     return payload
 
 
-@router.get("/llm-config")
-async def get_llm_config():
-    """获取当前 LLM 配置单例 (T-42)"""
-    config = llm_config_provider.get_config()
-    payload = config.dict()
-    # 脱敏处理
-    payload["api_key"] = _mask_api_key(payload.get("api_key", ""))
-    payload["has_api_key"] = bool(config.api_key)
-    return ok_response(payload)
+@router.get("/llm-config", include_in_schema=False, deprecated=True)
+async def get_llm_config_compat(request: Request):
+    """兼容别名：请迁移到 /api/system/llm/config。"""
+    response = await llm_runtime_config(request)
+    if not isinstance(response, dict) or not response.get("ok"):
+        return response
+    data = response.get("data", {})
+    compat_payload = dict(data.get("config", {})) if isinstance(data, dict) else {}
+    compat_payload["runtime_config"] = data.get("runtime_config", {}) if isinstance(data, dict) else {}
+    return ok_response(compat_payload, code="LLM_CONFIG_COMPAT_OK")
 
 
-@router.put("/llm-config")
-async def update_llm_config(req: LLMRuntimeConfigRequest):
-    """动态更新 LLM 配置单例 (T-42)"""
-    updates = req.dict(exclude_unset=True)
-    if not req.api_key and req.retain_api_key:
-        updates.pop("api_key", None)
-        
-    new_cfg = llm_config_provider.update_config(**updates)
-    payload = new_cfg.dict()
-    payload["api_key"] = _mask_api_key(payload.get("api_key", ""))
-    return ok_response(payload)
+@router.put("/llm-config", include_in_schema=False, deprecated=True)
+async def update_llm_config_compat(req: LLMRuntimeConfigRequest, request: Request):
+    """兼容别名：请迁移到 /api/system/llm/config。"""
+    response = await llm_runtime_config_update(req, request)
+    if not isinstance(response, dict) or not response.get("ok"):
+        return response
+    data = response.get("data", {})
+    compat_payload = dict(data.get("config", {})) if isinstance(data, dict) else {}
+    compat_payload["runtime_config"] = data.get("runtime_config", {}) if isinstance(data, dict) else {}
+    compat_payload["persisted"] = bool(data.get("persisted", False)) if isinstance(data, dict) else False
+    return ok_response(compat_payload, code="LLM_CONFIG_COMPAT_UPDATED")
 
 
 @router.get("/runtime")
@@ -430,21 +452,19 @@ async def risk_alerts(request: Request, limit: int = Query(default=50, ge=1, le=
 
 
 @router.get("/dataflow/metrics")
-async def dataflow_metrics():
+async def dataflow_metrics(request: Request):
     try:
-        from src.dataflows.source_manager import data_manager
-
-        return ok_response(data_manager.get_metrics(), code="DATAFLOW_METRICS_OK")
+        service = _get_dataflow_service(request)
+        return ok_response(service.get_metrics(), code="DATAFLOW_METRICS_OK")
     except Exception as exc:  # noqa: BLE001
         return ok_response(_degraded_dataflow_payload(str(exc)), code="DATAFLOW_METRICS_DEGRADED")
 
 
 @router.get("/dataflow/quality")
-async def dataflow_quality():
+async def dataflow_quality(request: Request):
     try:
-        from src.dataflows.source_manager import data_manager
-
-        metrics = data_manager.get_metrics()
+        service = _get_dataflow_service(request)
+        metrics = service.get_metrics()
         payload = {
             "summary": metrics.get("summary", {}),
             "quality": metrics.get("quality", {}),
@@ -471,11 +491,10 @@ async def dataflow_quality():
 
 
 @router.get("/dataflow/tuning")
-async def dataflow_tuning():
+async def dataflow_tuning(request: Request):
     try:
-        from src.dataflows.source_manager import data_manager
-
-        metrics = data_manager.get_metrics()
+        service = _get_dataflow_service(request)
+        metrics = service.get_metrics()
         payload = {
             "summary": metrics.get("summary", {}),
             "quality": metrics.get("quality", {}),
@@ -500,14 +519,13 @@ async def dataflow_tuning():
 
 
 @router.get("/dataflow/quality/feedback")
-async def dataflow_quality_feedback(limit: int = Query(default=50, ge=1, le=500)):
+async def dataflow_quality_feedback(request: Request, limit: int = Query(default=50, ge=1, le=500)):
     try:
-        from src.dataflows.source_manager import data_manager
-
+        service = _get_dataflow_service(request)
         return ok_response(
             {
-                "metrics": data_manager.get_quality_feedback_metrics(),
-                "events": data_manager.list_quality_events(limit=limit),
+                "metrics": service.get_quality_feedback_metrics(),
+                "events": service.list_quality_events(limit=limit),
                 "limit": limit,
             },
             code="DATAFLOW_QUALITY_FEEDBACK_OK",
@@ -524,11 +542,10 @@ async def dataflow_quality_feedback(limit: int = Query(default=50, ge=1, le=500)
 
 
 @router.post("/dataflow/quality/feedback")
-async def dataflow_quality_feedback_record(req: DataflowQualityFeedbackRequest):
+async def dataflow_quality_feedback_record(req: DataflowQualityFeedbackRequest, request: Request):
     try:
-        from src.dataflows.source_manager import data_manager
-
-        metrics = data_manager.record_quality_feedback(
+        service = _get_dataflow_service(request)
+        metrics = service.record_quality_feedback(
             label=req.label,
             event_id=req.event_id,
             source=req.source,
@@ -564,6 +581,60 @@ async def dataflow_quality_feedback_record(req: DataflowQualityFeedbackRequest):
         )
 
 
+@router.get("/dataflow/providers")
+async def dataflow_providers(request: Request):
+    """获取数据源目录与当前主源状态。"""
+    try:
+        service = _get_dataflow_service(request)
+        payload = service.list_provider_catalog()
+        return ok_response(payload, code="DATAFLOW_PROVIDERS_OK")
+    except Exception as exc:  # noqa: BLE001
+        degraded = _degraded_dataflow_payload(str(exc))
+        payload = {
+            "current_provider": "",
+            "current_provider_display_name": "",
+            "providers": [],
+            "summary": degraded.get("summary", {}),
+            "quality": degraded.get("quality", {}),
+            "tuning": degraded.get("tuning", {}),
+            "runtime_config": degraded.get("runtime_config", {}),
+            "error": str(exc),
+        }
+        return ok_response(payload, code="DATAFLOW_PROVIDERS_DEGRADED")
+
+
+@router.post("/dataflow/provider/use")
+async def dataflow_provider_use(req: DataflowProviderSwitchRequest, request: Request):
+    """切换当前主数据源，可选持久化到 system_settings。"""
+    try:
+        service = _get_dataflow_service(request)
+        store = _get_system_store_or_none(request)
+        payload = service.switch_provider(
+            provider_name=req.provider,
+            persist=bool(req.persist),
+            system_store=store,
+        )
+        return ok_response(payload, code="DATAFLOW_PROVIDER_SWITCHED")
+    except ValueError as exc:
+        return JSONResponse(
+            status_code=400,
+            content=error_response(
+                "INVALID_ORDER_REQUEST",
+                "数据源切换请求无效",
+                {"provider": req.provider, "error": str(exc)},
+            ),
+        )
+    except Exception as exc:  # noqa: BLE001
+        return JSONResponse(
+            status_code=500,
+            content=error_response(
+                "INTERNAL_ERROR",
+                "切换数据源失败",
+                {"provider": req.provider, "error": str(exc)},
+            ),
+        )
+
+
 @router.get("/dataflow/profiles")
 async def dataflow_profiles(request: Request):
     profiles = list_dataflow_profiles()
@@ -572,9 +643,8 @@ async def dataflow_profiles(request: Request):
     active_profile_meta = get_dataflow_profile_meta(active_profile) if active_profile else {}
 
     try:
-        from src.dataflows.source_manager import data_manager
-
-        metrics = data_manager.get_metrics()
+        service = _get_dataflow_service(request)
+        metrics = service.get_metrics()
         payload = {
             "active_profile": active_profile,
             "active_profile_version": str(active_profile_meta.get("version", "")),
@@ -627,10 +697,9 @@ async def dataflow_profile_apply(req: DataflowProfileApplyRequest, request: Requ
         tuning: dict[str, Any] = {}
         degraded_error = ""
         try:
-            from src.dataflows.source_manager import data_manager
-
-            runtime_config = data_manager.reload_runtime_config_from_env()
-            metrics = data_manager.get_metrics()
+            service = _get_dataflow_service(request)
+            runtime_config = service.reload_runtime_config_from_env()
+            metrics = service.get_metrics()
             summary = metrics.get("summary", {})
             quality = metrics.get("quality", {})
             tuning = metrics.get("tuning", {})
@@ -695,6 +764,7 @@ async def llm_providers(request: Request):
 
 @router.get("/llm/config")
 async def llm_runtime_config(request: Request):
+    """获取 LLM 运行时配置（契约主路径）。"""
     config = _load_llm_config(request)
     service = getattr(request.app.state, "trading_service", None)
     runtime_payload: dict[str, Any] = {}
@@ -714,6 +784,7 @@ async def llm_runtime_config(request: Request):
 
 @router.put("/llm/config")
 async def llm_runtime_config_update(req: LLMRuntimeConfigRequest, request: Request):
+    """更新 LLM 运行时配置（契约主路径）。"""
     try:
         current = _load_llm_config(request)
         payload = {
@@ -960,95 +1031,40 @@ async def error_codes():
 # System Config & Notification Test API (Phase 5 QA Rework)
 # ---------------------------------------------------------------------------
 
-def _get_system_config_path() -> str:
-    """动态获取系统配置文件路径 (与 LLMConfigProvider 逻辑一致)"""
-    if hasattr(sys, '_MEIPASS'):
-        base_dir = os.path.dirname(sys.executable)
-    else:
-        # src/routers/system.py -> src/routers -> src -> Root
-        base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-        if not os.path.exists(os.path.join(base_dir, 'pyproject.toml')):
-            base_dir = os.getcwd()
-    
-    config_dir = os.path.join(base_dir, 'config')
-    os.makedirs(config_dir, exist_ok=True)
-    return os.path.join(config_dir, "system_runtime.json")
-
-def _load_system_runtime_config():
-    config = {
-        "tushare_token": os.getenv("TUSHARE_TOKEN", ""),
-        "wechat_webhook": os.getenv("WECHAT_WEBHOOK_URL", ""),
-        "dingtalk_secret": os.getenv("DINGTALK_SECRET", ""),
-    }
-    path = _get_system_config_path()
-    if os.path.exists(path):
-        try:
-            with open(path, "r", encoding="utf-8") as f:
-                config.update(json.load(f))
-        except Exception:
-            pass
-    return config
-
-def _save_system_runtime_config(config: dict[str, Any]):
-    try:
-        path = _get_system_config_path()
-        # 加载现有配置，合并更新 (避免覆盖掉没传的字段)
-        current = {}
-        if os.path.exists(path):
-            with open(path, "r", encoding="utf-8") as f:
-                current = json.load(f)
-        
-        # 过滤掉掩码值 (••••)
-        updates = {k: v for k, v in config.items() if v and "•" not in str(v)}
-        current.update(updates)
-        
-        with open(path, "w", encoding="utf-8") as f:
-            json.dump(current, f, indent=4, ensure_ascii=False)
-            
-        # Sync to environment
-        if "wechat_webhook" in current:
-            os.environ["WECHAT_WEBHOOK_URL"] = current["wechat_webhook"]
-        if "tushare_token" in current:
-            os.environ["TUSHARE_TOKEN"] = current["tushare_token"]
-        if "dingtalk_secret" in current:
-            os.environ["DINGTALK_SECRET"] = current["dingtalk_secret"]
-    except Exception as e:
-        print(f"Failed to save system config: {e}")
-
-
 @router.get("/config")
 async def get_system_config(request: Request):
-    """Get general system configuration for SystemConfig page."""
-    runtime_config = _load_system_runtime_config()
-    config = {
+    """Get general system configuration for SystemConfig page via service layer."""
+    service = _get_system_config_service(request)
+    runtime_config = service.load_runtime_config()
+    payload = {
         "day_roll_time": os.getenv("DAY_ROLL_TIME", "23:00"),
         "autopilot_template": os.getenv("AUTOPILOT_TEMPLATE", ""),
         "channel": getattr(request.app.state, "channel", "simulation"),
-        **runtime_config
+        **runtime_config,
     }
-    return ok_response(config)
+    return ok_response(payload)
 
 
 @router.put("/config")
 async def update_system_config(request: Request, body: dict[str, Any]):
-    """Update general system configuration."""
-    _save_system_runtime_config(body)
-    return ok_response({"status": "updated", "config": body})
+    """Update general system configuration via service layer."""
+    service = _get_system_config_service(request)
+    merged = service.save_runtime_config(body)
+    return ok_response({"status": "updated", "config": merged})
 
 
 @router.post("/notification/test")
 async def test_notification():
     """Send a test notification to verify channel connectivity."""
     from src.routers.stream import publish_log
+
     publish_log("SYSTEM", "Test notification sent from SystemConfig page.", level="info")
     return ok_response({"status": "sent", "message": "Test notification dispatched."})
 
 
 @router.post("/notification/test/wechat")
-async def test_wechat_notification(req: NotificationTestRequest):
-    """
-    测试企业微信 Webhook 通知接口 (Phase 5 QA Rework)
-    """
+async def test_wechat_notification(req: NotificationTestRequest, request: Request):
+    """测试企业微信 Webhook 通知接口。"""
     if not req.webhook_url or not req.webhook_url.startswith("http"):
         return JSONResponse(
             status_code=400,
@@ -1060,23 +1076,17 @@ async def test_wechat_notification(req: NotificationTestRequest):
         )
 
     try:
-        channel = WeChatChannel(webhook_url=req.webhook_url)
-        # 发送一条测试消息
-        success = channel.send(
-            title="🔔 系统通知测试",
-            content=f"这是来自来财 (Attract-wealth) 系统配置页面的连通性测试消息。\n\n**测试时间**: {time.strftime('%Y-%m-%d %H:%M:%S')}\n**状态**: 运行中",
-            level="info",
-        )
+        service = _get_system_config_service(request)
+        success = service.send_wechat_test(req.webhook_url)
         if success:
             return ok_response({"status": "sent", "message": "Test message sent to WeChat."})
-        else:
-            return JSONResponse(
-                status_code=502,
-                content=error_response(
-                    "INTERNAL_ERROR",
-                    "企业微信发送测试消息失败，请检查 Webhook 密钥或网络连通性",
-                ),
-            )
+        return JSONResponse(
+            status_code=502,
+            content=error_response(
+                "INTERNAL_ERROR",
+                "企业微信发送测试消息失败，请检查 Webhook 密钥或网络连通性",
+            ),
+        )
     except Exception as exc:  # noqa: BLE001
         return JSONResponse(
             status_code=500,

@@ -67,3 +67,10 @@ def test_main_applies_profile_and_writes_report(monkeypatch):
     assert payload["profile"] == "ths_paper_default"
     assert payload["profile_version"]
     assert payload["applied_env"]["DATA_PROVIDER_RATE_LIMIT_PER_MINUTE"] == "120"
+
+
+def test_parse_args_defaults_probe_failure_every_is_9(monkeypatch):
+    module = _load_module()
+    monkeypatch.setattr(sys, "argv", ["apply_runtime_profile.py", "--profile", "ths_paper_default"])
+    args = module._parse_args()
+    assert args.probe_failure_every == 9

@@ -4,6 +4,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from src.core.errors import TradingServiceError
+from src.routers import strategy as strategy_router
 from src.routers.strategy import router
 
 
@@ -374,3 +375,138 @@ def test_strategy_router_promote_rejected_when_gate_failed():
     body = resp.json()
     assert body["ok"] is False
     assert body["code"] == "STRATEGY_VERSION_GATE_FAILED"
+
+
+def test_strategy_version_diff_endpoint_with_parent_baseline():
+    client = _build_client()
+    base_resp = client.post(
+        "/api/strategy/versions",
+        json={
+            "name": "diff_demo",
+            "content": '{"entry_signal":"ma_cross","risk_limit":0.2,"bias":"long"}',
+            "parameters": {"lookback": 3, "position_ratio": 0.5},
+            "metrics": {
+                "trade_count": 20,
+                "win_rate": 0.55,
+                "max_drawdown": 0.12,
+                "net_pnl": 1200,
+                "sharpe": 0.9,
+            },
+            "status": "candidate",
+        },
+    )
+    assert base_resp.status_code == 200
+    base_id = base_resp.json()["data"]["id"]
+
+    child_resp = client.post(
+        "/api/strategy/versions",
+        json={
+            "name": "diff_demo",
+            "parent_id": base_id,
+            "content": '{"entry_signal":"ma_cross","risk_limit":0.15,"bias":"long","rebalance":"weekly"}',
+            "parameters": {"lookback": 5, "position_ratio": 0.7},
+            "metrics": {
+                "trade_count": 35,
+                "win_rate": 0.62,
+                "max_drawdown": 0.1,
+                "net_pnl": 1900,
+                "sharpe": 1.2,
+            },
+            "status": "candidate",
+        },
+    )
+    assert child_resp.status_code == 200
+    child_id = child_resp.json()["data"]["id"]
+
+    bars = [
+        {"ts": "2026-01-01", "close": 10.0},
+        {"ts": "2026-01-02", "close": 10.4},
+        {"ts": "2026-01-03", "close": 10.7},
+    ]
+    base_backtest_resp = client.post("/api/strategy/backtest", json={"strategy_id": base_id, "bars": bars})
+    assert base_backtest_resp.status_code == 200
+    child_backtest_resp = client.post("/api/strategy/backtest", json={"strategy_id": child_id, "bars": bars})
+    assert child_backtest_resp.status_code == 200
+    base_report_id = base_backtest_resp.json()["data"]["archive"]["id"]
+    child_report_id = child_backtest_resp.json()["data"]["archive"]["id"]
+
+    diff_resp = client.get(f"/api/strategy/versions/{child_id}/diff")
+    assert diff_resp.status_code == 200
+    body = diff_resp.json()
+    assert body["ok"] is True
+    assert body["code"] == "STRATEGY_VERSION_DIFF_OK"
+    assert body["data"]["has_baseline"] is True
+    assert body["data"]["baseline_source"] == "parent"
+    assert body["data"]["baseline"]["id"] == base_id
+    assert body["data"]["metric_diff"]["trade_count"]["delta"] == 0.0
+    assert body["data"]["metric_diff"]["net_pnl"]["delta"] > 0
+    assert "lookback" in body["data"]["parameter_diff"]["changed"]
+    assert body["data"]["content_changed"] is True
+    assert body["data"]["content_diff"]["mode"] == "json_fields"
+    assert body["data"]["content_diff"]["changed"] is True
+    assert body["data"]["content_diff"]["summary"]["changed_fields"] >= 1
+    assert body["data"]["content_diff"]["summary"]["added_fields"] >= 1
+    assert body["data"]["backtest_compare"]["compare_ready"] is True
+    assert body["data"]["backtest_compare"]["current_report_id"] == child_report_id
+    assert body["data"]["backtest_compare"]["baseline_report_id"] == base_report_id
+    assert "/backtest?compareA=" in body["data"]["backtest_compare"]["compare_page_url"]
+
+
+def test_strategy_knowledge_endpoint_returns_normalized_items(monkeypatch):
+    class _FakeKnowledgeCore:
+        def search_patterns(self, _query: str, _top_k: int):
+            return [
+                {
+                    "id": "p-1",
+                    "name": "Breakout",
+                    "description": "Price breaks resistance with volume",
+                    "tags": '["pattern","volume"]',
+                    "relevance_score": 0.86,
+                    "vector": [0.75, 0.25],
+                }
+            ]
+
+        def search_lessons(self, _query: str, _top_k: int):
+            return []
+
+        def search_rules(self, _query: str, _top_k: int):
+            return []
+
+        def search_all(self, _query: str, _top_k: int):
+            return {"patterns": [], "lessons": [], "rules": []}
+
+    monkeypatch.setattr(strategy_router, "_load_knowledge_core", lambda: _FakeKnowledgeCore)
+    client = _build_client()
+    resp = client.get("/api/strategy/knowledge", params={"type": "patterns", "q": "breakout", "top_k": 5})
+    assert resp.status_code == 200
+
+    body = resp.json()
+    assert body["ok"] is True
+    assert body["code"] == "KNOWLEDGE_SEARCH_OK"
+    assert isinstance(body["data"], list)
+    assert len(body["data"]) == 1
+    item = body["data"][0]
+    assert item["id"] == "p-1"
+    assert item["type"] == "Pattern"
+    assert item["title"] == "Breakout"
+    assert item["relevance"] == 86.0
+    assert item["tags"] == ["pattern", "volume"]
+    assert isinstance(item["vector"], list)
+    assert len(item["vector"]) == 2
+    assert item["summary"]
+    assert item["fullContent"]
+
+
+def test_strategy_knowledge_endpoint_degrades_to_empty_when_core_missing(monkeypatch):
+    def _raise_import_error():
+        raise ImportError("knowledge core not available")
+
+    monkeypatch.setattr(strategy_router, "_load_knowledge_core", _raise_import_error)
+    client = _build_client()
+    resp = client.get("/api/strategy/knowledge", params={"type": "rules", "q": "risk", "top_k": 3})
+    assert resp.status_code == 200
+
+    body = resp.json()
+    assert body["ok"] is True
+    assert body["code"] == "KNOWLEDGE_CORE_UNAVAILABLE"
+    assert body["data"] == []

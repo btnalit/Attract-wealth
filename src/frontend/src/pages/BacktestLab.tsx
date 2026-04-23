@@ -1,8 +1,8 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Play, Settings, TrendingUp, BarChart, RotateCcw, Plus, Trash2, Loader2 } from 'lucide-react';
+import { useSearchParams } from 'react-router-dom';
 import { cn } from '../lib/utils';
-
-const API_BASE = import.meta.env.VITE_API_BASE_URL || '';
+import { apiUrl, strategyApi } from '../services/api';
 
 interface Metric {
   label: string;
@@ -10,6 +10,174 @@ interface Metric {
   subValue?: string;
   color: string;
 }
+
+interface StrategyOption {
+  id: string;
+  name: string;
+}
+
+interface BacktestReportSummary {
+  reportId: string;
+  strategyName: string;
+  createdAt: number;
+  metrics: Record<string, unknown>;
+}
+
+interface BacktestCompareRow {
+  label: string;
+  left: number;
+  right: number;
+  leftDisplay: string;
+  rightDisplay: string;
+  deltaDisplay: string;
+  deltaPositive: boolean;
+}
+
+const DEFAULT_STRATEGY_OPTIONS: StrategyOption[] = [
+  { id: 'Multi-Factor Mean Reversion', name: 'Multi-Factor Mean Reversion' },
+  { id: 'MACD Crossover V2', name: 'MACD Crossover V2' },
+  { id: 'Deep Learning RL-Alpha', name: 'Deep Learning RL-Alpha' },
+  { id: 'High Frequency Scalper', name: 'High Frequency Scalper' },
+];
+
+const parsePayloadData = <T,>(payload: unknown): T => {
+  if (payload && typeof payload === 'object' && 'data' in payload) {
+    return (payload as { data: T }).data;
+  }
+  return payload as T;
+};
+
+const buildSyntheticBars = (startDate: string, endDate: string) => {
+  const start = new Date(startDate);
+  const end = new Date(endDate);
+  const durationDays = Math.max(5, Math.floor((end.getTime() - start.getTime()) / (24 * 3600 * 1000)));
+  const points = Math.min(Math.max(durationDays, 30), 240);
+
+  const bars: Array<{ ts: string; close: number; signal: 'AUTO' }> = [];
+  let price = 100;
+  for (let i = 0; i < points; i += 1) {
+    const dt = new Date(start.getTime() + i * 24 * 3600 * 1000);
+    const drift = (Math.sin(i / 12) + Math.cos(i / 23)) * 0.8;
+    price = Math.max(5, price * (1 + drift / 100));
+    bars.push({
+      ts: dt.toISOString().slice(0, 10),
+      close: Number(price.toFixed(4)),
+      signal: 'AUTO',
+    });
+  }
+  return bars;
+};
+
+const buildEquityPath = (curve: any[]) => {
+  if (!Array.isArray(curve) || curve.length < 2) return '';
+  const equities = curve.map((p) => Number(p?.equity ?? 0)).filter((v) => Number.isFinite(v) && v > 0);
+  if (equities.length < 2) return '';
+
+  const min = Math.min(...equities);
+  const max = Math.max(...equities);
+  const span = Math.max(1e-6, max - min);
+  const n = equities.length;
+
+  return equities
+    .map((eq, idx) => {
+      const x = (idx / Math.max(1, n - 1)) * 100;
+      const y = 85 - ((eq - min) / span) * 70;
+      return `${idx === 0 ? 'M' : 'L'} ${x.toFixed(2)} ${y.toFixed(2)}`;
+    })
+    .join(' ');
+};
+
+const buildMetricsFromBacktest = (metrics: any, summary: any): Metric[] => {
+  const totalReturn = Number(metrics?.total_return ?? 0) * 100;
+  const annualized = totalReturn * 0.65;
+  const maxDrawdown = Number(metrics?.max_drawdown ?? 0) * 100;
+  const sharpe = Number(metrics?.sharpe ?? 0);
+  const winRate = Number(metrics?.win_rate ?? 0) * 100;
+  const tradeCount = Number(metrics?.trade_count ?? 0);
+  const turnover = Number(metrics?.turnover ?? 0);
+  const netPnl = Number(metrics?.net_pnl ?? 0);
+  const finalEquity = Number(summary?.final_equity ?? 0);
+
+  return [
+    { label: '总收益', value: `${totalReturn >= 0 ? '+' : ''}${totalReturn.toFixed(2)}%`, subValue: `¥${netPnl.toLocaleString('zh-CN', { maximumFractionDigits: 0 })}`, color: totalReturn >= 0 ? 'text-up-green' : 'text-down-red' },
+    { label: '年化收益', value: `${annualized.toFixed(2)}%`, subValue: '估算', color: 'text-white' },
+    { label: '最大回撤', value: `-${Math.abs(maxDrawdown).toFixed(2)}%`, subValue: '风险', color: 'text-up-red' },
+    { label: '夏普比率', value: sharpe.toFixed(2), subValue: '风险调整后', color: 'text-neon-cyan' },
+    { label: '胜率', value: `${winRate.toFixed(1)}%`, subValue: `${tradeCount} 笔交易`, color: 'text-info-gray' },
+    { label: '换手率', value: turnover.toFixed(2), subValue: `期末权益 ¥${finalEquity.toLocaleString('zh-CN', { maximumFractionDigits: 0 })}`, color: 'text-warn-gold' },
+  ];
+};
+
+const toNumber = (value: unknown, fallback = 0): number => {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
+};
+
+const asPercent = (value: unknown): number => {
+  const raw = toNumber(value, 0);
+  return raw <= 1 ? raw * 100 : raw;
+};
+
+const parseReportSummary = (report: any): BacktestReportSummary => {
+  const payload = (report?.report_payload?.backtest ?? report?.backtest ?? {}) as Record<string, unknown>;
+  const metrics = (payload.metrics ?? report?.metrics ?? {}) as Record<string, unknown>;
+  const strategyPayload = (payload.strategy ?? {}) as Record<string, unknown>;
+  return {
+    reportId: String(report?.id ?? ''),
+    strategyName: String(report?.strategy_name ?? strategyPayload.name ?? 'Unknown'),
+    createdAt: toNumber(report?.created_at, 0),
+    metrics,
+  };
+};
+
+const buildCompareRows = (left: BacktestReportSummary, right: BacktestReportSummary): BacktestCompareRow[] => {
+  const rows = [
+    {
+      label: 'Net PnL',
+      left: toNumber(left.metrics.net_pnl, 0),
+      right: toNumber(right.metrics.net_pnl, 0),
+      leftDisplay: toNumber(left.metrics.net_pnl, 0).toFixed(2),
+      rightDisplay: toNumber(right.metrics.net_pnl, 0).toFixed(2),
+    },
+    {
+      label: 'Win Rate',
+      left: asPercent(left.metrics.win_rate),
+      right: asPercent(right.metrics.win_rate),
+      leftDisplay: `${asPercent(left.metrics.win_rate).toFixed(2)}%`,
+      rightDisplay: `${asPercent(right.metrics.win_rate).toFixed(2)}%`,
+    },
+    {
+      label: 'Sharpe',
+      left: toNumber(left.metrics.sharpe ?? left.metrics.sharpe_ratio, 0),
+      right: toNumber(right.metrics.sharpe ?? right.metrics.sharpe_ratio, 0),
+      leftDisplay: toNumber(left.metrics.sharpe ?? left.metrics.sharpe_ratio, 0).toFixed(3),
+      rightDisplay: toNumber(right.metrics.sharpe ?? right.metrics.sharpe_ratio, 0).toFixed(3),
+    },
+    {
+      label: 'Max Drawdown',
+      left: asPercent(left.metrics.max_drawdown),
+      right: asPercent(right.metrics.max_drawdown),
+      leftDisplay: `${asPercent(left.metrics.max_drawdown).toFixed(2)}%`,
+      rightDisplay: `${asPercent(right.metrics.max_drawdown).toFixed(2)}%`,
+    },
+    {
+      label: 'Trade Count',
+      left: toNumber(left.metrics.trade_count, 0),
+      right: toNumber(right.metrics.trade_count, 0),
+      leftDisplay: `${Math.round(toNumber(left.metrics.trade_count, 0))}`,
+      rightDisplay: `${Math.round(toNumber(right.metrics.trade_count, 0))}`,
+    },
+  ];
+
+  return rows.map((row) => {
+    const delta = row.left - row.right;
+    return {
+      ...row,
+      deltaDisplay: `${delta >= 0 ? '+' : ''}${delta.toFixed(3)}`,
+      deltaPositive: delta >= 0,
+    };
+  });
+};
 
 const mockMetrics: Metric[] = [
   { label: '总收益', value: '+42.84%', subValue: '¥428,400', color: 'text-up-green' },
@@ -21,75 +189,117 @@ const mockMetrics: Metric[] = [
 ];
 
 export const BacktestLab: React.FC = () => {
+  const [searchParams] = useSearchParams();
   const [isRunning, setIsRunning] = useState(false);
   const [progress, setProgress] = useState(0);
   const [showMonteCarlo, setShowMonteCarlo] = useState(false);
   const [params, setParams] = useState([{ key: 'MA_PERIOD', value: '20' }, { key: 'RISK_PCT', value: '0.02' }]);
-  const [strategyId, setStrategyId] = useState('Multi-Factor Mean Reversion');
+  const [strategyOptions, setStrategyOptions] = useState<StrategyOption[]>(DEFAULT_STRATEGY_OPTIONS);
+  const [strategyId, setStrategyId] = useState(DEFAULT_STRATEGY_OPTIONS[0].id);
   const [startDate, setStartDate] = useState('2023-01-01');
   const [endDate, setEndDate] = useState('2024-04-01');
   const [initialCapital, setInitialCapital] = useState('1000000');
   const [metrics, setMetrics] = useState<Metric[]>(mockMetrics);
   const [equityCurve, setEquityCurve] = useState<string>("M 0 80 L 10 75 L 20 78 L 30 70 L 40 74 L 50 62 L 60 65 L 70 50 L 80 55 L 90 35 L 100 25");
-  
-  const pollIntervalRef = useRef<number | null>(null);
+  const [compareLoading, setCompareLoading] = useState(false);
+  const [compareError, setCompareError] = useState('');
+  const [compareLeft, setCompareLeft] = useState<BacktestReportSummary | null>(null);
+  const [compareRight, setCompareRight] = useState<BacktestReportSummary | null>(null);
+  const [compareRows, setCompareRows] = useState<BacktestCompareRow[]>([]);
+
+  useEffect(() => {
+    const loadStrategyOptions = async () => {
+      try {
+        const payload = await strategyApi.getVersions<{ items?: Array<Record<string, unknown>> } | Array<Record<string, unknown>>>(100);
+        const data = parsePayloadData<{ items?: Array<Record<string, unknown>> } | Array<Record<string, unknown>>>(payload);
+        const rows = Array.isArray(data)
+          ? data
+          : (data && typeof data === 'object' && Array.isArray((data as { items?: Array<Record<string, unknown>> }).items))
+            ? (data as { items: Array<Record<string, unknown>> }).items
+            : [];
+        if (!rows.length) return;
+        const options = rows.map((item: any) => ({
+          id: String(item?.id ?? ''),
+          name: String(item?.name ?? item?.id ?? 'Unknown Strategy'),
+        })).filter((item: StrategyOption) => item.id);
+        if (!options.length) return;
+        setStrategyOptions(options);
+        setStrategyId((prev) => (options.some((o) => o.id === prev) ? prev : options[0].id));
+      } catch (err) {
+        console.warn('[BacktestLab] load strategy options failed:', err);
+      }
+    };
+    void loadStrategyOptions();
+  }, []);
+
+  useEffect(() => {
+    const compareA = String(searchParams.get('compareA') ?? '').trim();
+    const compareB = String(searchParams.get('compareB') ?? '').trim();
+    if (!compareA || !compareB) {
+      setCompareLeft(null);
+      setCompareRight(null);
+      setCompareRows([]);
+      setCompareError('');
+      setCompareLoading(false);
+      return;
+    }
+
+    const loadCompareReports = async () => {
+      setCompareLoading(true);
+      setCompareError('');
+      try {
+        const [leftPayload, rightPayload] = await Promise.all([
+          strategyApi.getBacktestById<unknown>(compareA),
+          strategyApi.getBacktestById<unknown>(compareB),
+        ]);
+        const left = parseReportSummary(parsePayloadData<Record<string, unknown>>(leftPayload));
+        const right = parseReportSummary(parsePayloadData<Record<string, unknown>>(rightPayload));
+        setCompareLeft(left);
+        setCompareRight(right);
+        setCompareRows(buildCompareRows(left, right));
+      } catch (error) {
+        setCompareLeft(null);
+        setCompareRight(null);
+        setCompareRows([]);
+        setCompareError(String(error));
+      } finally {
+        setCompareLoading(false);
+      }
+    };
+    void loadCompareReports();
+  }, [searchParams]);
 
   const runBacktest = async () => {
     setIsRunning(true);
-    setProgress(0);
+    setProgress(10);
     
     try {
       const payload = {
         strategy_id: strategyId,
-        start_date: startDate,
-        end_date: endDate,
-        initial_capital: parseFloat(initialCapital),
-        params: Object.fromEntries(params.map(p => [p.key, p.value]))
+        bars: buildSyntheticBars(startDate, endDate),
+        start_cash: Number.parseFloat(initialCapital) || 1_000_000,
+        parameters_override: Object.fromEntries(params.filter((p) => p.key.trim()).map((p) => [p.key.trim(), p.value]))
       };
 
-      const response = await fetch(`${API_BASE}/api/strategy/backtest`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-
-      if (response.ok) {
-        const { job_id } = await response.json();
-        startPolling(job_id);
-      } else {
+      const body = await strategyApi.runBacktest<Record<string, unknown>>(payload);
+      const parsed = parsePayloadData<Record<string, unknown>>(body) || {};
+      const backtest = (parsed.backtest as Record<string, unknown> | undefined) ?? null;
+      if (!backtest) {
         throw new Error('Backtest API not available');
       }
+      const backtestMetrics = (backtest.metrics as Record<string, unknown>) ?? {};
+      const backtestSummary = (backtest.summary as Record<string, unknown>) ?? {};
+      const equityCurveTail = Array.isArray(backtest.equity_curve_tail) ? backtest.equity_curve_tail : [];
+
+      setProgress(100);
+      setMetrics(buildMetricsFromBacktest(backtestMetrics, backtestSummary));
+      const curvePath = buildEquityPath(equityCurveTail);
+      if (curvePath) setEquityCurve(curvePath);
+      setIsRunning(false);
     } catch (error) {
       console.warn('Backtest API failed, falling back to simulation:', error);
       simulateBacktest();
     }
-  };
-
-  const startPolling = (jobId: string) => {
-    if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
-    
-    pollIntervalRef.current = window.setInterval(async () => {
-      try {
-        const response = await fetch(`${API_BASE}/api/strategy/backtest/${jobId}/status`);
-        if (response.ok) {
-          const { status, progress: apiProgress, results } = await response.json();
-          setProgress(apiProgress);
-          
-          if (status === 'COMPLETED' && results) {
-            clearInterval(pollIntervalRef.current!);
-            setIsRunning(false);
-            setMetrics(results.metrics || mockMetrics);
-            if (results.equity_curve) setEquityCurve(results.equity_curve);
-          } else if (status === 'FAILED') {
-            clearInterval(pollIntervalRef.current!);
-            setIsRunning(false);
-            alert('Backtest failed on server');
-          }
-        }
-      } catch (e) {
-        console.error('Polling error:', e);
-      }
-    }, 1000);
   };
 
   const simulateBacktest = () => {
@@ -112,12 +322,6 @@ export const BacktestLab: React.FC = () => {
   const addParam = () => setParams([...params, { key: '', value: '' }]);
   const removeParam = (index: number) => setParams(params.filter((_, i) => i !== index));
 
-  useEffect(() => {
-    return () => {
-      if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
-    };
-  }, []);
-
   return (
     <div className="flex h-full flex-col overflow-hidden bg-bg-primary">
       {/* Header Section */}
@@ -128,6 +332,76 @@ export const BacktestLab: React.FC = () => {
         </h1>
         <p className="text-info-gray/60 text-xs mt-1 uppercase tracking-widest italic">量化策略的历史回测验证</p>
       </div>
+
+      {(compareLoading || compareError || (compareLeft && compareRight)) && (
+        <div className="mx-6 mt-4 bg-bg-card/40 border border-border rounded-lg p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <h2 className="text-[11px] font-bold tracking-[0.18em] uppercase text-neon-magenta">回测报告对比</h2>
+            {(compareLeft && compareRight) && (
+              <button
+                onClick={() => { window.location.href = '/backtest'; }}
+                className="text-[10px] px-3 py-1 border border-border rounded hover:border-neon-cyan transition-colors"
+              >
+                退出对比
+              </button>
+            )}
+          </div>
+          {compareLoading && (
+            <div className="text-[11px] text-info-gray/70 flex items-center gap-2">
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              正在加载回测报告...
+            </div>
+          )}
+          {compareError && (
+            <div className="text-[11px] text-down-red border border-down-red/30 rounded p-2">
+              {compareError}
+            </div>
+          )}
+          {(compareLeft && compareRight && compareRows.length > 0) && (
+            <div className="space-y-3">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-[11px]">
+                <div className="border border-border/40 rounded p-2">
+                  <div className="text-info-gray/60 uppercase text-[9px]">Current</div>
+                  <div className="text-white font-semibold">{compareLeft.strategyName}</div>
+                  <div className="text-info-gray/60">{new Date(compareLeft.createdAt * 1000).toLocaleString()}</div>
+                </div>
+                <div className="border border-border/40 rounded p-2">
+                  <div className="text-info-gray/60 uppercase text-[9px]">Baseline</div>
+                  <div className="text-white font-semibold">{compareRight.strategyName}</div>
+                  <div className="text-info-gray/60">{new Date(compareRight.createdAt * 1000).toLocaleString()}</div>
+                </div>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                {compareRows.map((row) => (
+                  <div key={row.label} className="border border-border/30 rounded p-2 text-[10px]">
+                    <div className="text-info-gray/70 uppercase">{row.label}</div>
+                    <div className="flex items-center justify-between mt-1">
+                      <span className="text-white">{row.leftDisplay}</span>
+                      <span className="text-info-gray/60">vs</span>
+                      <span className="text-white">{row.rightDisplay}</span>
+                      <span className={row.deltaPositive ? 'text-up-green' : 'text-down-red'}>{row.deltaDisplay}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => window.open(apiUrl(`/api/strategy/backtests/${compareLeft.reportId}`), '_blank', 'noopener,noreferrer')}
+                  className="text-[10px] px-3 py-1 border border-neon-cyan/40 text-neon-cyan rounded hover:bg-neon-cyan/10 transition-colors"
+                >
+                  打开当前报告
+                </button>
+                <button
+                  onClick={() => window.open(apiUrl(`/api/strategy/backtests/${compareRight.reportId}`), '_blank', 'noopener,noreferrer')}
+                  className="text-[10px] px-3 py-1 border border-neon-magenta/40 text-neon-magenta rounded hover:bg-neon-magenta/10 transition-colors"
+                >
+                  打开基线报告
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="flex-1 flex overflow-hidden">
         {/* Left Panel: Parameters */}
@@ -146,10 +420,9 @@ export const BacktestLab: React.FC = () => {
                 onChange={(e) => setStrategyId(e.target.value)}
                 className="w-full bg-bg-primary border border-border rounded px-3 py-2 text-xs text-white outline-none focus:border-neon-cyan transition-colors"
               >
-                <option>Multi-Factor Mean Reversion</option>
-                <option>MACD Crossover V2</option>
-                <option>Deep Learning RL-Alpha</option>
-                <option>High Frequency Scalper</option>
+                {strategyOptions.map((option) => (
+                  <option key={option.id} value={option.id}>{option.name}</option>
+                ))}
               </select>
             </div>
 

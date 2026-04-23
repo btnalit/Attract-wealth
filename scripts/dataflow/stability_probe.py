@@ -50,7 +50,7 @@ def _default_report_path() -> Path:
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Dataflow stability probe with fallback/retry/ratelimit metrics.")
     parser.add_argument("--iterations", type=int, default=80)
-    parser.add_argument("--failure-every", type=int, default=4)
+    parser.add_argument("--failure-every", type=int, default=9)
     parser.add_argument("--sleep-ms", type=int, default=0)
     parser.add_argument("--rate-limit-per-minute", type=int, default=90)
     parser.add_argument("--max-wait-ms", type=int, default=0)

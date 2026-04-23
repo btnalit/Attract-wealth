@@ -130,3 +130,13 @@ def test_main_dry_run_writes_sealoff_report(monkeypatch):
     assert report["profile"]["with_budget_recovery_probe"] is True
     assert report["paths"]["matrix_report"] == str(matrix_path)
     assert report["paths"]["oneclick_report"] == str(oneclick_path)
+    assert report["release_decision"]["policy"] == "single_basis_v1"
+    assert report["release_decision"]["decision"] == "UNKNOWN"
+    assert report["gate_summary"]["release_decision"]["reason_code"] == "DRY_RUN"
+
+
+def test_profiles_with_stability_probe_use_failure_every_9():
+    module = _load_module()
+    for profile in module.PROFILES.values():
+        if profile.with_stability_probe:
+            assert profile.probe_failure_every == 9

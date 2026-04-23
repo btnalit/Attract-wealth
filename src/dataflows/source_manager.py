@@ -139,8 +139,13 @@ class DataSourceManager:
             "cache_requests": 0,
             "cache_hits": 0,
             "cache_misses": 0,
+            "cache_decode_errors": 0,
+            "cache_last_error_code": "",
+            "cache_last_error": "",
             "last_success_ts": 0.0,
             "last_failure_ts": 0.0,
+            "last_failure_code": "",
+            "last_failure_message": "",
             "kline_last_age_days": None,
             "methods": {
                 "get_kline": {
@@ -244,6 +249,23 @@ class DataSourceManager:
                     }
                 )
             return result
+
+    def get_current_provider_name(self) -> str:
+        """Return current active provider name, empty string when unavailable."""
+        with self._lock:
+            if self._current_provider_name and self._enabled.get(self._current_provider_name, False):
+                return self._current_provider_name
+            ordered = self._ordered_provider_names()
+            return ordered[0] if ordered else ""
+
+    def get_provider_instance(self, name: str | None = None) -> BaseDataSource | None:
+        """Return provider instance by name or current active provider."""
+        target = str(name or "").strip().lower()
+        with self._lock:
+            provider_name = target or self.get_current_provider_name()
+            if not provider_name:
+                return None
+            return self._providers.get(provider_name)
 
     # -------------------------
     # Public query methods
@@ -382,8 +404,13 @@ class DataSourceManager:
                 "cache_requests": 0,
                 "cache_hits": 0,
                 "cache_misses": 0,
+                "cache_decode_errors": 0,
+                "cache_last_error_code": "",
+                "cache_last_error": "",
                 "last_success_ts": 0.0,
                 "last_failure_ts": 0.0,
+                "last_failure_code": "",
+                "last_failure_message": "",
                 "kline_last_age_days": None,
                 "methods": {
                     key: {
@@ -484,6 +511,7 @@ class DataSourceManager:
                 "quality_feedback_precision": quality_feedback.get("precision", 0.0),
                 "quality_false_positive_rate": quality_feedback.get("false_positive_rate", 0.0),
                 "quality_miss_rate": quality_feedback.get("miss_rate", 0.0),
+                "last_failure_code": str(self._metrics.get("last_failure_code", "")),
             }
 
             return {
@@ -508,12 +536,17 @@ class DataSourceManager:
                 "rate_limited_rate": round(rate_limited_rate, 4),
                 "throttle_sleep_ms_total": round(throttle_sleep_ms_total, 3),
                 "backoff_sleep_ms_total": round(backoff_sleep_ms_total, 3),
+                "last_failure_code": str(self._metrics.get("last_failure_code", "")),
+                "last_failure_message": str(self._metrics.get("last_failure_message", "")),
                 "methods": self._metrics["methods"],
                 "local_cache": {
                     "requests": local_cache_requests,
                     "hits": local_cache_hits,
                     "misses": int(self._metrics["cache_misses"]),
                     "hit_rate": round(local_cache_hit_rate, 4),
+                    "decode_errors": int(self._metrics["cache_decode_errors"]),
+                    "last_error_code": str(self._metrics.get("cache_last_error_code", "")),
+                    "last_error": str(self._metrics.get("cache_last_error", "")),
                 },
                 "summary": summary,
                 "quality": quality,
@@ -547,6 +580,8 @@ class DataSourceManager:
                 self._metrics["failure_total"] += 1
                 self._metrics["methods"][method]["failure"] += 1
                 self._metrics["last_failure_ts"] = time.time()
+                self._metrics["last_failure_code"] = "NO_PROVIDER_AVAILABLE"
+                self._metrics["last_failure_message"] = f"{method}:no_enabled_provider"
             return default_factory()
 
         for index, provider_name in enumerate(candidates):
@@ -563,7 +598,11 @@ class DataSourceManager:
                 bucket["rate_limited"] += 1
                 bucket["last_failure_ts"] = now
                 bucket["last_rate_limit_reason"] = limit_reason
+                bucket["last_error_code"] = "RATE_LIMITED"
                 bucket["last_error"] = f"rate_limited:{limit_reason}"
+                with self._lock:
+                    self._metrics["last_failure_code"] = "RATE_LIMITED"
+                    self._metrics["last_failure_message"] = f"{provider_name}:{method}:{limit_reason}"
                 continue
 
             if throttle_wait_seconds > 0:
@@ -590,6 +629,7 @@ class DataSourceManager:
                             self._metrics["backoff_sleep_ms_total"] += backoff_seconds * 1000
                         bucket["retries"] += 1
                         bucket["backoff_sleep_ms"] += backoff_seconds * 1000
+                        bucket["last_error_code"] = "RETRYING"
                         bucket["last_error"] = f"retrying:{exc}"
                         time.sleep(backoff_seconds)
                         attempt += 1
@@ -597,7 +637,11 @@ class DataSourceManager:
 
                     bucket["failure"] += 1
                     bucket["last_failure_ts"] = time.time()
+                    bucket["last_error_code"] = "PROVIDER_EXCEPTION"
                     bucket["last_error"] = str(exc)
+                    with self._lock:
+                        self._metrics["last_failure_code"] = "PROVIDER_EXCEPTION"
+                        self._metrics["last_failure_message"] = f"{provider_name}:{method}:{exc}"
                     logger.warning(
                         "data source call failed: provider=%s method=%s retries=%s err=%s",
                         provider_name,
@@ -613,15 +657,22 @@ class DataSourceManager:
                 if not validator(value):
                     bucket["failure"] += 1
                     bucket["last_failure_ts"] = time.time()
+                    bucket["last_error_code"] = "INVALID_PAYLOAD"
                     bucket["last_error"] = f"{method} returned invalid payload"
+                    with self._lock:
+                        self._metrics["last_failure_code"] = "INVALID_PAYLOAD"
+                        self._metrics["last_failure_message"] = f"{provider_name}:{method}:invalid_payload"
                     break
 
                 if empty(value):
                     bucket["empty"] += 1
+                    bucket["last_error_code"] = "EMPTY_PAYLOAD"
+                    bucket["last_error"] = f"{method} returned empty payload"
                     break
 
                 bucket["success"] += 1
                 bucket["last_success_ts"] = time.time()
+                bucket["last_error_code"] = ""
                 bucket["last_error"] = ""
                 if attempt > 0:
                     bucket["retry_success"] += 1
@@ -647,6 +698,8 @@ class DataSourceManager:
             self._metrics["empty_total"] += 1
             self._metrics["methods"][method]["empty"] += 1
             self._metrics["last_failure_ts"] = time.time()
+            self._metrics["last_failure_code"] = "ALL_PROVIDERS_FAILED"
+            self._metrics["last_failure_message"] = f"{method}:all_providers_failed"
         return default_factory()
 
     # -------------------------
@@ -677,9 +730,11 @@ class DataSourceManager:
             records = payload.get("records", [])
             columns = payload.get("columns", [])
             if not isinstance(records, list) or not isinstance(columns, list):
+                self._mark_cache_decode_error("INVALID_CACHE_PAYLOAD", f"{key}:invalid_records_or_columns")
                 return None
             return pd.DataFrame.from_records(records, columns=columns)
-        except Exception:  # noqa: BLE001
+        except Exception as exc:  # noqa: BLE001
+            self._mark_cache_decode_error("CACHE_DESERIALIZE_EXCEPTION", f"{key}:{exc}")
             return None
 
     def _cache_set_dataframe(self, key: str, df: pd.DataFrame, ttl: int) -> None:
@@ -831,6 +886,7 @@ class DataSourceManager:
                 "retries": 0,
                 "retry_success": 0,
                 "rate_limited": 0,
+                "last_error_code": "",
                 "last_error": "",
                 "last_success_ts": 0.0,
                 "last_failure_ts": 0.0,
@@ -842,6 +898,12 @@ class DataSourceManager:
                 "priority": self._priorities.get(provider_name, 100),
             }
         return providers[provider_name]
+
+    def _mark_cache_decode_error(self, code: str, message: str) -> None:
+        with self._lock:
+            self._metrics["cache_decode_errors"] = int(self._metrics.get("cache_decode_errors", 0)) + 1
+            self._metrics["cache_last_error_code"] = str(code or "CACHE_DECODE_ERROR")
+            self._metrics["cache_last_error"] = str(message or "")[:300]
 
     def _build_quality_snapshot(
         self,
@@ -1267,6 +1329,85 @@ class AkShareDataSourceAdapter(BaseDataSource):
         # Reserved for future implementation.
         return []
 
+    def get_realtime_quote(self, ticker: str) -> dict[str, Any]:
+        quote = self._provider.get_realtime_quote(ticker)
+        return quote if isinstance(quote, dict) else {}
+
+    def get_historical_kline(self, ticker: str, limit: int = 100) -> pd.DataFrame:
+        if not PANDAS_AVAILABLE:
+            return pd.DataFrame()
+        df = self._provider.get_historical_kline(ticker, limit=limit)
+        if isinstance(df, pd.DataFrame):
+            return df
+        return pd.DataFrame()
+
+    def get_metrics(self) -> dict[str, Any]:
+        if hasattr(self._provider, "get_metrics"):
+            payload = self._provider.get_metrics()
+            if isinstance(payload, dict):
+                return payload
+        return {}
+
+
+class BaostockDataSourceAdapter(BaseDataSource):
+    """Adapter to plug existing BaostockProvider into DataSourceManager."""
+
+    def __init__(self):
+        from src.dataflows.providers.baostock_provider import BaostockProvider
+
+        self._provider = BaostockProvider()
+
+    def get_kline(self, ticker: str, start_date: str, end_date: str, timeframe: str = "D") -> pd.DataFrame:
+        if not PANDAS_AVAILABLE:
+            return pd.DataFrame()
+
+        limit = 400
+        parsed_start = _parse_date(start_date)
+        parsed_end = _parse_date(end_date)
+        if parsed_start and parsed_end and parsed_end >= parsed_start:
+            days = max(60, (parsed_end - parsed_start).days + 10)
+            limit = min(days, 2000)
+
+        df = self._provider.get_historical_kline(ticker, limit=limit)
+        if not isinstance(df, pd.DataFrame) or df.empty:
+            return pd.DataFrame()
+
+        if "date" in df.columns:
+            date_series = pd.to_datetime(df["date"], errors="coerce")
+            if parsed_start:
+                df = df[date_series >= pd.Timestamp(parsed_start)]
+            if parsed_end:
+                df = df[date_series <= pd.Timestamp(parsed_end)]
+
+        return df.reset_index(drop=True)
+
+    def get_fundamentals(self, ticker: str) -> dict:
+        # Reserved for future implementation.
+        return {}
+
+    def get_news(self, ticker: str, limit: int = 10) -> list[dict]:
+        # Reserved for future implementation.
+        return []
+
+    def get_realtime_quote(self, ticker: str) -> dict[str, Any]:
+        quote = self._provider.get_realtime_quote(ticker)
+        return quote if isinstance(quote, dict) else {}
+
+    def get_historical_kline(self, ticker: str, limit: int = 100) -> pd.DataFrame:
+        if not PANDAS_AVAILABLE:
+            return pd.DataFrame()
+        df = self._provider.get_historical_kline(ticker, limit=limit)
+        if isinstance(df, pd.DataFrame):
+            return df
+        return pd.DataFrame()
+
+    def get_metrics(self) -> dict[str, Any]:
+        if hasattr(self._provider, "get_metrics"):
+            payload = self._provider.get_metrics()
+            if isinstance(payload, dict):
+                return payload
+        return {}
+
 
 def _env_float(name: str, default: float) -> float:
     raw = os.getenv(name, "")
@@ -1315,14 +1456,25 @@ def _is_env_true(name: str, *, default: bool = False) -> bool:
 def _bootstrap_default_sources(manager: DataSourceManager) -> None:
     if not _is_env_true("DATA_SOURCE_BOOTSTRAP_AKSHARE", default=True):
         logger.info("akshare data source bootstrap disabled by env")
+    else:
+        try:
+            manager.register("akshare", AkShareDataSourceAdapter(), priority=10, is_primary=True, enabled=True)
+        except Exception as exc:  # noqa: BLE001
+            if "pandas" in str(exc).lower():
+                logger.info("akshare data source bootstrap skipped: %s", exc)
+            else:
+                logger.warning("akshare data source bootstrap skipped: %s", exc)
+
+    if not _is_env_true("DATA_SOURCE_BOOTSTRAP_BAOSTOCK", default=True):
+        logger.info("baostock data source bootstrap disabled by env")
         return
     try:
-        manager.register("akshare", AkShareDataSourceAdapter(), priority=10, is_primary=True, enabled=True)
+        manager.register("baostock", BaostockDataSourceAdapter(), priority=20, is_primary=False, enabled=True)
     except Exception as exc:  # noqa: BLE001
         if "pandas" in str(exc).lower():
-            logger.info("akshare data source bootstrap skipped: %s", exc)
+            logger.info("baostock data source bootstrap skipped: %s", exc)
             return
-        logger.warning("akshare data source bootstrap skipped: %s", exc)
+        logger.warning("baostock data source bootstrap skipped: %s", exc)
 
 
 data_manager = DataSourceManager(cache=cache_manager)

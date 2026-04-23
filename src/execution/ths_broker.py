@@ -7,13 +7,13 @@ It assumes `xiadan.exe` is already logged in and accessible in current Windows s
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import os
 import time
 from pathlib import Path
 from typing import Any
 
-import pywinauto
 import win32gui
 from pywinauto import Desktop
 
@@ -62,6 +62,17 @@ class THSBroker(BaseBroker):
         self.window_title: str = ""
         self._local_order_seq = 0
         self._local_orders: dict[str, OrderResult] = {}
+        self.submit_max_attempts = max(1, _safe_int(os.getenv("THS_AUTO_SUBMIT_MAX_ATTEMPTS"), 2))
+        self.submit_retry_interval_s = max(0.0, _safe_float(os.getenv("THS_AUTO_SUBMIT_RETRY_INTERVAL_S"), 0.35))
+        self.submit_retry_backoff = max(1.0, _safe_float(os.getenv("THS_AUTO_SUBMIT_RETRY_BACKOFF"), 1.6))
+        self.rebind_hwnd_on_submit = _is_true(os.getenv("THS_AUTO_REBIND_HWND_ON_SUBMIT"), default=True)
+        self.strict_hwnd_health = _is_true(os.getenv("THS_AUTO_STRICT_HWND_HEALTH"), default=False)
+        transient_tokens = os.getenv("THS_AUTO_SUBMIT_TRANSIENT_TOKENS", "").strip()
+        self.submit_transient_tokens = tuple(
+            token.strip().lower()
+            for token in (transient_tokens.split(",") if transient_tokens else _DEFAULT_TRANSIENT_SUBMIT_TOKENS)
+            if token.strip()
+        )
 
     @property
     def is_connected(self) -> bool:
@@ -70,10 +81,23 @@ class THSBroker(BaseBroker):
     def check_health(self) -> dict:
         """检查同花顺下单窗口存活状态 (HWND 校验)"""
         is_alive = win32gui.IsWindow(self.hwnd) if self.hwnd else False
+        is_visible = bool(is_alive and win32gui.IsWindowVisible(self.hwnd))
+        foreground_hwnd = 0
+        is_foreground = False
+        if is_alive:
+            try:
+                foreground_hwnd = int(win32gui.GetForegroundWindow() or 0)
+                is_foreground = bool(foreground_hwnd and foreground_hwnd == int(self.hwnd))
+            except Exception:  # noqa: BLE001
+                foreground_hwnd = 0
+                is_foreground = False
         return {
             "hwnd": self.hwnd,
             "title": self.window_title,
             "status": "active" if is_alive else "dead",
+            "visible": is_visible,
+            "foreground": is_foreground,
+            "foreground_hwnd": foreground_hwnd,
             "is_connected": self.is_connected and is_alive,
         }
 
@@ -89,17 +113,7 @@ class THSBroker(BaseBroker):
         )
 
         # 查找同花顺下单窗口 (HWND 绑定)
-        try:
-            apps = pywinauto.Desktop(backend="win32").windows()
-            for app in apps:
-                title = app.window_text()
-                if any(k in title for k in ("股票", "交易")) or "xiadan" in title.lower():
-                    self.hwnd = int(app.handle)
-                    self.window_title = title
-                    logger.info("[%s] HWND 绑定成功: hwnd=%s, title=%s", self.channel_name, self.hwnd, title)
-                    break
-        except Exception as exc:  # noqa: BLE001
-            logger.warning("[%s] HWND 自动探测失败: %s", self.channel_name, exc)
+        self._rebind_hwnd(log_prefix="connect")
 
         self._connect_meta = meta
         self._client = client
@@ -166,7 +180,7 @@ class THSBroker(BaseBroker):
             return False
 
         local = self._local_orders.get(order_id)
-        broker_order_id = extract_broker_order_id(local.message if local else "") or order_id
+        broker_order_id = _extract_local_broker_order_id(local.message if local else "") or order_id
         try:
             raw = await asyncio.to_thread(cancel_fn, broker_order_id)
         except Exception as exc:  # noqa: BLE001
@@ -407,20 +421,12 @@ class THSBroker(BaseBroker):
             self._local_orders[local_id] = result
             return result
 
-        try:
-            raw = await asyncio.to_thread(trade_fn, ticker, price, quantity)
-            broker_order_id = extract_broker_order_id(raw)
-            result = OrderResult(
-                order_id=local_id,
-                status=OrderStatus.SUBMITTED,
-                ticker=ticker,
-                side=side,
-                price=price,
-                quantity=quantity,
-                channel=self.channel_name,
-                message=f"broker_order_id={broker_order_id};source=easytrader;raw={_safe_compact(raw)}",
-            )
-        except Exception as exc:  # noqa: BLE001
+        health_before = self.check_health()
+        rebound = False
+        if self.rebind_hwnd_on_submit and health_before.get("status") != "active":
+            rebound = self._rebind_hwnd(log_prefix="submit_precheck")
+        health_after = self.check_health()
+        if self.strict_hwnd_health and health_after.get("status") != "active":
             result = OrderResult(
                 order_id=local_id,
                 status=OrderStatus.FAILED,
@@ -429,9 +435,90 @@ class THSBroker(BaseBroker):
                 price=price,
                 quantity=quantity,
                 channel=self.channel_name,
-                message=f"submit_failed:{exc}",
+                message=(
+                    "submit_blocked_by_hwnd_health;"
+                    f"diag={_compact_json({'before': health_before, 'after': health_after, 'rebound': rebound})}"
+                ),
             )
+            self._local_orders[local_id] = result
+            return result
 
+        attempts = max(1, int(self.submit_max_attempts))
+        sleep_seconds = float(self.submit_retry_interval_s)
+        backoff = float(self.submit_retry_backoff)
+        errors: list[dict[str, Any]] = []
+        result: OrderResult | None = None
+
+        for attempt in range(1, attempts + 1):
+            try:
+                raw = await asyncio.to_thread(trade_fn, ticker, price, quantity)
+                broker_order_id = extract_broker_order_id(raw)
+                diag = {
+                    "attempt": attempt,
+                    "attempts": attempts,
+                    "hwnd_health_before": health_before,
+                    "hwnd_health_after": health_after,
+                    "hwnd_rebound": rebound,
+                    "errors": errors,
+                }
+                result = OrderResult(
+                    order_id=local_id,
+                    status=OrderStatus.SUBMITTED,
+                    ticker=ticker,
+                    side=side,
+                    price=price,
+                    quantity=quantity,
+                    channel=self.channel_name,
+                    message=(
+                        f"broker_order_id={broker_order_id};"
+                        "source=easytrader;"
+                        f"diag={_compact_json(diag)};"
+                        f"raw={_safe_compact(raw)}"
+                    ),
+                )
+                break
+            except Exception as exc:  # noqa: BLE001
+                err_text = str(exc)
+                transient = _is_transient_submit_error(err_text, self.submit_transient_tokens)
+                errors.append({"attempt": attempt, "transient": transient, "error": _truncate_text(err_text, 240)})
+                should_retry = transient and attempt < attempts
+                if should_retry:
+                    if self.rebind_hwnd_on_submit:
+                        self._rebind_hwnd(log_prefix=f"submit_retry_{attempt}")
+                    if sleep_seconds > 0:
+                        await asyncio.sleep(sleep_seconds * (backoff ** (attempt - 1)))
+                    continue
+                diag = {
+                    "attempt": attempt,
+                    "attempts": attempts,
+                    "hwnd_health_before": health_before,
+                    "hwnd_health_after": self.check_health(),
+                    "hwnd_rebound": rebound,
+                    "errors": errors,
+                }
+                result = OrderResult(
+                    order_id=local_id,
+                    status=OrderStatus.FAILED,
+                    ticker=ticker,
+                    side=side,
+                    price=price,
+                    quantity=quantity,
+                    channel=self.channel_name,
+                    message=f"submit_failed:{_truncate_text(err_text, 240)};diag={_compact_json(diag)}",
+                )
+                break
+
+        if result is None:
+            result = OrderResult(
+                order_id=local_id,
+                status=OrderStatus.FAILED,
+                ticker=ticker,
+                side=side,
+                price=price,
+                quantity=quantity,
+                channel=self.channel_name,
+                message="submit_failed:unknown",
+            )
         self._local_orders[local_id] = result
         return result
 
@@ -446,6 +533,37 @@ class THSBroker(BaseBroker):
             if extract_broker_order_id(order.message) == broker_order_id:
                 return local_id
         return ""
+
+    def _rebind_hwnd(self, *, log_prefix: str = "runtime") -> bool:
+        try:
+            apps = Desktop(backend="win32").windows()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("[%s] HWND 重绑定失败(%s): %s", self.channel_name, log_prefix, exc)
+            return False
+
+        candidates: list[tuple[int, str]] = []
+        for app in apps:
+            title = str(app.window_text() or "").strip()
+            title_lower = title.lower()
+            if any(token in title for token in ("股票", "交易", "委托")) or "xiadan" in title_lower:
+                candidates.append((int(app.handle), title))
+        if not candidates:
+            logger.warning("[%s] HWND 重绑定未找到候选窗口(%s)", self.channel_name, log_prefix)
+            return False
+
+        old_hwnd = self.hwnd
+        old_title = self.window_title
+        self.hwnd, self.window_title = candidates[0]
+        logger.info(
+            "[%s] HWND 重绑定成功(%s): old=(%s,%s) new=(%s,%s)",
+            self.channel_name,
+            log_prefix,
+            old_hwnd,
+            old_title,
+            self.hwnd,
+            self.window_title,
+        )
+        return True
 
 
 def _cancel_result_ok(raw: Any) -> bool:
@@ -483,6 +601,68 @@ def _is_true(value: str | None, *, default: bool = False) -> bool:
 
 def _safe_compact(payload: Any) -> str:
     try:
-        return str(payload) if isinstance(payload, (str, bytes)) else str(payload)
+        text = str(payload) if isinstance(payload, (str, bytes)) else str(payload)
+        return _truncate_text(text, 480)
     except Exception:  # noqa: BLE001
         return ""
+
+
+def _safe_int(value: Any, default: int) -> int:
+    try:
+        return int(str(value).strip())
+    except (TypeError, ValueError):
+        return default
+
+
+def _safe_float(value: Any, default: float) -> float:
+    try:
+        return float(str(value).strip())
+    except (TypeError, ValueError):
+        return default
+
+
+def _truncate_text(text: str, max_len: int) -> str:
+    raw = str(text or "")
+    if len(raw) <= max_len:
+        return raw
+    return raw[: max_len - 3] + "..."
+
+
+def _compact_json(payload: Any) -> str:
+    try:
+        return _truncate_text(json.dumps(payload, ensure_ascii=False, separators=(",", ":")), 800)
+    except Exception:  # noqa: BLE001
+        return ""
+
+
+def _extract_local_broker_order_id(message: str) -> str:
+    text = str(message or "")
+    for marker in ("broker_order_id=", "order_id=", "entrust_no="):
+        if marker in text:
+            value = text.split(marker, 1)[1].split(";", 1)[0].strip()
+            if value:
+                return value
+    return extract_broker_order_id(text)
+
+
+def _is_transient_submit_error(error_text: str, tokens: tuple[str, ...]) -> bool:
+    text = str(error_text or "").strip().lower()
+    if not text:
+        return False
+    return any(token in text for token in tokens)
+
+
+_DEFAULT_TRANSIENT_SUBMIT_TOKENS: tuple[str, ...] = (
+    "timed out",
+    "timeout",
+    "超时",
+    "busy",
+    "暂时",
+    "try again",
+    "重试",
+    "captcha",
+    "验证码",
+    "focus",
+    "window",
+    "控件",
+)

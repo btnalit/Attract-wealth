@@ -8,7 +8,7 @@ from typing import List, Dict, Any, Optional, Union
 from datetime import datetime
 from pathlib import Path
 from collections import OrderedDict
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, ConfigDict, Field
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -25,8 +25,7 @@ class MemoryEntry(BaseModel):
     importance_score: float = Field(default=0.5, ge=0.0, le=1.0)
     metadata: Dict[str, Any] = Field(default_factory=dict)
 
-    class Config:
-        use_enum_values = True
+    model_config = ConfigDict(use_enum_values=True)
 
 class MemoryManager:
     """
@@ -144,8 +143,7 @@ class MemoryManager:
         file_path = month_dir / f"{entry.id}.json"
         try:
             with open(file_path, "w", encoding="utf-8") as f:
-                # Use json.dumps for compatibility
-                f.write(entry.json() if hasattr(entry, 'json') else json.dumps(entry.dict()))
+                f.write(entry.model_dump_json())
         except Exception as e:
             logger.error(f"Failed to write to cold memory file: {e}")
 
@@ -232,7 +230,7 @@ class MemoryManager:
                             entry.access_count += 1
                             # Update file with new access count
                             with open(f_path, "w", encoding="utf-8") as fw:
-                                fw.write(entry.json() if hasattr(entry, 'json') else json.dumps(entry.dict()))
+                                fw.write(entry.model_dump_json())
                             matches.append(entry)
                             if len(matches) >= limit:
                                 break

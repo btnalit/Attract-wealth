@@ -1,8 +1,7 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { Loader2, RefreshCcw } from 'lucide-react';
 import { cn } from '../lib/utils';
-
-const API_BASE = import.meta.env.VITE_API_BASE_URL || '';
+import { strategyApi } from '../services/api';
 
 /**
  * Strategy Matrix Page
@@ -105,26 +104,31 @@ export const StrategyMatrix: React.FC = () => {
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/api/strategy/versions`);
-      if (res.ok) {
-        const json = await res.json();
-        const raw = json.data || [];
-        const mapped: Strategy[] = raw.map((s: any) => ({
-          id: s.id,
-          name: s.name,
-          version: `v${s.version}`,
-          status: (s.status || 'ACTIVE').toUpperCase(),
-          winRate: s.metrics?.win_rate || 0.5,
-          plRatio: s.metrics?.profit_loss_ratio || 1.5,
-          maxDrawdown: s.metrics?.max_drawdown || 0.1,
-          sharpeRatio: s.metrics?.sharpe_ratio || 2.0,
-          latency: s.metrics?.avg_response_time || 50,
-          qualityScore: s.metrics?.quality_score || 0.7,
-        }));
-        setStrategies(mapped);
-        if (mapped.length > 0 && !selectedId) {
-          setSelectedId(mapped[0].id);
-        }
+      const payload = await strategyApi.getVersions<{ items?: Array<Record<string, unknown>> } | Array<Record<string, unknown>>>();
+      const rawBody =
+        payload && typeof payload === 'object' && 'data' in payload
+          ? ((payload as { data?: { items?: Array<Record<string, unknown>> } | Array<Record<string, unknown>> }).data ?? [])
+          : payload;
+      const raw = Array.isArray(rawBody)
+        ? rawBody
+        : Array.isArray(rawBody?.items)
+          ? rawBody.items
+          : [];
+      const mapped: Strategy[] = raw.map((s: any) => ({
+        id: s.id,
+        name: s.name,
+        version: `v${s.version}`,
+        status: (s.status || 'ACTIVE').toUpperCase(),
+        winRate: s.metrics?.win_rate || 0.5,
+        plRatio: s.metrics?.profit_loss_ratio || 1.5,
+        maxDrawdown: s.metrics?.max_drawdown || 0.1,
+        sharpeRatio: s.metrics?.sharpe_ratio || 2.0,
+        latency: s.metrics?.avg_response_time || 50,
+        qualityScore: s.metrics?.quality_score || 0.7,
+      }));
+      setStrategies(mapped);
+      if (mapped.length > 0 && !selectedId) {
+        setSelectedId(mapped[0].id);
       }
     } catch (err) {
       console.warn('[StrategyMatrix] API fetch failed:', err);

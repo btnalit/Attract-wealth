@@ -1,17 +1,18 @@
 {
   "report_version": "1.0",
-  "generated_at": "2026-04-09T09:09:46.966324",
+  "generated_at": "2026-04-20T15:52:20.629823",
   "profiles": [
     "dev_default",
-    "sim_default"
+    "sim_default",
+    "prod_live"
   ],
   "counts": {
-    "pass": 2,
+    "pass": 3,
     "fail": 0
   },
   "all_passed": true,
   "baseline": {
-    "worst_retry_rate": 0.1,
+    "worst_retry_rate": 0.1125,
     "worst_rate_limited_rate": 0.0
   },
   "results": [
@@ -29,12 +30,12 @@
       },
       "probe_summary": {
         "current_provider": "flaky",
-        "requests_total": 10,
+        "requests_total": 80,
         "error_rate": 0.0,
         "empty_rate": 0.0,
         "fallback_rate": 0.0,
-        "retry_rate": 0.1,
-        "retry_pressure_rate": 0.1,
+        "retry_rate": 0.1125,
+        "retry_pressure_rate": 0.1125,
         "rate_limited_rate": 0.0,
         "cache_hit_rate": 0.0,
         "quality_alert_level": "none",
@@ -44,10 +45,11 @@
         "tuning_action": "none",
         "quality_feedback_precision": 0.0,
         "quality_false_positive_rate": 0.0,
-        "quality_miss_rate": 0.0
+        "quality_miss_rate": 0.0,
+        "last_failure_code": ""
       },
       "apply_summary": {
-        "current_provider": null,
+        "current_provider": "akshare",
         "requests_total": 0,
         "error_rate": 0.0,
         "empty_rate": 0.0,
@@ -57,16 +59,17 @@
         "rate_limited_rate": 0.0,
         "cache_hit_rate": 0.0,
         "quality_alert_level": "none",
-        "quality_code": "DATAFLOW_UNAVAILABLE",
+        "quality_code": "DATA_QUALITY_OK",
         "quality_action": "record",
         "quality_event_id": "",
         "tuning_action": "none",
         "quality_feedback_precision": 0.0,
         "quality_false_positive_rate": 0.0,
-        "quality_miss_rate": 0.0
+        "quality_miss_rate": 0.0,
+        "last_failure_code": ""
       },
-      "stdout": "[stability] output=D:\\来财\\Attract-wealth\\data\\stability\\profile_probe_dev_default_baseline.json\n[stability] status=PASS quality=none retry_rate=0.1 rate_limited_rate=0.0\n[profile-apply] profile=dev_default\n[profile-apply] profile_meta version=2026.04.09.1 description=开发环境参数：容错优先，便于联调排错。\n[profile-apply] output=D:\\来财\\Attract-wealth\\data\\stability\\profile_apply_dev_default_baseline.json\n",
-      "stderr": "akshare data source bootstrap skipped: No module named 'akshare'\n"
+      "stdout": "[stability] output=D:\\来财\\Attract-wealth\\data\\stability\\profile_probe_dev_default_baseline.json\n[stability] status=PASS quality=none retry_rate=0.1125 rate_limited_rate=0.0\n[profile-apply] profile=dev_default\n[profile-apply] profile_meta version=2026.04.09.1 description=开发环境参数：容错优先，便于联调排错。\n[profile-apply] output=D:\\来财\\Attract-wealth\\data\\stability\\profile_apply_dev_default_baseline.json\n",
+      "stderr": ""
     },
     {
       "profile": "sim_default",
@@ -82,12 +85,12 @@
       },
       "probe_summary": {
         "current_provider": "flaky",
-        "requests_total": 10,
+        "requests_total": 80,
         "error_rate": 0.0,
         "empty_rate": 0.0,
         "fallback_rate": 0.0,
-        "retry_rate": 0.1,
-        "retry_pressure_rate": 0.1,
+        "retry_rate": 0.1125,
+        "retry_pressure_rate": 0.1125,
         "rate_limited_rate": 0.0,
         "cache_hit_rate": 0.0,
         "quality_alert_level": "none",
@@ -97,10 +100,11 @@
         "tuning_action": "none",
         "quality_feedback_precision": 0.0,
         "quality_false_positive_rate": 0.0,
-        "quality_miss_rate": 0.0
+        "quality_miss_rate": 0.0,
+        "last_failure_code": ""
       },
       "apply_summary": {
-        "current_provider": null,
+        "current_provider": "akshare",
         "requests_total": 0,
         "error_rate": 0.0,
         "empty_rate": 0.0,
@@ -110,16 +114,72 @@
         "rate_limited_rate": 0.0,
         "cache_hit_rate": 0.0,
         "quality_alert_level": "none",
-        "quality_code": "DATAFLOW_UNAVAILABLE",
+        "quality_code": "DATA_QUALITY_OK",
         "quality_action": "record",
         "quality_event_id": "",
         "tuning_action": "none",
         "quality_feedback_precision": 0.0,
         "quality_false_positive_rate": 0.0,
-        "quality_miss_rate": 0.0
+        "quality_miss_rate": 0.0,
+        "last_failure_code": ""
       },
-      "stdout": "[stability] output=D:\\来财\\Attract-wealth\\data\\stability\\profile_probe_sim_default_baseline.json\n[stability] status=PASS quality=none retry_rate=0.1 rate_limited_rate=0.0\n[profile-apply] profile=sim_default\n[profile-apply] profile_meta version=2026.04.09.1 description=模拟交易参数：吞吐与稳定平衡。\n[profile-apply] output=D:\\来财\\Attract-wealth\\data\\stability\\profile_apply_sim_default_baseline.json\n",
-      "stderr": "akshare data source bootstrap skipped: No module named 'akshare'\n"
+      "stdout": "[stability] output=D:\\来财\\Attract-wealth\\data\\stability\\profile_probe_sim_default_baseline.json\n[stability] status=PASS quality=none retry_rate=0.1125 rate_limited_rate=0.0\n[profile-apply] profile=sim_default\n[profile-apply] profile_meta version=2026.04.09.1 description=模拟交易参数：吞吐与稳定平衡。\n[profile-apply] output=D:\\来财\\Attract-wealth\\data\\stability\\profile_apply_sim_default_baseline.json\n",
+      "stderr": ""
+    },
+    {
+      "profile": "prod_live",
+      "status": "PASS",
+      "returncode": 0,
+      "apply_report": "D:\\来财\\Attract-wealth\\data\\stability\\profile_apply_prod_live_baseline.json",
+      "probe_report": "D:\\来财\\Attract-wealth\\data\\stability\\profile_probe_prod_live_baseline.json",
+      "probe_gate": {
+        "status": "PASS",
+        "quality_level": "none",
+        "failed_rules": [],
+        "warn_rules": []
+      },
+      "probe_summary": {
+        "current_provider": "flaky",
+        "requests_total": 80,
+        "error_rate": 0.0,
+        "empty_rate": 0.0,
+        "fallback_rate": 0.0,
+        "retry_rate": 0.1125,
+        "retry_pressure_rate": 0.1125,
+        "rate_limited_rate": 0.0,
+        "cache_hit_rate": 0.0,
+        "quality_alert_level": "none",
+        "quality_code": "DATA_QUALITY_OK",
+        "quality_action": "record",
+        "quality_event_id": "",
+        "tuning_action": "none",
+        "quality_feedback_precision": 0.0,
+        "quality_false_positive_rate": 0.0,
+        "quality_miss_rate": 0.0,
+        "last_failure_code": ""
+      },
+      "apply_summary": {
+        "current_provider": "akshare",
+        "requests_total": 0,
+        "error_rate": 0.0,
+        "empty_rate": 0.0,
+        "fallback_rate": 0.0,
+        "retry_rate": 0.0,
+        "retry_pressure_rate": 0.0,
+        "rate_limited_rate": 0.0,
+        "cache_hit_rate": 0.0,
+        "quality_alert_level": "none",
+        "quality_code": "DATA_QUALITY_OK",
+        "quality_action": "record",
+        "quality_event_id": "",
+        "tuning_action": "none",
+        "quality_feedback_precision": 0.0,
+        "quality_false_positive_rate": 0.0,
+        "quality_miss_rate": 0.0,
+        "last_failure_code": ""
+      },
+      "stdout": "[stability] output=D:\\来财\\Attract-wealth\\data\\stability\\profile_probe_prod_live_baseline.json\n[stability] status=PASS quality=none retry_rate=0.1125 rate_limited_rate=0.0\n[profile-apply] profile=prod_live\n[profile-apply] profile_meta version=2026.04.09.1 description=实盘参数：保守限流与退避，稳定优先。\n[profile-apply] output=D:\\来财\\Attract-wealth\\data\\stability\\profile_apply_prod_live_baseline.json\n",
+      "stderr": ""
     }
   ]
 }

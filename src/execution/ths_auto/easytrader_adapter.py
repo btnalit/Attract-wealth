@@ -7,6 +7,7 @@ import ctypes
 import io
 import importlib
 import json
+import logging
 import os
 import re
 import struct
@@ -17,6 +18,8 @@ import time
 import types
 from pathlib import Path
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 DEFAULT_THS_EXE_PATH = Path(r"D:\同花顺软件\同花顺\xiadan.exe")
@@ -526,17 +529,19 @@ def _patch_easytrader_captcha_engine(captcha_engine: str) -> tuple[bool, str]:
         img.save(buffer, format="PNG")
         return _recognize_from_bytes(buffer.getvalue(), source="invoke_tesseract_to_recognize")
 
+    grid_patch_warning = ""
     try:
         captcha_mod.captcha_recognize = _captcha_recognize
         captcha_mod.invoke_tesseract_to_recognize = _invoke_tesseract_to_recognize
         try:
             grid_mod = importlib.import_module("easytrader.grid_strategies")
             grid_mod.captcha_recognize = _captcha_recognize
-        except Exception:  # noqa: BLE001
-            pass
+        except Exception as exc:  # noqa: BLE001
+            grid_patch_warning = f"CAPTCHA_GRID_PATCH_FAILED:{exc}"
     except Exception as exc:  # noqa: BLE001
         return False, str(exc)
-    return True, engine
+    detail = engine if not grid_patch_warning else f"{engine}|{grid_patch_warning}"
+    return True, detail
 
 
 def apply_easytrader_runtime_patches(*, repo_path: str = "", grid_strategy: str = "", captcha_engine: str = "") -> dict[str, Any]:
@@ -554,19 +559,134 @@ def apply_easytrader_runtime_patches(*, repo_path: str = "", grid_strategy: str 
     }
 
 
+def _needs_32bit_bridge(exe_path: str) -> bool:
+    """Check if we need a 32-bit bridge (64-bit Python + 32-bit xiadan.exe)."""
+    python_bits = _python_bits()
+    if python_bits == 32:
+        return False
+    exe_bits = _detect_pe_bits(exe_path)
+    return exe_bits == 32
+
+
+def _try_bridge_connect(
+    *,
+    exe_path: str,
+    broker: str,
+    repo_path: str,
+    grid_strategy: str,
+    captcha_engine: str,
+) -> tuple[Any | None, dict[str, Any]]:
+    """Attempt to connect via 32-bit bridge subprocess."""
+    from src.execution.ths_auto.bridge_proxy import BridgeProxyClient, discover_python32
+
+    python32 = discover_python32()
+    if not python32:
+        return None, {
+            "ok": False,
+            "reason": "python32_not_found",
+            "error_code": "THS_PYTHON32_NOT_FOUND",
+            "exe_path": exe_path,
+            "broker": broker,
+            "errors": [
+                "当前 Python 为 64 位，xiadan.exe 为 32 位，需要 32 位 Python 作为桥接。"
+                "请设置 THS_EASYTRADER_PYTHON32 环境变量指向 32 位 Python 路径，"
+                "或安装 32 位 Python (如 Python 3.10-32)。"
+            ],
+            "load_meta": {"ok": False, "source": "bridge", "python_bits": _python_bits()},
+        }
+
+    # Resolve easytrader repo path for the bridge
+    easytrader_repo = repo_path or os.getenv("EASYTRADER_REPO_PATH", "").strip()
+    if not easytrader_repo:
+        for candidate in discover_easytrader_repo_candidates(""):
+            if candidate.exists():
+                easytrader_repo = str(candidate)
+                break
+
+    logger.info(
+        "[ths_auto] 检测到架构不匹配 (Python=%dbit, xiadan=32bit)，启动 32 位桥接: %s",
+        _python_bits(), python32,
+    )
+
+    try:
+        proxy = BridgeProxyClient(python32_exe=python32, easytrader_repo=easytrader_repo)
+        proxy.connect(
+            exe_path=exe_path,
+            broker=broker,
+            grid_strategy=grid_strategy,
+            captcha_engine=captcha_engine,
+        )
+        return proxy, {
+            "ok": True,
+            "reason": "connected_via_bridge",
+            "error_code": "",
+            "exe_path": exe_path,
+            "broker": broker,
+            "grid_strategy": grid_strategy,
+            "captcha_engine": captcha_engine,
+            "patches": {},
+            "errors": [],
+            "load_meta": {
+                "ok": True,
+                "source": "bridge_32bit",
+                "python32": python32,
+                "easytrader_repo": easytrader_repo,
+            },
+        }
+    except Exception as exc:  # noqa: BLE001
+        return None, {
+            "ok": False,
+            "reason": "bridge_connect_failed",
+            "error_code": "THS_BRIDGE_CONNECT_FAILED",
+            "exe_path": exe_path,
+            "broker": broker,
+            "errors": [str(exc)],
+            "load_meta": {
+                "ok": False,
+                "source": "bridge_32bit",
+                "python32": python32,
+                "easytrader_repo": easytrader_repo,
+            },
+        }
+
+
 def create_easytrader_client(*, exe_path: str, broker: str = "ths", repo_path: str = "", grid_strategy: str = "", captcha_engine: str = "") -> tuple[Any | None, dict[str, Any]]:
     exe = Path(resolve_ths_exe_path(exe_path)).expanduser()
     if not exe.exists():
-        return None, {"ok": False, "reason": "exe_not_found", "exe_path": str(exe), "broker": broker, "errors": [f"exe_not_found:{exe}"]}
+        return None, {
+            "ok": False,
+            "reason": "exe_not_found",
+            "error_code": "THS_EXE_NOT_FOUND",
+            "exe_path": str(exe),
+            "broker": broker,
+            "errors": [f"exe_not_found:{exe}"],
+        }
 
     requested_grid_strategy = _normalize_grid_strategy_name(grid_strategy or os.getenv("THS_EASYTRADER_GRID_STRATEGY", "auto"))
     requested_captcha_engine = _normalize_captcha_engine_name(captcha_engine or os.getenv("THS_EASYTRADER_CAPTCHA_ENGINE", "auto"))
+
+    # --- 32-bit bridge auto-detection ---
+    # If current Python is 64-bit and xiadan.exe is 32-bit, use bridge subprocess
+    if _needs_32bit_bridge(str(exe)):
+        logger.info("[ths_auto] 64 位 Python 检测到 32 位 xiadan.exe，尝试桥接模式...")
+        client, meta = _try_bridge_connect(
+            exe_path=str(exe),
+            broker=broker,
+            repo_path=repo_path,
+            grid_strategy=requested_grid_strategy,
+            captcha_engine=requested_captcha_engine,
+        )
+        if client is not None:
+            return client, meta
+        # Bridge failed — log and fall through to native attempt (may also fail)
+        logger.warning("[ths_auto] 桥接模式失败: %s，尝试原生连接...", meta.get("errors", []))
 
     module, load_meta = load_easytrader_module(repo_path)
     if module is None:
         return None, {
             "ok": False,
             "reason": "easytrader_import_failed",
+            "error_code": "EASYTRADER_IMPORT_FAILED",
             "exe_path": str(exe),
             "broker": broker,
             "errors": [row.get("error", "") for row in load_meta.get("attempts", [])],
@@ -593,6 +713,7 @@ def create_easytrader_client(*, exe_path: str, broker: str = "ths", repo_path: s
             return user, {
                 "ok": True,
                 "reason": "connected",
+                "error_code": "",
                 "exe_path": str(exe),
                 "broker": broker_name,
                 "grid_strategy": requested_grid_strategy,
@@ -607,6 +728,7 @@ def create_easytrader_client(*, exe_path: str, broker: str = "ths", repo_path: s
     return None, {
         "ok": False,
         "reason": "connect_failed",
+        "error_code": "EASYTRADER_CONNECT_FAILED",
         "exe_path": str(exe),
         "broker": broker,
         "grid_strategy": requested_grid_strategy,
@@ -635,13 +757,27 @@ def read_client_member_with_retry(client: Any, member: str, *, retries: int | No
     for idx in range(max_retries):
         try:
             payload = read_client_member(client, member)
-            return payload, {"ok": True, "member": member, "attempts": idx + 1, "errors": errors, "elapsed_ms": round((time.perf_counter() - started) * 1000, 3)}
+            return payload, {
+                "ok": True,
+                "error_code": "",
+                "member": member,
+                "attempts": idx + 1,
+                "errors": errors,
+                "elapsed_ms": round((time.perf_counter() - started) * 1000, 3),
+            }
         except Exception as exc:  # noqa: BLE001
             errors.append(str(exc))
             if idx < max_retries - 1 and interval > 0:
                 time.sleep(interval)
 
-    return None, {"ok": False, "member": member, "attempts": max_retries, "errors": errors, "elapsed_ms": round((time.perf_counter() - started) * 1000, 3)}
+    return None, {
+        "ok": False,
+        "error_code": "THS_READ_MEMBER_FAILED",
+        "member": member,
+        "attempts": max_retries,
+        "errors": errors,
+        "elapsed_ms": round((time.perf_counter() - started) * 1000, 3),
+    }
 
 def normalize_balance(raw: Any) -> dict[str, Any]:
     data = raw if isinstance(raw, dict) else {}
@@ -899,6 +1035,15 @@ def inspect_easytrader_runtime(*, exe_path: str = str(DEFAULT_THS_EXE_PATH), req
         access_ok, access_error = _can_query_process(pid)
 
     needs_32bit = exe_bits == 32
+    # If 32-bit bridge is available, arch mismatch is not a blocker
+    bridge_available = False
+    bridge_detect_error = ""
+    if needs_32bit and python_bits != 32:
+        try:
+            from src.execution.ths_auto.bridge_proxy import discover_python32
+            bridge_available = discover_python32() is not None
+        except Exception as exc:  # noqa: BLE001
+            bridge_detect_error = str(exc)
     arch_ok = not (require_32bit_python and needs_32bit and python_bits != 32)
     access_gate_ok = not (require_process_access and running and access_ok is False)
     running_gate_ok = running if running_known else True
@@ -908,7 +1053,10 @@ def inspect_easytrader_runtime(*, exe_path: str = str(DEFAULT_THS_EXE_PATH), req
     if not exe.exists():
         hints.append(f"THS_EXE_PATH not found: {exe}")
     if needs_32bit and python_bits != 32:
-        hints.append("当前 Python 为 64 位，建议切换到 32 位 Python 运行 easytrader。")
+        if bridge_available:
+            hints.append("当前 Python 为 64 位，将通过 32 位桥接子进程连接 easytrader。")
+        else:
+            hints.append("当前 Python 为 64 位，未找到 32 位 Python 桥接。请设置 THS_EASYTRADER_PYTHON32 环境变量。")
     if not running and running_known:
         hints.append(f"未检测到 {process_name} 进程，请先登录交易客户端。")
     if not running_known:
@@ -917,6 +1065,8 @@ def inspect_easytrader_runtime(*, exe_path: str = str(DEFAULT_THS_EXE_PATH), req
         errors.append(pid_error)
     if access_error:
         errors.append(access_error)
+    if bridge_detect_error:
+        errors.append(f"bridge_detect_failed:{bridge_detect_error}")
     if access_ok is False:
         hints.append("当前进程对 xiadan 进程无查询权限，通常是管理员权限级别不一致导致。")
         if current_admin is False:
@@ -934,6 +1084,7 @@ def inspect_easytrader_runtime(*, exe_path: str = str(DEFAULT_THS_EXE_PATH), req
         "python_bits": python_bits,
         "exe_bits": exe_bits,
         "needs_32bit_python": needs_32bit,
+        "bridge_available": bridge_available,
         "current_process_admin": current_admin,
         "require_32bit_python": bool(require_32bit_python),
         "require_process_access": bool(require_process_access),
@@ -971,7 +1122,12 @@ def probe_easytrader_readiness(*, exe_path: str = str(DEFAULT_THS_EXE_PATH), bro
     }
 
     if runtime_guard and not bool(runtime.get("ok", False)):
-        result["meta"] = {"ok": False, "reason": "runtime_guard_failed", "runtime": runtime}
+        result["meta"] = {
+            "ok": False,
+            "reason": "runtime_guard_failed",
+            "error_code": "THS_RUNTIME_GUARD_FAILED",
+            "runtime": runtime,
+        }
         result["errors"] = list(runtime.get("errors", []))
         result["elapsed_ms"] = round((time.time() - started) * 1000, 3)
         return result
@@ -980,6 +1136,8 @@ def probe_easytrader_readiness(*, exe_path: str = str(DEFAULT_THS_EXE_PATH), bro
     result["meta"] = meta if isinstance(meta, dict) else {}
     if client is None:
         result["errors"] = list((meta or {}).get("errors", [])) if isinstance(meta, dict) else []
+        if isinstance(result["meta"], dict):
+            result["meta"].setdefault("error_code", "THS_CLIENT_CREATE_FAILED")
         result["meta"]["captcha_stats"] = get_captcha_runtime_stats()
         result["elapsed_ms"] = round((time.time() - started) * 1000, 3)
         return result
@@ -1034,7 +1192,10 @@ def probe_easytrader_readiness(*, exe_path: str = str(DEFAULT_THS_EXE_PATH), bro
         result["meta"]["read_diagnostics"] = read_diag
         result["meta"]["captcha_stats"] = get_captcha_runtime_stats()
     except Exception as exc:  # noqa: BLE001
-        result["errors"].append(str(exc))
+        result["errors"].append(f"THS_PROBE_EXCEPTION:{exc}")
+        if isinstance(result["meta"], dict):
+            if not str(result["meta"].get("error_code", "")).strip():
+                result["meta"]["error_code"] = "THS_PROBE_EXCEPTION"
         if read_diag:
             result["meta"]["read_diagnostics"] = read_diag
         result["meta"]["captcha_stats"] = get_captcha_runtime_stats()
@@ -1044,8 +1205,11 @@ def probe_easytrader_readiness(*, exe_path: str = str(DEFAULT_THS_EXE_PATH), bro
             if callable(exit_fn):
                 try:
                     exit_fn()
-                except Exception:  # noqa: BLE001
-                    pass
+                except Exception as exc:  # noqa: BLE001
+                    result["errors"].append(f"THS_CLIENT_CLOSE_FAILED:{exc}")
+                    if isinstance(result["meta"], dict):
+                        if not str(result["meta"].get("error_code", "")).strip():
+                            result["meta"]["error_code"] = "THS_CLIENT_CLOSE_FAILED"
 
     result["elapsed_ms"] = round((time.time() - started) * 1000, 3)
     return result

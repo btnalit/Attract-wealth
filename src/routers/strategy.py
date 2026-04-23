@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import difflib
 import hashlib
 import itertools
 import json
+import logging
 import time
 from typing import Any
+from urllib.parse import quote_plus
 
 from fastapi import APIRouter, Query, Request
 from fastapi.responses import JSONResponse
@@ -12,10 +15,10 @@ from pydantic import BaseModel, Field
 from src.core.schemas import BaseSchema
 
 from src.core.errors import TradingServiceError, error_response, ok_response
-from src.core.strategy_store import StrategyStore
-from src.evolution.backtest_runner import BacktestRunner
+from src.services.strategy_service import StrategyService
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 _GRID_SORT_ASC_METRICS = {"max_drawdown"}
 
@@ -136,6 +139,290 @@ def _to_float(value: Any, default: float = 0.0) -> float:
         return default
 
 
+def _to_int(value: Any, default: int = 0) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _pick_metric(metrics: dict[str, Any], *aliases: str) -> float:
+    for alias in aliases:
+        if alias in metrics:
+            return _to_float(metrics.get(alias), 0.0)
+    return 0.0
+
+
+def _build_parameter_diff(current_params: dict[str, Any], baseline_params: dict[str, Any]) -> dict[str, list[str]]:
+    current_keys = set(current_params.keys())
+    baseline_keys = set(baseline_params.keys())
+    added = sorted(list(current_keys - baseline_keys))
+    removed = sorted(list(baseline_keys - current_keys))
+    changed = sorted(
+        [key for key in (current_keys & baseline_keys) if current_params.get(key) != baseline_params.get(key)]
+    )
+    return {"added": added, "removed": removed, "changed": changed}
+
+
+def _format_diff_value(value: Any, *, limit: int = 120) -> str:
+    """将 diff 值格式化为可展示文本。"""
+    if value is None:
+        text = "null"
+    elif isinstance(value, (dict, list)):
+        text = json.dumps(value, ensure_ascii=False, sort_keys=True)
+    else:
+        text = str(value)
+    if len(text) <= limit:
+        return text
+    return f"{text[:limit]}..."
+
+
+def _try_parse_json_object(raw_content: str) -> dict[str, Any] | None:
+    text = str(raw_content or "").strip()
+    if not text:
+        return {}
+    try:
+        payload = json.loads(text)
+    except Exception:  # noqa: BLE001
+        return None
+    return payload if isinstance(payload, dict) else None
+
+
+def _build_content_diff(current_content: str, baseline_content: str) -> dict[str, Any]:
+    """构建字段级内容差异（优先 JSON 字段 diff，降级为文本行块 diff）。"""
+    current_text = str(current_content or "")
+    baseline_text = str(baseline_content or "")
+    current_obj = _try_parse_json_object(current_text)
+    baseline_obj = _try_parse_json_object(baseline_text)
+
+    if current_obj is not None and baseline_obj is not None:
+        current_keys = set(current_obj.keys())
+        baseline_keys = set(baseline_obj.keys())
+        all_keys = sorted(list(current_keys | baseline_keys))
+
+        added_count = 0
+        removed_count = 0
+        changed_count = 0
+        fields: list[dict[str, Any]] = []
+        for key in all_keys:
+            has_current = key in current_obj
+            has_baseline = key in baseline_obj
+            if has_current and not has_baseline:
+                status = "added"
+                added_count += 1
+            elif has_baseline and not has_current:
+                status = "removed"
+                removed_count += 1
+            elif current_obj.get(key) != baseline_obj.get(key):
+                status = "changed"
+                changed_count += 1
+            else:
+                continue
+
+            fields.append(
+                {
+                    "field": key,
+                    "status": status,
+                    "current_value": _format_diff_value(current_obj.get(key)),
+                    "baseline_value": _format_diff_value(baseline_obj.get(key)),
+                }
+            )
+
+        return {
+            "mode": "json_fields",
+            "changed": bool(fields),
+            "summary": {
+                "added_fields": added_count,
+                "removed_fields": removed_count,
+                "changed_fields": changed_count,
+                "total_changed_fields": len(fields),
+            },
+            "fields": fields[:120],
+            "truncated": len(fields) > 120,
+        }
+
+    baseline_lines = baseline_text.splitlines()
+    current_lines = current_text.splitlines()
+    matcher = difflib.SequenceMatcher(None, baseline_lines, current_lines)
+
+    added_line_count = 0
+    removed_line_count = 0
+    changed_line_count = 0
+    changes: list[dict[str, Any]] = []
+    for tag, i1, i2, j1, j2 in matcher.get_opcodes():
+        if tag == "equal":
+            continue
+        if tag == "insert":
+            added_line_count += max(0, j2 - j1)
+        elif tag == "delete":
+            removed_line_count += max(0, i2 - i1)
+        else:
+            changed_line_count += max(0, max(i2 - i1, j2 - j1))
+        changes.append(
+            {
+                "type": tag,
+                "baseline_range": [i1 + 1, i2],
+                "current_range": [j1 + 1, j2],
+                "baseline_lines": baseline_lines[i1:i2][:12],
+                "current_lines": current_lines[j1:j2][:12],
+            }
+        )
+
+    return {
+        "mode": "text_lines",
+        "changed": bool(changes) or current_text != baseline_text,
+        "summary": {
+            "baseline_line_count": len(baseline_lines),
+            "current_line_count": len(current_lines),
+            "change_blocks": len(changes),
+            "added_lines": added_line_count,
+            "removed_lines": removed_line_count,
+            "changed_lines": changed_line_count,
+        },
+        "changes": changes[:80],
+        "truncated": len(changes) > 80,
+    }
+
+
+def _get_latest_report(strategy_service: StrategyService, strategy_id: str) -> dict[str, Any] | None:
+    if not str(strategy_id or "").strip():
+        return None
+    rows = strategy_service.list_backtest_reports(strategy_id=str(strategy_id).strip(), limit=1)
+    if not rows:
+        return None
+    item = rows[0]
+    return item if isinstance(item, dict) else None
+
+
+def _load_knowledge_core():
+    from src.evolution.knowledge_core import KnowledgeCore
+
+    return KnowledgeCore
+
+
+def _normalize_knowledge_type(raw: str) -> str:
+    value = str(raw or "").strip().lower()
+    mapping = {
+        "pattern": "pattern",
+        "patterns": "pattern",
+        "lesson": "lesson",
+        "lessons": "lesson",
+        "rule": "rule",
+        "rules": "rule",
+        "all": "all",
+    }
+    return mapping.get(value, "all")
+
+
+def _normalize_knowledge_tags(raw: Any) -> list[str]:
+    if isinstance(raw, list):
+        return [str(item).strip() for item in raw if str(item).strip()]
+    if isinstance(raw, str):
+        text = raw.strip()
+        if not text:
+            return []
+        if text.startswith("[") and text.endswith("]"):
+            try:
+                parsed = json.loads(text)
+                if isinstance(parsed, list):
+                    return [str(item).strip() for item in parsed if str(item).strip()]
+            except Exception:  # noqa: BLE001
+                pass
+        return [item.strip() for item in text.split(",") if item.strip()]
+    return []
+
+
+def _normalize_knowledge_vector(raw: Any, *, seed: str) -> list[float]:
+    if isinstance(raw, (list, tuple)) and len(raw) >= 2:
+        try:
+            x = float(raw[0])
+            y = float(raw[1])
+            if 0.0 <= x <= 1.0 and 0.0 <= y <= 1.0:
+                return [round(x * 2 - 1, 6), round(y * 2 - 1, 6)]
+            return [round(max(-1.0, min(1.0, x)), 6), round(max(-1.0, min(1.0, y)), 6)]
+        except (TypeError, ValueError):
+            pass
+
+    digest = hashlib.sha256(seed.encode("utf-8")).digest()
+    x = int.from_bytes(digest[:2], "big") / 65535.0
+    y = int.from_bytes(digest[2:4], "big") / 65535.0
+    return [round(x * 2 - 1, 6), round(y * 2 - 1, 6)]
+
+
+def _normalize_knowledge_entry(raw: dict[str, Any], *, default_type: str) -> dict[str, Any]:
+    type_value = str(raw.get("entry_type") or default_type or "rule").strip().lower()
+    if type_value in {"patterns", "pattern"}:
+        item_type = "Pattern"
+    elif type_value in {"lessons", "lesson"}:
+        item_type = "Lesson"
+    else:
+        item_type = "Rule"
+
+    entry_id = str(raw.get("id") or raw.get("vector_id") or f"kb_{hashlib.md5(str(raw).encode('utf-8')).hexdigest()[:12]}")
+    title = (
+        str(raw.get("title", "")).strip()
+        or str(raw.get("name", "")).strip()
+        or str(raw.get("rule_text", "")).strip()
+        or f"{item_type} {entry_id[:8]}"
+    )
+    full_content = (
+        str(raw.get("content", "")).strip()
+        or str(raw.get("description", "")).strip()
+        or str(raw.get("rule_text", "")).strip()
+    )
+    summary = full_content if len(full_content) <= 160 else f"{full_content[:157]}..."
+    tags = _normalize_knowledge_tags(raw.get("tags", []))
+
+    relevance_raw = _to_float(raw.get("relevance_score", raw.get("score", 0.0)), default=0.0)
+    if relevance_raw <= 1.0:
+        relevance = relevance_raw * 100.0
+    else:
+        relevance = relevance_raw
+    relevance = round(max(0.0, min(100.0, relevance)), 2)
+
+    vector = _normalize_knowledge_vector(raw.get("vector"), seed=f"{entry_id}|{title}|{item_type}")
+
+    return {
+        "id": entry_id,
+        "title": title,
+        "type": item_type,
+        "relevance": relevance,
+        "summary": summary,
+        "tags": tags,
+        "fullContent": full_content,
+        "vector": vector,
+    }
+
+
+def _flatten_knowledge_results(raw: Any, *, requested_type: str, top_k: int) -> list[dict[str, Any]]:
+    records: list[dict[str, Any]] = []
+    group_map = {"pattern": "patterns", "lesson": "lessons", "rule": "rules"}
+
+    if isinstance(raw, dict):
+        if requested_type == "all":
+            for source_key in ("patterns", "lessons", "rules"):
+                values = raw.get(source_key, [])
+                if not isinstance(values, list):
+                    continue
+                source_type = source_key[:-1] if source_key.endswith("s") else source_key
+                for item in values:
+                    if isinstance(item, dict):
+                        records.append(_normalize_knowledge_entry(item, default_type=source_type))
+        else:
+            values = raw.get(group_map.get(requested_type, "patterns"), [])
+            if isinstance(values, list):
+                for item in values:
+                    if isinstance(item, dict):
+                        records.append(_normalize_knowledge_entry(item, default_type=requested_type))
+    elif isinstance(raw, list):
+        for item in raw:
+            if isinstance(item, dict):
+                records.append(_normalize_knowledge_entry(item, default_type=requested_type))
+
+    records.sort(key=lambda item: float(item.get("relevance", 0.0)), reverse=True)
+    return records[:top_k]
+
+
 def _collect_gate_overrides(
     req: StrategyGateRequest | StrategyPromoteRequest | StrategyTransitionRequest,
 ) -> dict[str, Any]:
@@ -200,39 +487,27 @@ def _metric_sort_value(metrics: dict[str, Any], metric: str) -> float:
     return _to_float(metrics.get(metric, 0.0), 0.0)
 
 
-def _get_strategy_store(request: Request) -> StrategyStore:
-    store = getattr(request.app.state, "strategy_store", None)
-    required_methods = {
-        "create_strategy_version",
-        "list_strategy_versions",
-        "get_strategy",
-        "update_strategy_metrics",
-        "evaluate_version_gate",
-        "promote_strategy_version",
-        "transition_strategy_status",
-        "archive_backtest_report",
-        "list_backtest_reports",
-        "get_backtest_report",
-    }
-    if store is None or not all(hasattr(store, name) for name in required_methods):
-        store = StrategyStore()
-        request.app.state.strategy_store = store
-    return store
-
-
-def _get_backtest_runner(request: Request) -> BacktestRunner:
-    runner = getattr(request.app.state, "backtest_runner", None)
-    if runner is None or not hasattr(runner, "run"):
-        runner = BacktestRunner()
-        request.app.state.backtest_runner = runner
-    return runner
+def _get_strategy_service(request: Request) -> StrategyService:
+    strategy_service = getattr(request.app.state, "strategy_service", None)
+    if not isinstance(strategy_service, StrategyService):
+        strategy_service = StrategyService(
+            strategy_store=getattr(request.app.state, "strategy_store", None),
+            backtest_runner=getattr(request.app.state, "backtest_runner", None),
+        )
+        request.app.state.strategy_service = strategy_service
+    else:
+        strategy_service.sync_dependencies(
+            strategy_store=getattr(request.app.state, "strategy_store", None),
+            backtest_runner=getattr(request.app.state, "backtest_runner", None),
+        )
+    return strategy_service
 
 
 @router.post("/versions")
 async def create_strategy_version(req: StrategyCreateRequest, request: Request):
     try:
-        store = _get_strategy_store(request)
-        payload = store.create_strategy_version(
+        strategy_service = _get_strategy_service(request)
+        payload = strategy_service.create_strategy_version(
             name=req.name,
             content=req.content,
             origin=req.origin,
@@ -261,8 +536,8 @@ async def list_strategy_versions(
     limit: int = Query(default=50, ge=1, le=500),
 ):
     try:
-        store = _get_strategy_store(request)
-        rows = store.list_strategy_versions(name=name, status=status, limit=limit)
+        strategy_service = _get_strategy_service(request)
+        rows = strategy_service.list_strategy_versions(name=name, status=status, limit=limit)
         return ok_response({"items": rows, "count": len(rows)}, code="STRATEGY_VERSIONS_OK")
     except TradingServiceError as exc:
         return _error_json(exc)
@@ -276,8 +551,8 @@ async def list_strategy_versions(
 @router.get("/versions/{strategy_id}")
 async def get_strategy_version(strategy_id: str, request: Request):
     try:
-        store = _get_strategy_store(request)
-        payload = store.get_strategy(strategy_id)
+        strategy_service = _get_strategy_service(request)
+        payload = strategy_service.get_strategy(strategy_id)
         return ok_response(payload, code="STRATEGY_VERSION_OK")
     except TradingServiceError as exc:
         return _error_json(exc)
@@ -288,12 +563,148 @@ async def get_strategy_version(strategy_id: str, request: Request):
         )
 
 
+@router.get("/versions/{strategy_id}/diff")
+async def get_strategy_version_diff(
+    strategy_id: str,
+    request: Request,
+    baseline_id: str = Query(default=""),
+):
+    """比较策略版本差异，默认基线为父版本或同名上一版本。"""
+    try:
+        strategy_service = _get_strategy_service(request)
+        current = strategy_service.get_strategy(strategy_id)
+
+        baseline: dict[str, Any] | None = None
+        baseline_source = "none"
+        explicit_baseline_id = str(baseline_id or "").strip()
+        if explicit_baseline_id:
+            baseline = strategy_service.get_strategy(explicit_baseline_id)
+            baseline_source = "explicit"
+        else:
+            parent_id = str(current.get("parent_id", "")).strip()
+            if parent_id:
+                try:
+                    baseline = strategy_service.get_strategy(parent_id)
+                    baseline_source = "parent"
+                except TradingServiceError as exc:
+                    if exc.code != "STRATEGY_NOT_FOUND":
+                        raise
+
+            if baseline is None:
+                current_name = str(current.get("name", "")).strip()
+                current_version = _to_int(current.get("version", 0), 0)
+                siblings = strategy_service.list_strategy_versions(name=current_name, limit=200)
+                candidates = [
+                    item
+                    for item in siblings
+                    if str(item.get("id", "")) != str(current.get("id", ""))
+                    and _to_int(item.get("version", 0), 0) < current_version
+                ]
+                if candidates:
+                    baseline = sorted(
+                        candidates,
+                        key=lambda item: _to_int(item.get("version", 0), 0),
+                        reverse=True,
+                    )[0]
+                    baseline_source = "previous_version"
+
+        current_metrics = current.get("metrics", {}) if isinstance(current.get("metrics"), dict) else {}
+        baseline_metrics = baseline.get("metrics", {}) if isinstance((baseline or {}).get("metrics"), dict) else {}
+
+        metric_diff = {
+            "trade_count": {
+                "current": _to_int(_pick_metric(current_metrics, "trade_count", "trades"), 0),
+                "baseline": _to_int(_pick_metric(baseline_metrics, "trade_count", "trades"), 0),
+            },
+            "win_rate": {
+                "current": _pick_metric(current_metrics, "win_rate"),
+                "baseline": _pick_metric(baseline_metrics, "win_rate"),
+            },
+            "sharpe": {
+                "current": _pick_metric(current_metrics, "sharpe", "sharpe_ratio"),
+                "baseline": _pick_metric(baseline_metrics, "sharpe", "sharpe_ratio"),
+            },
+            "max_drawdown": {
+                "current": _pick_metric(current_metrics, "max_drawdown"),
+                "baseline": _pick_metric(baseline_metrics, "max_drawdown"),
+            },
+            "net_pnl": {
+                "current": _pick_metric(current_metrics, "net_pnl", "total_pnl"),
+                "baseline": _pick_metric(baseline_metrics, "net_pnl", "total_pnl"),
+            },
+        }
+        for item in metric_diff.values():
+            item["delta"] = round(_to_float(item.get("current", 0.0)) - _to_float(item.get("baseline", 0.0)), 6)
+
+        current_params = current.get("parameters", {}) if isinstance(current.get("parameters"), dict) else {}
+        baseline_params = baseline.get("parameters", {}) if isinstance((baseline or {}).get("parameters"), dict) else {}
+        parameter_diff = _build_parameter_diff(current_params, baseline_params)
+        current_content = str(current.get("content", "") or "")
+        baseline_content = str((baseline or {}).get("content", "") or "")
+        content_diff = _build_content_diff(current_content=current_content, baseline_content=baseline_content)
+
+        current_report = _get_latest_report(strategy_service, str(current.get("id", "")))
+        baseline_report = _get_latest_report(strategy_service, str((baseline or {}).get("id", ""))) if baseline else None
+        current_report_id = str((current_report or {}).get("id", ""))
+        baseline_report_id = str((baseline_report or {}).get("id", ""))
+        compare_ready = bool(current_report_id and baseline_report_id)
+        compare_page_url = (
+            f"/backtest?compareA={quote_plus(current_report_id)}&compareB={quote_plus(baseline_report_id)}"
+            if compare_ready
+            else ""
+        )
+
+        payload = {
+            "strategy_id": str(current.get("id", "")),
+            "baseline_id": str((baseline or {}).get("id", "")),
+            "baseline_source": baseline_source,
+            "has_baseline": baseline is not None,
+            "current": {
+                "id": str(current.get("id", "")),
+                "name": str(current.get("name", "")),
+                "version": _to_int(current.get("version", 0), 0),
+                "status": str(current.get("status", "")),
+            },
+            "baseline": (
+                {
+                    "id": str(baseline.get("id", "")),
+                    "name": str(baseline.get("name", "")),
+                    "version": _to_int(baseline.get("version", 0), 0),
+                    "status": str(baseline.get("status", "")),
+                }
+                if baseline
+                else None
+            ),
+            "metric_diff": metric_diff,
+            "parameter_diff": parameter_diff,
+            "content_changed": bool(content_diff.get("changed", False)),
+            "content_diff": content_diff,
+            "backtest_compare": {
+                "current_report_id": current_report_id,
+                "baseline_report_id": baseline_report_id,
+                "current_report_created_at": _to_float((current_report or {}).get("created_at", 0.0), 0.0),
+                "baseline_report_created_at": _to_float((baseline_report or {}).get("created_at", 0.0), 0.0),
+                "compare_ready": compare_ready,
+                "compare_page_url": compare_page_url,
+                "current_report_url": f"/api/strategy/backtests/{current_report_id}" if current_report_id else "",
+                "baseline_report_url": f"/api/strategy/backtests/{baseline_report_id}" if baseline_report_id else "",
+            },
+        }
+        return ok_response(payload, code="STRATEGY_VERSION_DIFF_OK")
+    except TradingServiceError as exc:
+        return _error_json(exc)
+    except Exception as exc:  # noqa: BLE001
+        return JSONResponse(
+            status_code=500,
+            content=error_response("INTERNAL_ERROR", "策略版本差异计算失败", {"error": str(exc)}),
+        )
+
+
 @router.post("/backtest")
 async def run_strategy_backtest(req: StrategyBacktestRequest, request: Request):
     try:
-        store = _get_strategy_store(request)
-        runner = _get_backtest_runner(request)
-        strategy = store.get_strategy(req.strategy_id)
+        strategy_service = _get_strategy_service(request)
+        strategy = strategy_service.get_strategy(req.strategy_id)
         merged_params = {
             **(strategy.get("parameters", {}) if isinstance(strategy.get("parameters", {}), dict) else {}),
             **(req.parameters_override or {}),
@@ -306,7 +717,7 @@ async def run_strategy_backtest(req: StrategyBacktestRequest, request: Request):
         merged_params["strategy_template"] = resolved_template
 
         bars = [{"timestamp": item.ts, "close": item.close, "signal": item.signal} for item in req.bars]
-        report = runner.run(
+        report = strategy_service.run_backtest(
             strategy_id=strategy["id"],
             strategy_name=strategy["name"],
             strategy_version=strategy["version"],
@@ -326,7 +737,7 @@ async def run_strategy_backtest(req: StrategyBacktestRequest, request: Request):
 
         archive_record = None
         if req.archive_report:
-            archive_record = store.archive_backtest_report(
+            archive_record = strategy_service.archive_backtest_report(
                 strategy_id=strategy["id"],
                 report=report,
                 market=resolved_market,
@@ -365,7 +776,7 @@ async def run_strategy_backtest(req: StrategyBacktestRequest, request: Request):
                     "strategy_template": archive_record.get("strategy_template", ""),
                     "run_tag": archive_record.get("run_tag", ""),
                 }
-            store.update_strategy_metrics(strategy["id"], metrics_update, merge=True)
+            strategy_service.update_strategy_metrics(strategy["id"], metrics_update, merge=True)
         return ok_response(
             {
                 "strategy": strategy,
@@ -393,9 +804,8 @@ async def run_strategy_backtest(req: StrategyBacktestRequest, request: Request):
 @router.post("/backtest/grid")
 async def run_strategy_backtest_grid(req: StrategyBacktestGridRequest, request: Request):
     try:
-        store = _get_strategy_store(request)
-        runner = _get_backtest_runner(request)
-        strategy = store.get_strategy(req.strategy_id)
+        strategy_service = _get_strategy_service(request)
+        strategy = strategy_service.get_strategy(req.strategy_id)
         parameter_sets = _build_parameter_sets(req)
         bars = [{"timestamp": item.ts, "close": item.close, "signal": item.signal} for item in req.bars]
 
@@ -410,7 +820,7 @@ async def run_strategy_backtest_grid(req: StrategyBacktestGridRequest, request: 
             merged_params = {**base_params, **dict(patch)}
             merged_params["market"] = resolved_market
             merged_params["strategy_template"] = resolved_template
-            report = runner.run(
+            report = strategy_service.run_backtest(
                 strategy_id=strategy["id"],
                 strategy_name=strategy["name"],
                 strategy_version=strategy["version"],
@@ -430,7 +840,7 @@ async def run_strategy_backtest_grid(req: StrategyBacktestGridRequest, request: 
 
             gate_eval: dict[str, Any] = {}
             if req.evaluate_gate:
-                gate_eval = store.evaluate_version_gate(
+                gate_eval = strategy_service.evaluate_version_gate(
                     strategy["id"],
                     metrics=metrics,
                     overrides=dict(req.gate_overrides or {}),
@@ -442,7 +852,7 @@ async def run_strategy_backtest_grid(req: StrategyBacktestGridRequest, request: 
             archive_record: dict[str, Any] = {}
             if req.archive_report:
                 suffix = f"{req.run_tag}#{index:03d}" if str(req.run_tag or "").strip() else f"grid#{index:03d}"
-                archive = store.archive_backtest_report(
+                archive = strategy_service.archive_backtest_report(
                     strategy_id=strategy["id"],
                     report=report,
                     market=resolved_market,
@@ -515,7 +925,7 @@ async def run_strategy_backtest_grid(req: StrategyBacktestGridRequest, request: 
                     "strategy_template": best["archive"].get("strategy_template", ""),
                     "run_tag": best["archive"].get("run_tag", ""),
                 }
-            store.update_strategy_metrics(strategy["id"], metrics_update, merge=True)
+            strategy_service.update_strategy_metrics(strategy["id"], metrics_update, merge=True)
 
         return ok_response(
             {
@@ -555,8 +965,8 @@ async def run_strategy_backtest_grid(req: StrategyBacktestGridRequest, request: 
 @router.post("/versions/{strategy_id}/gate")
 async def evaluate_strategy_gate(strategy_id: str, req: StrategyGateRequest, request: Request):
     try:
-        store = _get_strategy_store(request)
-        payload = store.evaluate_version_gate(
+        strategy_service = _get_strategy_service(request)
+        payload = strategy_service.evaluate_version_gate(
             strategy_id,
             metrics=req.metrics or None,
             overrides=_collect_gate_overrides(req),
@@ -578,8 +988,8 @@ async def evaluate_strategy_gate(strategy_id: str, req: StrategyGateRequest, req
 @router.post("/versions/{strategy_id}/transition")
 async def transition_strategy_version(strategy_id: str, req: StrategyTransitionRequest, request: Request):
     try:
-        store = _get_strategy_store(request)
-        payload = store.transition_strategy_status(
+        strategy_service = _get_strategy_service(request)
+        payload = strategy_service.transition_strategy_status(
             strategy_id,
             target_status=req.target_status,
             operator=req.operator,
@@ -610,8 +1020,8 @@ async def list_backtest_reports(
     limit: int = Query(default=50, ge=1, le=500),
 ):
     try:
-        store = _get_strategy_store(request)
-        rows = store.list_backtest_reports(
+        strategy_service = _get_strategy_service(request)
+        rows = strategy_service.list_backtest_reports(
             strategy_id=strategy_id,
             strategy_name=strategy_name,
             market=market,
@@ -632,8 +1042,8 @@ async def list_backtest_reports(
 @router.get("/backtests/{report_id}")
 async def get_backtest_report(report_id: str, request: Request):
     try:
-        store = _get_strategy_store(request)
-        payload = store.get_backtest_report(report_id)
+        strategy_service = _get_strategy_service(request)
+        payload = strategy_service.get_backtest_report(report_id)
         return ok_response(payload, code="STRATEGY_BACKTEST_REPORT_OK")
     except TradingServiceError as exc:
         return _error_json(exc)
@@ -647,17 +1057,17 @@ async def get_backtest_report(report_id: str, request: Request):
 @router.post("/versions/{strategy_id}/promote")
 async def promote_strategy_version(strategy_id: str, req: StrategyPromoteRequest, request: Request):
     try:
-        store = _get_strategy_store(request)
+        strategy_service = _get_strategy_service(request)
         gate_result = None
         if req.run_gate and not req.force:
-            gate_result = store.evaluate_version_gate(
+            gate_result = strategy_service.evaluate_version_gate(
                 strategy_id,
                 overrides=_collect_gate_overrides(req),
                 persist=True,
                 market=req.market,
                 strategy_template=req.strategy_template,
             )
-        payload = store.promote_strategy_version(
+        payload = strategy_service.promote_strategy_version(
             strategy_id,
             operator=req.operator,
             force=bool(req.force),
@@ -685,40 +1095,76 @@ async def search_knowledge(
     request: Request,
     type: str = Query("all"),
     q: str = Query(""),
-    top_k: int = Query(10),
+    top_k: int = Query(10, ge=1, le=100),
 ):
-    """Search knowledge base (LanceDB / file-based fallback)."""
-    import time
+    """Search knowledge base and return frontend-friendly normalized entries."""
+    _ = request
+    knowledge_type = _normalize_knowledge_type(type)
+    query_text = str(q or "").strip()
     try:
-        # Try to load KnowledgeCore
-        from src.evolution.knowledge_core import KnowledgeCore
-        kb = KnowledgeCore()
-        if type == "patterns":
-            results = kb.search_patterns(q, top_k)
-        elif type == "lessons":
-            results = kb.search_lessons(q, top_k)
-        elif type == "rules":
-            results = kb.search_rules(q, top_k)
+        knowledge_core_cls = _load_knowledge_core()
+        kb = knowledge_core_cls()
+    except ImportError as exc:
+        logger.warning("KnowledgeCore import failed, return empty knowledge list: %s", exc)
+        return ok_response([], code="KNOWLEDGE_CORE_UNAVAILABLE")
+    except Exception as exc:  # noqa: BLE001
+        return JSONResponse(
+            status_code=500,
+            content=error_response("INTERNAL_ERROR", "Knowledge core init failed", {"error": str(exc)}),
+        )
+
+    try:
+        if knowledge_type == "pattern":
+            raw_results = kb.search_patterns(query_text, top_k)
+        elif knowledge_type == "lesson":
+            raw_results = kb.search_lessons(query_text, top_k)
+        elif knowledge_type == "rule":
+            raw_results = kb.search_rules(query_text, top_k)
         else:
-            results = kb.search_all(q, top_k)
-        return ok_response(results)
-    except ImportError:
-        # Fallback: return mock entries for frontend demo
-        logger.info("KnowledgeCore not available, returning mock entries")
-        mock_entries = []
-        for i in range(min(top_k, 5)):
-            mock_entries.append({
-                "id": f"kb_{type}_{i}",
-                "entry_type": type if type != "all" else ["pattern", "lesson", "rule"][i % 3],
-                "title": f"Sample {type} entry #{i+1}",
-                "content": f"This is a mock knowledge entry for query '{q}'.",
-                "tags": ["mock", "demo"],
-                "relevance_score": round(0.9 - i * 0.1, 2),
-                "created_at": time.time() - i * 3600,
-            })
-        return ok_response({"results": mock_entries, "total": len(mock_entries)})
+            raw_results = kb.search_all(query_text, top_k)
+
+        payload = _flatten_knowledge_results(raw_results, requested_type=knowledge_type, top_k=top_k)
+        return ok_response(payload, code="KNOWLEDGE_SEARCH_OK")
     except Exception as exc:
         return JSONResponse(
             status_code=500,
             content=error_response("INTERNAL_ERROR", "Knowledge search failed", {"error": str(exc)}),
         )
+
+
+# ---------------------------------------------------------------------------
+# Strategy History API (Evolution Center — frontend /api/strategy/history)
+# ---------------------------------------------------------------------------
+
+@router.get("/history")
+async def list_strategy_history(
+    request: Request,
+    limit: int = Query(50, ge=1, le=200),
+):
+    """返回策略演化事件历史，供 EvolutionCenter 前端消费。"""
+    strategy_service = _get_strategy_service(request)
+    try:
+        versions = strategy_service.list_strategy_versions(limit=limit)
+        events = []
+        _TYPE_MAP = {
+            "BUILT_IN": "BASE",
+            "MUTATION": "MUTATION",
+            "CROSSOVER": "CROSSOVER",
+            "BACKTEST": "FIX",
+        }
+        for v in versions:
+            origin = (v.get("origin") or "BUILT_IN").upper()
+            events.append({
+                "id": v["id"],
+                "timestamp": v.get("created_at", 0),
+                "type": _TYPE_MAP.get(origin, "FIX"),
+                "strategy_name": v.get("name", ""),
+                "message": f"v{v.get('version', 1)} {origin.lower()} — status: {v.get('status', 'draft')}",
+            })
+        return ok_response(events)
+    except Exception as exc:
+        return JSONResponse(
+            status_code=500,
+            content=error_response("INTERNAL_ERROR", "Failed to load strategy history", {"error": str(exc)}),
+        )
+

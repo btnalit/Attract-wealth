@@ -12,8 +12,7 @@ import {
 import { cn } from '../lib/utils';
 import { PageTitle } from '../components/PageTitle';
 import { Button } from '../components/ui/button';
-
-const API_BASE = import.meta.env.VITE_API_BASE_URL || '';
+import { monitorApi } from '../services/api';
 
 // --- Types ---
 interface RiskGaugeData { label: string; current: number; threshold: number; color: string; unit: string }
@@ -25,6 +24,66 @@ const SEVERITY_COLOR: Record<string, { text: string; glow: string }> = {
   'Low': { text: 'text-white/70', glow: 'shadow-[0_0_8px_rgba(255,255,255,0.2)] border-white/20' },
   'Medium': { text: 'text-warn-gold', glow: 'shadow-[0_0_10px_rgba(255,215,0,0.3)] border-warn-gold/30' },
   'High': { text: 'text-down-red', glow: 'shadow-[0_0_12px_rgba(255,0,85,0.4)] border-down-red/40' },
+};
+
+const SWITCH_META: Record<string, { label: string; description: string }> = {
+  auto_stop: {
+    label: 'Auto Stop-Loss',
+    description: 'Emergency sell if loss > 5% on single position',
+  },
+  blacklist: {
+    label: 'Blacklist Filter',
+    description: 'Prevent trading restricted securities',
+  },
+  deviation: {
+    label: 'Price Deviation Check',
+    description: 'Block orders deviating > 2% from market price',
+  },
+  global_pause: {
+    label: 'Global Pause',
+    description: 'Pause all trading actions immediately',
+  },
+  trading_pause: {
+    label: 'Trading Pause',
+    description: 'Pause order submission while keeping monitoring active',
+  },
+  daily_reset: {
+    label: 'Daily Reset',
+    description: 'Manual daily counters reset for risk gate',
+  },
+};
+
+const SWITCH_ORDER = ['auto_stop', 'blacklist', 'deviation', 'global_pause', 'trading_pause', 'daily_reset'];
+
+const parsePayloadData = <T,>(payload: unknown): T => {
+  if (payload && typeof payload === 'object' && 'data' in payload) {
+    return (payload as { data: T }).data;
+  }
+  return payload as T;
+};
+
+const toSwitches = (payload: unknown): RiskSwitch[] => {
+  if (!payload || typeof payload !== 'object') {
+    return SWITCH_ORDER.slice(0, 3).map((id) => ({
+      id,
+      label: SWITCH_META[id]?.label || id,
+      description: SWITCH_META[id]?.description || '',
+      enabled: id !== 'deviation',
+    }));
+  }
+
+  const source = payload as Record<string, unknown>;
+  const orderedIds = [
+    ...SWITCH_ORDER.filter((id) => id in source),
+    ...Object.keys(source).filter((id) => !SWITCH_ORDER.includes(id)),
+  ];
+
+  return orderedIds.map((id) => ({
+    id,
+    label: SWITCH_META[id]?.label || id,
+    description: SWITCH_META[id]?.description || 'Runtime risk switch',
+    enabled: Boolean(source[id]),
+  }));
 };
 
 // --- HELPER COMPONENT: GAUGE ---
@@ -77,44 +136,33 @@ export const AuditRisk: FC = () => {
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const [riskRes, auditRes] = await Promise.all([
-        fetch(`${API_BASE}/api/v1/monitor/risk`),
-        fetch(`${API_BASE}/api/v1/monitor/audit?limit=20`),
+      const [riskPayload, auditPayload] = await Promise.all([
+        monitorApi.getRisk<Record<string, unknown>>(),
+        monitorApi.getAuditLogs<Array<Record<string, unknown>>>(20),
       ]);
-
-      if (riskRes.ok) {
-        const json = await riskRes.json();
-        const d = json.data || {};
-        setGauges([
-          { label: '最大回撤', current: (d.max_drawdown_current || 0.024) * 100, threshold: (d.max_drawdown_threshold || 0.10) * 100, color: 'text-up-green', unit: '%' },
-          { label: '单仓限制', current: (d.position_limit_current || 0.15) * 100, threshold: (d.position_limit_threshold || 0.30) * 100, color: 'text-neon-cyan', unit: '%' },
-          { label: '每日交易频次', current: d.trade_frequency_day || 12, threshold: 500, color: 'text-warn-gold', unit: 'req' },
-          { label: 'API 速率限制', current: d.api_rate_limit_percent || 42.0, threshold: 100, color: 'text-neon-magenta', unit: '%' },
-        ]);
-      }
-
-      if (auditRes.ok) {
-        const json = await auditRes.json();
-        const raw = json.data || [];
-        setAuditLogs(raw.map((l: any, i: number) => ({
-          id: `LOG_${i}`,
-          time: new Date(l.timestamp * 1000).toLocaleTimeString(),
-          type: l.type,
-          severity: l.severity,
-          description: l.message,
-          payload: l.payload
-        })));
-      }
-
-      // Initial switches
-      setSwitches([
-        { id: 'auto_stop', label: 'Auto Stop-Loss', description: 'Emergency sell if loss > 5% on single position', enabled: true },
-        { id: 'blacklist', label: 'Blacklist Filter', description: 'Prevent trading restricted securities', enabled: true },
-        { id: 'deviation', label: 'Price Deviation Check', description: 'Block orders deviating > 2% from market price', enabled: false },
+      const d = parsePayloadData<Record<string, unknown>>(riskPayload) || {};
+      setGauges([
+        { label: '最大回撤', current: Number(d.max_drawdown_current ?? 0.024) * 100, threshold: Number(d.max_drawdown_threshold ?? 0.10) * 100, color: 'text-up-green', unit: '%' },
+        { label: '单仓限制', current: Number(d.position_limit_current ?? 0.15) * 100, threshold: Number(d.position_limit_threshold ?? 0.30) * 100, color: 'text-neon-cyan', unit: '%' },
+        { label: '每日交易频次', current: Number(d.trade_frequency_day ?? 12), threshold: 500, color: 'text-warn-gold', unit: 'req' },
+        { label: 'API 速率限制', current: Number(d.api_rate_limit_percent ?? 42.0), threshold: 100, color: 'text-neon-magenta', unit: '%' },
       ]);
+      setSwitches(toSwitches(d.switches));
+
+      const raw = parsePayloadData<Array<Record<string, unknown>>>(auditPayload);
+      const safeRaw = Array.isArray(raw) ? raw : [];
+      setAuditLogs(safeRaw.map((l: any, i: number) => ({
+        id: `LOG_${i}`,
+        time: new Date((Number(l.timestamp) || 0) * 1000).toLocaleTimeString(),
+        type: String(l.type ?? ''),
+        severity: String(l.severity ?? ''),
+        description: String(l.message ?? ''),
+        payload: l.payload
+      })));
 
     } catch (err) {
       console.warn('[AuditRisk] API fetch failed:', err);
+      setSwitches(toSwitches(null));
     } finally {
       setLoading(false);
     }
@@ -127,12 +175,12 @@ export const AuditRisk: FC = () => {
     if (!s) return;
     
     try {
-      const res = await fetch(`${API_BASE}/api/v1/monitor/risk/toggle`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: id, enabled: !s.enabled })
-      });
-      if (res.ok) {
+      const payload = await monitorApi.toggleRiskSwitch<Record<string, unknown>>({ name: id, enabled: !s.enabled });
+      const parsed = parsePayloadData<Record<string, unknown>>(payload) || {};
+      const serverSwitches = parsed.switches;
+      if (serverSwitches && typeof serverSwitches === 'object') {
+        setSwitches(toSwitches(serverSwitches));
+      } else {
         setSwitches(prev => prev.map(item => item.id === id ? { ...item, enabled: !item.enabled } : item));
       }
     } catch (err) {

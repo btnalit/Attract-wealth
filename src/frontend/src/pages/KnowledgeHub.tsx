@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Search, BookOpen, Trash2, Save, BarChart2, Info, Loader2 } from 'lucide-react';
 import { cn } from '../lib/utils';
-
-const API_BASE = import.meta.env.VITE_API_BASE_URL || '';
+import { strategyApi } from '../services/api';
 
 interface KnowledgeItem {
   id: string;
@@ -82,15 +81,13 @@ export const KnowledgeHub: React.FC = () => {
       await new Promise(resolve => setTimeout(resolve, 600));
       
       const typeParam = type.toLowerCase() + 's';
-      const response = await fetch(`${API_BASE}/api/strategy/knowledge?type=${typeParam}&q=${query}`);
-      
-      if (response.ok) {
-        const result = await response.json();
-        const newData = result.data || (Array.isArray(result) ? result : []);
-        setItems(newData.length > 0 ? newData : mockKnowledge.filter(item => item.type === type));
-      } else {
-        throw new Error('API not available');
-      }
+      const result = await strategyApi.getKnowledge<any>(typeParam, query);
+      const newData = Array.isArray(result?.data)
+        ? result.data
+        : Array.isArray(result)
+          ? result
+          : [];
+      setItems(newData.length > 0 ? newData : mockKnowledge.filter(item => item.type === type));
     } catch (error) {
       console.warn('Knowledge API failed, falling back to mock:', error);
       // Fallback to mock + filter

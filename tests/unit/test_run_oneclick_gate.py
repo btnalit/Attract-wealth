@@ -26,7 +26,7 @@ def _build_args(*, no_stability_probe: bool, no_budget_recovery_probe: bool) -> 
         no_stability_probe=no_stability_probe,
         no_budget_recovery_probe=no_budget_recovery_probe,
         probe_iterations=80,
-        probe_failure_every=4,
+        probe_failure_every=9,
         probe_rate_limit_per_minute=90,
         probe_max_wait_ms=0,
         probe_retry_count=2,
@@ -134,3 +134,50 @@ def test_load_env_file_does_not_override_existing_value(monkeypatch):
     assert "A" in loaded
     assert "B" not in loaded
     env_path.unlink(missing_ok=True)
+
+
+def test_resolve_release_basis_distinguishes_full_and_baseline():
+    module = _load_module()
+    full_args = _build_args(no_stability_probe=False, no_budget_recovery_probe=False)
+    full_args.no_reconcile = False
+    assert module._resolve_release_basis(full_args) == "full"
+
+    baseline_args = _build_args(no_stability_probe=False, no_budget_recovery_probe=False)
+    baseline_args.no_reconcile = True
+    assert module._resolve_release_basis(baseline_args) == "baseline"
+
+
+def test_build_release_decision_for_precheck_fail_fast():
+    module = _load_module()
+    decision = module._build_release_decision(
+        basis="full",
+        all_passed=False,
+        precheck_returncode=2,
+        matrix_returncode=None,
+        hints=["precheck failed"],
+    )
+    assert decision["policy"] == "single_basis_v1"
+    assert decision["basis"] == "full"
+    assert decision["decision"] == "NO_GO"
+    assert decision["reason_code"] == "PRECHECK_FAILED"
+
+
+def test_build_release_decision_for_baseline_success():
+    module = _load_module()
+    decision = module._build_release_decision(
+        basis="baseline",
+        all_passed=True,
+        precheck_returncode=0,
+        matrix_returncode=0,
+        hints=[],
+    )
+    assert decision["decision"] == "GO"
+    assert decision["reason_code"] == "GATE_ALL_PASSED"
+    assert decision["basis"] == "baseline"
+
+
+def test_parse_args_defaults_probe_failure_every_is_9(monkeypatch):
+    module = _load_module()
+    monkeypatch.setattr(sys, "argv", ["run_oneclick_gate.py"])
+    args = module._parse_args()
+    assert args.probe_failure_every == 9

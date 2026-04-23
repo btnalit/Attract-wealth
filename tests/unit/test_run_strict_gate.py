@@ -80,7 +80,7 @@ def test_build_matrix_command_contains_budget_probe_flags():
             "force_live_order": False,
             "with_stability_probe": False,
             "probe_iterations": 80,
-            "probe_failure_every": 4,
+            "probe_failure_every": 9,
             "probe_rate_limit_per_minute": 90,
             "probe_max_wait_ms": 0,
             "probe_retry_count": 2,
@@ -106,3 +106,10 @@ def test_build_matrix_command_contains_budget_probe_flags():
     assert "--with-budget-recovery-probe" in text
     assert "--budget-probe-cycles 5" in text
     assert "--budget-probe-min-success-rate 0.95" in text
+
+
+def test_parse_args_defaults_probe_failure_every_is_9(monkeypatch):
+    module = _load_module()
+    monkeypatch.setattr(sys, "argv", ["run_strict_gate.py"])
+    args = module._parse_args()
+    assert args.probe_failure_every == 9

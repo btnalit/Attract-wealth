@@ -218,3 +218,10 @@ def test_run_p1_p4_closure_strict_mode_blocks_warn(monkeypatch):
     assert "--profile" in captured_p1_cmd
     assert "simulation_strict" in captured_p1_cmd
     assert "--seed-sample-evidence" in captured_p3_cmd
+
+
+def test_parse_args_defaults_p2_probe_failure_every_is_9(monkeypatch):
+    module = _load_module()
+    monkeypatch.setattr(sys, "argv", ["run_p1_p4_closure.py"])
+    args = module._parse_args()
+    assert args.p2_probe_failure_every == 9

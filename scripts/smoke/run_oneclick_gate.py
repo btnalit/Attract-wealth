@@ -248,6 +248,47 @@ def _build_check_only_cmd(args: argparse.Namespace, matrix_output: Path) -> list
     return cmd
 
 
+def _resolve_release_basis(args: argparse.Namespace) -> str:
+    if bool(args.no_reconcile) or bool(args.no_stability_probe) or bool(args.no_budget_recovery_probe):
+        return "baseline"
+    return "full"
+
+
+def _build_release_decision(
+    *,
+    basis: str,
+    all_passed: bool,
+    precheck_returncode: int | None,
+    matrix_returncode: int | None,
+    hints: list[str],
+) -> dict[str, Any]:
+    if precheck_returncode not in (None, 0) and matrix_returncode is None:
+        decision = "NO_GO"
+        reason_code = "PRECHECK_FAILED"
+        summary = "precheck failed before matrix run"
+    elif all_passed:
+        decision = "GO"
+        reason_code = "GATE_ALL_PASSED"
+        summary = "all gate checks passed under current basis"
+    else:
+        decision = "NO_GO"
+        reason_code = "GATE_FAILED"
+        summary = "gate checks failed under current basis"
+
+    return {
+        "policy": "single_basis_v1",
+        "basis": str(basis),
+        "decision": decision,
+        "reason_code": reason_code,
+        "all_passed": bool(all_passed),
+        "precheck_returncode": precheck_returncode,
+        "matrix_returncode": matrix_returncode,
+        "blockers_count": len(hints),
+        "blockers": hints,
+        "summary": summary,
+    }
+
+
 def _open_log(path: Path) -> TextIO:
     path.parent.mkdir(parents=True, exist_ok=True)
     return path.open("a", encoding="utf-8")
@@ -262,7 +303,7 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--no-stability-probe", action="store_true")
     parser.add_argument("--no-budget-recovery-probe", action="store_true")
     parser.add_argument("--probe-iterations", type=int, default=80)
-    parser.add_argument("--probe-failure-every", type=int, default=4)
+    parser.add_argument("--probe-failure-every", type=int, default=9)
     parser.add_argument("--probe-rate-limit-per-minute", type=int, default=90)
     parser.add_argument("--probe-max-wait-ms", type=int, default=0)
     parser.add_argument("--probe-retry-count", type=int, default=2)
@@ -331,6 +372,7 @@ def main() -> int:
         env_status["loaded_keys"] = loaded_keys
 
     channels = _split_channels(args.channels)
+    release_basis = _resolve_release_basis(args)
     started_at = _iso_now()
     matrix_path = _resolve_path(args.matrix_output)
     report_path = _resolve_path(args.report_output)
@@ -399,10 +441,18 @@ def main() -> int:
         precheck_cmd = _build_check_only_cmd(args, matrix_path)
         precheck_proc = subprocess.run(precheck_cmd, check=False, cwd=str(PROJECT_ROOT))
         if precheck_proc.returncode != 0 and args.fail_fast_precheck:
+            release_decision = _build_release_decision(
+                basis=release_basis,
+                all_passed=False,
+                precheck_returncode=precheck_proc.returncode,
+                matrix_returncode=None,
+                hints=["前置校验失败，已 fail-fast；请先修复 precheck 提示后重试。"],
+            )
             report = {
                 "report_version": "1.2",
                 "started_at": started_at,
                 "finished_at": _iso_now(),
+                "release_decision": release_decision,
                 "inputs": {
                     "channels": channels,
                     "include_order_probe": bool(args.include_order_probe),
@@ -412,6 +462,7 @@ def main() -> int:
                     "no_budget_recovery_probe": bool(args.no_budget_recovery_probe),
                     "auto_start_ths_bridge": bool(args.auto_start_ths_bridge),
                     "keep_bridge": bool(args.keep_bridge),
+                    "release_basis": release_basis,
                     "env_file": env_status,
                     "precheck_first": True,
                     "fail_fast_precheck": True,
@@ -422,6 +473,7 @@ def main() -> int:
                     "all_passed": False,
                     "counts": {},
                     "hints": ["前置校验失败，已 fail-fast；请先修复 precheck 提示后重试。"],
+                    "release_decision": release_decision,
                     "command": precheck_cmd,
                     "precheck_returncode": precheck_proc.returncode,
                     "matrix_returncode": None,
@@ -447,13 +499,22 @@ def main() -> int:
 
     matrix = _load_json(matrix_path)
     hints = _extract_hints_from_matrix(matrix) if matrix else []
+    all_passed = bool(matrix.get("all_passed", False)) if matrix else False
+    release_decision = _build_release_decision(
+        basis=release_basis,
+        all_passed=all_passed,
+        precheck_returncode=precheck_proc.returncode if precheck_proc is not None else None,
+        matrix_returncode=proc.returncode,
+        hints=hints,
+    )
 
     gate_summary = {
         "returncode": proc.returncode,
         "matrix_report": str(matrix_path),
-        "all_passed": bool(matrix.get("all_passed", False)) if matrix else False,
+        "all_passed": all_passed,
         "counts": matrix.get("counts", {}) if matrix else {},
         "hints": hints,
+        "release_decision": release_decision,
         "command": cmd,
         "precheck_returncode": precheck_proc.returncode if precheck_proc is not None else None,
         "matrix_returncode": proc.returncode,
@@ -479,6 +540,7 @@ def main() -> int:
         "report_version": "1.2",
         "started_at": started_at,
         "finished_at": _iso_now(),
+        "release_decision": release_decision,
         "inputs": {
             "channels": channels,
             "include_order_probe": bool(args.include_order_probe),
@@ -488,6 +550,7 @@ def main() -> int:
             "no_budget_recovery_probe": bool(args.no_budget_recovery_probe),
             "auto_start_ths_bridge": bool(args.auto_start_ths_bridge),
             "keep_bridge": bool(args.keep_bridge),
+            "release_basis": release_basis,
             "env_file": env_status,
             "precheck_first": bool(args.precheck_first),
             "fail_fast_precheck": bool(args.fail_fast_precheck),

@@ -437,6 +437,11 @@ def test_get_trade_snapshot(monkeypatch):
     assert "positions" in snapshot
     assert "orders" in snapshot
     assert "reconciliation_guard" in snapshot
+    assert snapshot["total_value"] == 1_000_000.0
+    assert snapshot["daily_pnl"] == 0.0
+    assert snapshot["holding_value"] == 0.0
+    assert snapshot["cash"] == 1_000_000.0
+    assert isinstance(snapshot["strategies"], list)
 
 
 def test_execute_persists_evidence_with_trace_and_policy(monkeypatch):

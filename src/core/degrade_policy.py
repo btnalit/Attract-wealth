@@ -48,8 +48,8 @@ def _collect_analyst_llm_fallback_count(state: dict[str, Any]) -> int:
         payload = (
             value.model_dump()
             if hasattr(value, "model_dump")
-            else value.dict()
-            if hasattr(value, "dict")
+            else dict(value)
+            if isinstance(value, dict)
             else value
         )
         if not isinstance(payload, dict):

@@ -65,3 +65,47 @@ def test_resolve_reconcile_initial_cash_uses_zero_for_live_empty_balance():
         explicit_initial_cash=None,
     )
     assert result == 0.0
+
+
+def test_bootstrap_simulation_broker_from_ledger_applies_snapshot(monkeypatch):
+    module = _load_module()
+
+    class _Broker:
+        channel_name = "simulation"
+
+        def __init__(self):
+            self.loaded: dict[str, object] = {}
+
+        def load_portfolio_snapshot(self, *, cash: float, positions: dict[str, int], reset_orders: bool = False):
+            self.loaded = {
+                "cash": cash,
+                "positions": positions,
+                "reset_orders": reset_orders,
+            }
+
+    monkeypatch.setattr(
+        "src.core.trading_ledger.TradingLedger.build_portfolio_snapshot",
+        lambda initial_cash=1_000_000.0, channel="": {"cash": 888_000.0, "positions": {"000001": 300}},
+    )
+
+    broker = _Broker()
+    meta = module._bootstrap_simulation_broker_from_ledger(broker=broker, initial_cash=1_000_000.0)
+    assert meta["applied"] is True
+    assert broker.loaded["cash"] == 888_000.0
+    assert broker.loaded["positions"] == {"000001": 300}
+    assert broker.loaded["reset_orders"] is True
+
+
+def test_bootstrap_simulation_broker_from_ledger_respects_disable_flag(monkeypatch):
+    module = _load_module()
+    monkeypatch.setenv("SMOKE_SIM_RECON_BOOTSTRAP", "false")
+
+    class _Broker:
+        channel_name = "simulation"
+
+        def load_portfolio_snapshot(self, *, cash: float, positions: dict[str, int], reset_orders: bool = False):
+            raise AssertionError("should not be called when bootstrap disabled")
+
+    meta = module._bootstrap_simulation_broker_from_ledger(broker=_Broker(), initial_cash=1_000_000.0)
+    assert meta["applied"] is False
+    assert meta["reason"] == "disabled"

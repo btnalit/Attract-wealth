@@ -204,6 +204,36 @@ class SimulatorBroker(BaseBroker):
             },
         }
 
+    def load_portfolio_snapshot(
+        self,
+        *,
+        cash: float,
+        positions: dict[str, int],
+        reset_orders: bool = False,
+    ) -> None:
+        """
+        从账本快照恢复模拟盘状态。
+
+        仅用于口径对齐，不推断持仓成本价/市值。
+        """
+        self._balance = float(cash)
+        self._positions = {}
+        for ticker, raw_qty in (positions or {}).items():
+            qty = int(raw_qty or 0)
+            if qty <= 0:
+                continue
+            self._positions[str(ticker)] = Position(
+                ticker=str(ticker),
+                quantity=qty,
+                available=qty,
+                avg_cost=0.0,
+                current_price=0.0,
+                market_value=0.0,
+            )
+        self._initial_balance = self._balance
+        if reset_orders:
+            self._orders = []
+
     def new_day(self):
         """模拟新交易日 — T+1可卖"""
         for pos in self._positions.values():

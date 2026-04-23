@@ -92,3 +92,10 @@ def test_main_collects_budget_probe_and_blocks_gate(monkeypatch):
     assert payload["all_passed"] is False
     assert payload["budget_recovery_probe"]["enabled"] is True
     assert payload["budget_recovery_probe"]["status"] == "BLOCK"
+
+
+def test_parse_args_defaults_probe_failure_every_is_9(monkeypatch):
+    module = _load_module()
+    monkeypatch.setattr(sys, "argv", ["run_channel_matrix.py"])
+    args = module._parse_args()
+    assert args.probe_failure_every == 9

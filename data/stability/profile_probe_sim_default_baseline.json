@@ -1,34 +1,35 @@
 {
   "report_version": "1.1",
-  "started_at": "2026-04-09T09:09:46.775988",
-  "duration_ms": 10.933,
-  "iterations": 10,
-  "success_count": 10,
+  "started_at": "2026-04-20T15:52:16.822393",
+  "duration_ms": 277.393,
+  "iterations": 80,
+  "success_count": 80,
   "failed_count": 0,
   "metrics": {
     "current_provider": "flaky",
     "providers": {
       "flaky": {
-        "requests": 10,
-        "success": 10,
+        "requests": 80,
+        "success": 80,
         "failure": 0,
         "empty": 0,
         "fallback_success": 0,
-        "retries": 1,
-        "retry_success": 1,
+        "retries": 9,
+        "retry_success": 9,
         "rate_limited": 0,
+        "last_error_code": "",
         "last_error": "",
-        "last_success_ts": 1775696986.7758412,
+        "last_success_ts": 1776671536.8221946,
         "last_failure_ts": 0.0,
-        "last_latency_ms": 0.01,
+        "last_latency_ms": 0.001,
         "last_rate_limit_reason": "",
         "throttle_sleep_ms": 0.0,
-        "backoff_sleep_ms": 10.0,
+        "backoff_sleep_ms": 270.0,
         "enabled": true,
         "priority": 10,
         "error_rate": 0.0,
         "empty_rate": 0.0,
-        "retry_rate": 0.1,
+        "retry_rate": 0.1125,
         "rate_limited_rate": 0.0
       },
       "stable": {
@@ -40,6 +41,7 @@
         "retries": 0,
         "retry_success": 0,
         "rate_limited": 0,
+        "last_error_code": "",
         "last_error": "",
         "last_success_ts": 0.0,
         "last_failure_ts": 0.0,
@@ -69,8 +71,8 @@
         "current": false
       }
     ],
-    "requests_total": 10,
-    "success_total": 10,
+    "requests_total": 80,
+    "success_total": 80,
     "failure_total": 0,
     "fallback_total": 0,
     "empty_total": 0,
@@ -79,14 +81,16 @@
     "error_rate": 0.0,
     "empty_rate": 0.0,
     "fallback_rate": 0.0,
-    "retries_total": 1,
-    "retry_success_total": 1,
-    "retry_rate": 0.1,
-    "retry_pressure_rate": 0.1,
+    "retries_total": 9,
+    "retry_success_total": 9,
+    "retry_rate": 0.1125,
+    "retry_pressure_rate": 0.1125,
     "rate_limited_total": 0,
     "rate_limited_rate": 0.0,
     "throttle_sleep_ms_total": 0.0,
-    "backoff_sleep_ms_total": 10.0,
+    "backoff_sleep_ms_total": 270.0,
+    "last_failure_code": "",
+    "last_failure_message": "",
     "methods": {
       "get_kline": {
         "requests": 0,
@@ -107,12 +111,12 @@
         "rate_limited": 0
       },
       "get_news": {
-        "requests": 10,
-        "success": 10,
+        "requests": 80,
+        "success": 80,
         "failure": 0,
         "fallback": 0,
         "empty": 0,
-        "retries": 1,
+        "retries": 9,
         "rate_limited": 0
       }
     },
@@ -120,16 +124,19 @@
       "requests": 0,
       "hits": 0,
       "misses": 0,
-      "hit_rate": 0.0
+      "hit_rate": 0.0,
+      "decode_errors": 0,
+      "last_error_code": "",
+      "last_error": ""
     },
     "summary": {
       "current_provider": "flaky",
-      "requests_total": 10,
+      "requests_total": 80,
       "error_rate": 0.0,
       "empty_rate": 0.0,
       "fallback_rate": 0.0,
-      "retry_rate": 0.1,
-      "retry_pressure_rate": 0.1,
+      "retry_rate": 0.1125,
+      "retry_pressure_rate": 0.1125,
       "rate_limited_rate": 0.0,
       "cache_hit_rate": 0.0,
       "quality_alert_level": "none",
@@ -139,7 +146,8 @@
       "tuning_action": "none",
       "quality_feedback_precision": 0.0,
       "quality_false_positive_rate": 0.0,
-      "quality_miss_rate": 0.0
+      "quality_miss_rate": 0.0,
+      "last_failure_code": ""
     },
     "quality": {
       "alert_level": "none",
@@ -181,14 +189,14 @@
       "suggested_env": {},
       "observed": {
         "error_rate": 0.0,
-        "retry_rate": 0.1,
+        "retry_rate": 0.1125,
         "rate_limited_rate": 0.0
       }
     },
     "quality_event": {
       "event_id": "",
       "signature": "none|DATA_QUALITY_OK|",
-      "timestamp": 1775696986.775909,
+      "timestamp": 1776671536.8222551,
       "level": "none",
       "code": "DATA_QUALITY_OK",
       "action": "record",
@@ -208,15 +216,15 @@
     "quality_events": [],
     "runtime_config": {
       "provider_rate_limit": {
-        "per_minute": 120,
+        "per_minute": 90,
         "min_interval_ms": 0,
         "max_wait_ms": 0
       },
       "retry_policy": {
-        "max_retries": 1,
-        "base_ms": 10,
+        "max_retries": 2,
+        "base_ms": 30,
         "factor": 2.0,
-        "max_ms": 80
+        "max_ms": 240
       },
       "quality_thresholds": {
         "error_warn": 0.15,
@@ -243,12 +251,12 @@
   },
   "summary": {
     "current_provider": "flaky",
-    "requests_total": 10,
+    "requests_total": 80,
     "error_rate": 0.0,
     "empty_rate": 0.0,
     "fallback_rate": 0.0,
-    "retry_rate": 0.1,
-    "retry_pressure_rate": 0.1,
+    "retry_rate": 0.1125,
+    "retry_pressure_rate": 0.1125,
     "rate_limited_rate": 0.0,
     "cache_hit_rate": 0.0,
     "quality_alert_level": "none",
@@ -258,7 +266,8 @@
     "tuning_action": "none",
     "quality_feedback_precision": 0.0,
     "quality_false_positive_rate": 0.0,
-    "quality_miss_rate": 0.0
+    "quality_miss_rate": 0.0,
+    "last_failure_code": ""
   },
   "quality": {
     "alert_level": "none",
@@ -300,7 +309,7 @@
     "suggested_env": {},
     "observed": {
       "error_rate": 0.0,
-      "retry_rate": 0.1,
+      "retry_rate": 0.1125,
       "rate_limited_rate": 0.0
     }
   },

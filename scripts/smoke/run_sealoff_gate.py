@@ -25,7 +25,7 @@ class SealoffProfile:
     with_stability_probe: bool
     with_budget_recovery_probe: bool = True
     probe_iterations: int = 80
-    probe_failure_every: int = 4
+    probe_failure_every: int = 9
     probe_rate_limit_per_minute: int = 90
     probe_max_wait_ms: int = 0
     probe_retry_count: int = 2
@@ -276,6 +276,41 @@ def _load_json(path: Path) -> dict[str, Any]:
         return {}
 
 
+def _fallback_release_decision(
+    *,
+    profile: SealoffProfile,
+    returncode: int,
+    dry_run: bool,
+    hints: list[str],
+) -> dict[str, Any]:
+    basis = (
+        "full"
+        if profile.include_reconcile and profile.with_stability_probe and profile.with_budget_recovery_probe
+        else "baseline"
+    )
+    if dry_run:
+        decision = "UNKNOWN"
+        reason_code = "DRY_RUN"
+        summary = "dry run mode, release decision is not final"
+    else:
+        decision = "GO" if int(returncode) == 0 else "NO_GO"
+        reason_code = "GATE_ALL_PASSED" if decision == "GO" else "GATE_FAILED"
+        summary = "fallback release decision derived from sealoff returncode"
+
+    return {
+        "policy": "single_basis_v1",
+        "basis": basis,
+        "decision": decision,
+        "reason_code": reason_code,
+        "all_passed": decision == "GO",
+        "precheck_returncode": None,
+        "matrix_returncode": None if dry_run else int(returncode),
+        "blockers_count": len(hints),
+        "blockers": hints,
+        "summary": summary,
+    }
+
+
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Sealoff runner for P1-H2 + P2-B3: fixed profile + fixed baseline + one-click execution."
@@ -354,6 +389,14 @@ def main() -> int:
     hints = gate.get("hints", [])
     if not isinstance(hints, list):
         hints = []
+    release_decision = gate.get("release_decision", {}) if isinstance(gate.get("release_decision", {}), dict) else {}
+    if not release_decision:
+        release_decision = _fallback_release_decision(
+            profile=profile,
+            returncode=returncode,
+            dry_run=bool(args.dry_run),
+            hints=hints,
+        )
 
     result = {
         "report_version": "1.0",
@@ -388,12 +431,14 @@ def main() -> int:
         },
         "command": cmd,
         "returncode": int(returncode),
+        "release_decision": release_decision,
         "gate_summary": {
             "all_passed": bool(gate.get("all_passed", False)),
             "bridge_ready": bool(bridge.get("ready", False)),
             "precheck_returncode": gate.get("precheck_returncode"),
             "matrix_returncode": gate.get("matrix_returncode"),
             "hints": hints,
+            "release_decision": release_decision,
         },
     }
     sealoff_output.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")

@@ -91,3 +91,10 @@ def test_main_returns_nonzero_when_any_profile_fails(monkeypatch):
     payload = json.loads(output.read_text(encoding="utf-8"))
     assert payload["all_passed"] is False
     assert payload["counts"]["fail"] == 1
+
+
+def test_parse_args_defaults_probe_failure_every_is_9(monkeypatch):
+    module = _load_module()
+    monkeypatch.setattr(sys, "argv", ["run_stability_baseline.py"])
+    args = module._parse_args()
+    assert args.probe_failure_every == 9

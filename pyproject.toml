@@ -92,3 +92,6 @@ select = ["E", "F", "W", "I", "UP", "B", "SIM"]
 testpaths = ["tests"]
 cache_dir = "_pytest_tmp/.pytest_cache"
 addopts = "-ra -p no:tmpdir"
+filterwarnings = [
+    "ignore:Please use `import python_multipart` instead\\.:PendingDeprecationWarning:starlette\\.formparsers",
+]

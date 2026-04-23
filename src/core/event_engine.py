@@ -153,7 +153,8 @@ class EventEngine:
             for job in self.scheduler.get_jobs():
                 if job.id not in self.MANAGED_JOB_IDS:
                     continue
-                next_run = job.next_run_time.isoformat() if job.next_run_time else ""
+                next_run_time = getattr(job, "next_run_time", None)
+                next_run = next_run_time.isoformat() if next_run_time else ""
                 jobs.append({"id": job.id, "next_run_time": next_run})
         return {
             "active_template": self.active_template,

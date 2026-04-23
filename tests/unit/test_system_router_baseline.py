@@ -204,10 +204,62 @@ def test_runtime_includes_budget_recovery_metrics():
     assert data["budget_recovery_metrics"]["recovery_success_rate"] == 1.0
 
 
-def test_dataflow_quality_feedback_endpoints(monkeypatch):
-    from src.dataflows import source_manager as source_manager_module
+def test_system_config_and_wechat_routes_delegate_to_service(monkeypatch):
+    from src.routers import system as system_router
 
-    class _FakeDataManager:
+    captured: dict = {}
+
+    class _FakeSystemConfigService:
+        def load_runtime_config(self):
+            captured["loaded"] = True
+            return {
+                "tushare_token": "ts-token",
+                "wechat_webhook": "https://example.invalid/webhook",
+                "dingtalk_secret": "dt-secret",
+            }
+
+        def save_runtime_config(self, config: dict):
+            captured["saved"] = dict(config)
+            return {
+                "tushare_token": "ts-token-2",
+                "wechat_webhook": "https://example.invalid/webhook-2",
+                "dingtalk_secret": "dt-secret-2",
+            }
+
+        def send_wechat_test(self, webhook_url: str):
+            captured["wechat_webhook_url"] = webhook_url
+            return True
+
+    fake_service = _FakeSystemConfigService()
+    monkeypatch.setattr(system_router, "_get_system_config_service", lambda request: fake_service)
+
+    client = _build_client()
+    get_resp = client.get("/api/system/config")
+    assert get_resp.status_code == 200
+    get_body = get_resp.json()
+    assert get_body["ok"] is True
+    assert get_body["data"]["wechat_webhook"] == "https://example.invalid/webhook"
+    assert captured["loaded"] is True
+
+    put_resp = client.put("/api/system/config", json={"wechat_webhook": "https://example.invalid/new"})
+    assert put_resp.status_code == 200
+    put_body = put_resp.json()
+    assert put_body["ok"] is True
+    assert captured["saved"]["wechat_webhook"] == "https://example.invalid/new"
+    assert put_body["data"]["config"]["wechat_webhook"] == "https://example.invalid/webhook-2"
+
+    test_resp = client.post(
+        "/api/system/notification/test/wechat",
+        json={"webhook_url": "https://example.invalid/ping", "channel": "wechat"},
+    )
+    assert test_resp.status_code == 200
+    assert captured["wechat_webhook_url"] == "https://example.invalid/ping"
+
+
+def test_dataflow_quality_feedback_endpoints(monkeypatch):
+    from src.routers import system as system_router
+
+    class _FakeDataflowService:
         def __init__(self):
             self.feedback_events = []
 
@@ -234,8 +286,8 @@ def test_dataflow_quality_feedback_endpoints(monkeypatch):
             )
             return {"feedback_total": len(self.feedback_events), "precision": 1.0}
 
-    fake_manager = _FakeDataManager()
-    monkeypatch.setattr(source_manager_module, "data_manager", fake_manager)
+    fake_service = _FakeDataflowService()
+    monkeypatch.setattr(system_router, "_get_dataflow_service", lambda request: fake_service)
 
     client = _build_client()
     quality_resp = client.get("/api/system/dataflow/quality")
@@ -264,6 +316,58 @@ def test_dataflow_quality_feedback_endpoints(monkeypatch):
     assert get_body["ok"] is True
     assert get_body["data"]["metrics"]["feedback_total"] == 1
 
+
+def test_dataflow_provider_catalog_and_switch(monkeypatch):
+    from src.routers import system as system_router
+
+    class _FakeDataflowService:
+        def list_provider_catalog(self):
+            return {
+                "current_provider": "akshare",
+                "current_provider_display_name": "AkShare",
+                "providers": [
+                    {"name": "akshare", "display_name": "AkShare", "enabled": True, "current": True, "priority": 10},
+                    {"name": "baostock", "display_name": "BaoStock", "enabled": True, "current": False, "priority": 20},
+                ],
+                "summary": {"requests_total": 0},
+                "quality": {"alert_level": "none"},
+                "tuning": {"action": "none"},
+                "runtime_config": {},
+            }
+
+        def switch_provider(self, *, provider_name: str, persist: bool = False, system_store=None):  # noqa: ARG002
+            if provider_name not in {"akshare", "baostock"}:
+                raise ValueError("provider is required")
+            return {
+                "applied_provider": provider_name,
+                "persisted": bool(persist),
+                "current_provider": provider_name,
+                "current_provider_display_name": "BaoStock" if provider_name == "baostock" else "AkShare",
+                "providers": [],
+                "summary": {},
+                "quality": {},
+                "tuning": {},
+                "runtime_config": {},
+            }
+
+    fake_service = _FakeDataflowService()
+    monkeypatch.setattr(system_router, "_get_dataflow_service", lambda request: fake_service)
+
+    client = _build_client()
+
+    list_resp = client.get("/api/system/dataflow/providers")
+    assert list_resp.status_code == 200
+    list_body = list_resp.json()
+    assert list_body["ok"] is True
+    assert list_body["code"] == "DATAFLOW_PROVIDERS_OK"
+    assert list_body["data"]["current_provider"] == "akshare"
+
+    switch_resp = client.post("/api/system/dataflow/provider/use", json={"provider": "baostock", "persist": False})
+    assert switch_resp.status_code == 200
+    switch_body = switch_resp.json()
+    assert switch_body["ok"] is True
+    assert switch_body["code"] == "DATAFLOW_PROVIDER_SWITCHED"
+    assert switch_body["data"]["applied_provider"] == "baostock"
 
 def test_llm_config_get_and_put():
     client = _build_client()
@@ -294,6 +398,39 @@ def test_llm_config_get_and_put():
     assert put_body["code"] == "LLM_CONFIG_UPDATED"
     assert put_body["data"]["config"]["has_api_key"] is True
     assert "api_key_masked" in put_body["data"]["config"]
+
+
+def test_llm_config_legacy_alias_is_backward_compatible():
+    client = _build_client()
+
+    legacy_get_resp = client.get("/api/system/llm-config")
+    assert legacy_get_resp.status_code == 200
+    legacy_get_body = legacy_get_resp.json()
+    assert legacy_get_body["ok"] is True
+    assert legacy_get_body["code"] == "LLM_CONFIG_COMPAT_OK"
+    assert "base_url" in legacy_get_body["data"]
+    assert "runtime_config" in legacy_get_body["data"]
+
+    legacy_put_resp = client.put(
+        "/api/system/llm-config",
+        json={
+            "provider_name": "deepseek",
+            "base_url": "https://api.deepseek.com",
+            "model": "deepseek-chat",
+            "quick_model": "deepseek-chat",
+            "deep_model": "deepseek-reasoner",
+            "timeout_s": 120,
+            "max_tokens": 4096,
+            "temperature": 0.6,
+            "api_key": "sk-test-1234567890",
+        },
+    )
+    assert legacy_put_resp.status_code == 200
+    legacy_put_body = legacy_put_resp.json()
+    assert legacy_put_body["ok"] is True
+    assert legacy_put_body["code"] == "LLM_CONFIG_COMPAT_UPDATED"
+    assert legacy_put_body["data"]["has_api_key"] is True
+    assert "runtime_config" in legacy_put_body["data"]
 
 
 def test_llm_config_test_endpoint(monkeypatch):

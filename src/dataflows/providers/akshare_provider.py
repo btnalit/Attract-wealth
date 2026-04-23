@@ -6,6 +6,7 @@ AkShare底层数据引擎 (防封特制版)
 """
 import time
 import logging
+import re
 from typing import Dict, Any, List
 import pandas as pd
 import akshare as ak
@@ -78,28 +79,48 @@ class AkShareProvider(DataProvider):
     def get_realtime_quote(self, ticker: str) -> Dict[str, Any]:
         """获取单独个股最新数据"""
         df = self._get_spot_board()
-        if df.empty:
-            return {}
+        numeric_ticker = re.sub(r'[^\d]', '', ticker)
         
-        # akshare 的 ticker 是纯数字 000001
-        match = df[df["代码"] == ticker]
-        if match.empty:
-            return {}
+        if not df.empty:
+            match = df[df["代码"] == numeric_ticker]
+            if not match.empty:
+                row = match.iloc[0]
+                return {
+                    "price": float(row["最新价"]) if pd.notna(row["最新价"]) else 0.0,
+                    "change_pct": float(row["涨跌幅"]) if pd.notna(row["涨跌幅"]) else 0.0,
+                    "volume_chg": float(row["换手率"]) if pd.notna(row["换手率"]) else 0.0,
+                    "amount": float(row["成交额"]) if pd.notna(row["成交额"]) else 0.0,
+                    "name": str(row["名称"])
+                }
+                
+        # 降级方案：由于整板抓取可能被封锁导致为空，尝试单点拉取日线
+        try:
+            market_prefix = "sh" if numeric_ticker.startswith("6") else "sz"
+            symbol = f"{market_prefix}{numeric_ticker}"
+            df_hist = ak.stock_zh_a_daily(symbol=symbol, adjust="qfq")
+            if not df_hist.empty:
+                last_row = df_hist.iloc[-1]
+                prev_row = df_hist.iloc[-2] if len(df_hist) > 1 else last_row
+                close = float(last_row["close"])
+                prev_close = float(prev_row["close"])
+                return {
+                    "price": close,
+                    "change_pct": round((close - prev_close) / prev_close * 100, 2) if prev_close else 0.0,
+                    "volume_chg": float(last_row.get("turnover", 0.0)),
+                    "amount": float(last_row.get("amount", 0.0)),
+                    "name": ticker.upper()
+                }
+        except Exception as e:
+            logger.warning(f"Spot EM fallback failed for {ticker}: {e}")
             
-        row = match.iloc[0]
-        return {
-            "price": float(row["最新价"]) if pd.notna(row["最新价"]) else 0.0,
-            "change_pct": float(row["涨跌幅"]) if pd.notna(row["涨跌幅"]) else 0.0,
-            "volume_chg": float(row["换手率"]) if pd.notna(row["换手率"]) else 0.0,
-            "amount": float(row["成交额"]) if pd.notna(row["成交额"]) else 0.0,
-            "name": str(row["名称"])
-        }
+        return {}
 
     def get_batch_realtime_quotes(self, tickers: List[str]) -> Dict[str, Dict[str, Any]]:
         result = {}
         df = self._get_spot_board()
         for t in tickers:
-            match = df[df["代码"] == t]
+            numeric_ticker = re.sub(r'[^\d]', '', t)
+            match = df[df["代码"] == numeric_ticker]
             if not match.empty:
                 row = match.iloc[0]
                 result[t] = {
@@ -122,9 +143,11 @@ class AkShareProvider(DataProvider):
         start_t = time.time()
         try:
             logger.info(f"📊 [AkShare] 正在拉取 {ticker} 的历史日 K 线...")
-            # 注意: symbol要求根据市场补齐前缀 sh600000, sz000001
-            market_prefix = "sh" if ticker.startswith("6") else "sz"
-            symbol = f"{market_prefix}{ticker}"
+            
+            # 提取纯数字代码，并根据市场补齐前缀 sh600000, sz000001
+            numeric_ticker = re.sub(r'[^\d]', '', ticker)
+            market_prefix = "sh" if numeric_ticker.startswith("6") else "sz"
+            symbol = f"{market_prefix}{numeric_ticker}"
             
             df = ak.stock_zh_a_daily(symbol=symbol, adjust="qfq")
             # 截取尾部符合限制的数据

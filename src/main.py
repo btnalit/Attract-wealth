@@ -27,7 +27,9 @@ from src.core.strategy_store import StrategyStore
 from src.core.system_store import SystemStore
 from src.core.ths_bridge_runtime import THSBridgeRuntime
 from src.core.trading_service import TradingService
+from src.core.errors import ok_response
 from src.evolution.backtest_runner import BacktestRunner
+from src.services.dataflow_service import DataflowService
 
 # Determine base path for resources
 if hasattr(sys, "_MEIPASS"):
@@ -87,17 +89,7 @@ def _setup_legacy_schedule(event_engine: EventEngine):
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # 架构自检：ths_auto 强烈依赖 32 位 Python
-    import struct
-    is_32bit = struct.calcsize("P") * 8 == 32
-    if channel == "ths_auto" and not is_32bit:
-        print("\n" + "="*60)
-        print("⚠️  [THS_AUTO 架构警告]")
-        print(f"当前 Python 为 {struct.calcsize('P')*8} 位。")
-        print("ths_auto (easytrader) 依赖 32 位环境 Hook 同花顺交易端。")
-        print("64 位环境下可能出现控件读取失败/静默降级。")
-        print("✅ 建议：使用 32 位 Python 运行此服务 (如 py -3.12-32 -m src.main)")
-        print("="*60 + "\n")
+    channel = os.getenv("TRADING_CHANNEL", "ths_auto").strip().lower()
     include_stability_probe = _is_true(os.getenv("STARTUP_PREFLIGHT_INCLUDE_STABILITY"), default=False)
     strict_preflight = _is_true(os.getenv("STARTUP_STRICT_PREFLIGHT"), default=False)
 
@@ -129,6 +121,14 @@ async def lifespan(app: FastAPI):
         await trading_service.initialize()
 
         system_store = SystemStore()
+        dataflow_service = DataflowService()
+        app.state.dataflow_service = dataflow_service
+        try:
+            app.state.dataflow_provider_restore = dataflow_service.apply_persisted_provider(system_store)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("failed to apply persisted dataflow provider: %s", exc)
+            app.state.dataflow_provider_restore = {"applied": False, "reason": str(exc)}
+
         persisted_llm_config = system_store.get_setting("llm_runtime_config", {})
         if isinstance(persisted_llm_config, dict) and persisted_llm_config:
             try:
@@ -162,10 +162,19 @@ async def lifespan(app: FastAPI):
         yield
     finally:
         if event_engine is not None:
-            event_engine.stop()
+            try:
+                event_engine.stop()
+            except Exception:  # noqa: BLE001
+                pass
         if trading_service is not None:
-            await trading_service.shutdown()
-        app.state.ths_bridge = bridge_runtime.stop(reason="app_shutdown")
+            try:
+                await trading_service.shutdown()
+            except (BaseException,):  # noqa: BLE001 — CancelledError is BaseException in 3.9+
+                pass
+        try:
+            app.state.ths_bridge = bridge_runtime.stop(reason="app_shutdown")
+        except Exception:  # noqa: BLE001
+            pass
         app.state.ths_bridge_runtime = None
 
 
@@ -187,23 +196,33 @@ app.add_middleware(
 
 @app.get("/api/health")
 async def health_check():
-    return {"status": "ok", "service": "attract-wealth", "version": "0.1.0"}
+    return ok_response(
+        {
+            "status": "ok",
+            "service": "attract-wealth",
+            "version": "0.1.0",
+        },
+        code="HEALTH_OK",
+    )
 
 
 @app.get("/api/system/info")
 async def system_info():
     preflight: dict[str, Any] = getattr(app.state, "startup_preflight", {})
     ths_bridge: dict[str, Any] = getattr(app.state, "ths_bridge", {})
-    return {
-        "name": "来财 (Attract-wealth)",
-        "version": "0.1.0",
-        "trading_channel": os.getenv("TRADING_CHANNEL", "ths_auto"),
-        "llm_provider": os.getenv("LLM_BASE_URL", "未配置"),
-        "llm_model": os.getenv("LLM_MODEL", "未配置"),
-        "startup_preflight_ok": preflight.get("ok", False),
-        "startup_preflight_summary": preflight.get("summary", {}),
-        "ths_bridge": ths_bridge,
-    }
+    return ok_response(
+        {
+            "name": "来财 (Attract-wealth)",
+            "version": "0.1.0",
+            "trading_channel": os.getenv("TRADING_CHANNEL", "ths_auto"),
+            "llm_provider": os.getenv("LLM_BASE_URL", "未配置"),
+            "llm_model": os.getenv("LLM_MODEL", "未配置"),
+            "startup_preflight_ok": preflight.get("ok", False),
+            "startup_preflight_summary": preflight.get("summary", {}),
+            "ths_bridge": ths_bridge,
+        },
+        code="SYSTEM_INFO_OK",
+    )
 
 
 app.include_router(trading.router, prefix="/api/trading", tags=["trading"])

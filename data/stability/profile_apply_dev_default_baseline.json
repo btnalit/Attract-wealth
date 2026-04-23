@@ -1,7 +1,7 @@
 {
   "report_version": "1.0",
-  "started_at": "2026-04-09T01:09:43.709250+00:00",
-  "finished_at": "2026-04-09T01:09:45.167609+00:00",
+  "started_at": "2026-04-20T07:52:11.825670+00:00",
+  "finished_at": "2026-04-20T07:52:14.290069+00:00",
   "profile": "dev_default",
   "profile_version": "2026.04.09.1",
   "profile_description": "开发环境参数：容错优先，便于联调排错。",
@@ -61,7 +61,7 @@
     }
   },
   "summary": {
-    "current_provider": null,
+    "current_provider": "akshare",
     "requests_total": 0,
     "error_rate": 0.0,
     "empty_rate": 0.0,
@@ -71,18 +71,19 @@
     "rate_limited_rate": 0.0,
     "cache_hit_rate": 0.0,
     "quality_alert_level": "none",
-    "quality_code": "DATAFLOW_UNAVAILABLE",
+    "quality_code": "DATA_QUALITY_OK",
     "quality_action": "record",
     "quality_event_id": "",
     "tuning_action": "none",
     "quality_feedback_precision": 0.0,
     "quality_false_positive_rate": 0.0,
-    "quality_miss_rate": 0.0
+    "quality_miss_rate": 0.0,
+    "last_failure_code": ""
   },
   "quality": {
     "alert_level": "none",
     "action": "record",
-    "code": "DATAFLOW_UNAVAILABLE",
+    "code": "DATA_QUALITY_OK",
     "thresholds": {
       "error_warn": 0.25,
       "error_block": 0.55,
@@ -100,7 +101,7 @@
     },
     "triggered_rules": [],
     "event_id": "",
-    "event_signature": "none|DATAFLOW_UNAVAILABLE|",
+    "event_signature": "none|DATA_QUALITY_OK|",
     "feedback_metrics": {
       "true_positive": 0,
       "false_positive": 0,
@@ -127,22 +128,22 @@
   "stability_probe": {
     "enabled": true,
     "command": [
-      "D:\\来财\\Attract-wealth\\.venv\\Scripts\\python.exe",
+      "C:\\Python313\\python.exe",
       "D:\\来财\\Attract-wealth\\scripts\\dataflow\\stability_probe.py",
       "--iterations",
-      "10",
+      "80",
       "--failure-every",
-      "10",
+      "9",
       "--rate-limit-per-minute",
-      "120",
+      "90",
       "--max-wait-ms",
       "0",
       "--retry-count",
-      "1",
+      "2",
       "--retry-base-ms",
-      "10",
+      "30",
       "--fail-on-quality",
-      "warn",
+      "critical",
       "--output",
       "D:\\来财\\Attract-wealth\\data\\stability\\profile_probe_dev_default_baseline.json"
     ],
@@ -150,35 +151,36 @@
     "output": "D:\\来财\\Attract-wealth\\data\\stability\\profile_probe_dev_default_baseline.json",
     "report": {
       "report_version": "1.1",
-      "started_at": "2026-04-09T09:09:45.076100",
-      "duration_ms": 10.64,
-      "iterations": 10,
-      "success_count": 10,
+      "started_at": "2026-04-20T15:52:14.209825",
+      "duration_ms": 277.257,
+      "iterations": 80,
+      "success_count": 80,
       "failed_count": 0,
       "metrics": {
         "current_provider": "flaky",
         "providers": {
           "flaky": {
-            "requests": 10,
-            "success": 10,
+            "requests": 80,
+            "success": 80,
             "failure": 0,
             "empty": 0,
             "fallback_success": 0,
-            "retries": 1,
-            "retry_success": 1,
+            "retries": 9,
+            "retry_success": 9,
             "rate_limited": 0,
+            "last_error_code": "",
             "last_error": "",
-            "last_success_ts": 1775696985.0759816,
+            "last_success_ts": 1776671534.2095673,
             "last_failure_ts": 0.0,
-            "last_latency_ms": 0.007,
+            "last_latency_ms": 0.001,
             "last_rate_limit_reason": "",
             "throttle_sleep_ms": 0.0,
-            "backoff_sleep_ms": 10.0,
+            "backoff_sleep_ms": 270.0,
             "enabled": true,
             "priority": 10,
             "error_rate": 0.0,
             "empty_rate": 0.0,
-            "retry_rate": 0.1,
+            "retry_rate": 0.1125,
             "rate_limited_rate": 0.0
           },
           "stable": {
@@ -190,6 +192,7 @@
             "retries": 0,
             "retry_success": 0,
             "rate_limited": 0,
+            "last_error_code": "",
             "last_error": "",
             "last_success_ts": 0.0,
             "last_failure_ts": 0.0,
@@ -219,8 +222,8 @@
             "current": false
           }
         ],
-        "requests_total": 10,
-        "success_total": 10,
+        "requests_total": 80,
+        "success_total": 80,
         "failure_total": 0,
         "fallback_total": 0,
         "empty_total": 0,
@@ -229,14 +232,16 @@
         "error_rate": 0.0,
         "empty_rate": 0.0,
         "fallback_rate": 0.0,
-        "retries_total": 1,
-        "retry_success_total": 1,
-        "retry_rate": 0.1,
-        "retry_pressure_rate": 0.1,
+        "retries_total": 9,
+        "retry_success_total": 9,
+        "retry_rate": 0.1125,
+        "retry_pressure_rate": 0.1125,
         "rate_limited_total": 0,
         "rate_limited_rate": 0.0,
         "throttle_sleep_ms_total": 0.0,
-        "backoff_sleep_ms_total": 10.0,
+        "backoff_sleep_ms_total": 270.0,
+        "last_failure_code": "",
+        "last_failure_message": "",
         "methods": {
           "get_kline": {
             "requests": 0,
@@ -257,12 +262,12 @@
             "rate_limited": 0
           },
           "get_news": {
-            "requests": 10,
-            "success": 10,
+            "requests": 80,
+            "success": 80,
             "failure": 0,
             "fallback": 0,
             "empty": 0,
-            "retries": 1,
+            "retries": 9,
             "rate_limited": 0
           }
         },
@@ -270,16 +275,19 @@
           "requests": 0,
           "hits": 0,
           "misses": 0,
-          "hit_rate": 0.0
+          "hit_rate": 0.0,
+          "decode_errors": 0,
+          "last_error_code": "",
+          "last_error": ""
         },
         "summary": {
           "current_provider": "flaky",
-          "requests_total": 10,
+          "requests_total": 80,
           "error_rate": 0.0,
           "empty_rate": 0.0,
           "fallback_rate": 0.0,
-          "retry_rate": 0.1,
-          "retry_pressure_rate": 0.1,
+          "retry_rate": 0.1125,
+          "retry_pressure_rate": 0.1125,
           "rate_limited_rate": 0.0,
           "cache_hit_rate": 0.0,
           "quality_alert_level": "none",
@@ -289,7 +297,8 @@
           "tuning_action": "none",
           "quality_feedback_precision": 0.0,
           "quality_false_positive_rate": 0.0,
-          "quality_miss_rate": 0.0
+          "quality_miss_rate": 0.0,
+          "last_failure_code": ""
         },
         "quality": {
           "alert_level": "none",
@@ -331,14 +340,14 @@
           "suggested_env": {},
           "observed": {
             "error_rate": 0.0,
-            "retry_rate": 0.1,
+            "retry_rate": 0.1125,
             "rate_limited_rate": 0.0
           }
         },
         "quality_event": {
           "event_id": "",
           "signature": "none|DATA_QUALITY_OK|",
-          "timestamp": 1775696985.0760274,
+          "timestamp": 1776671534.209641,
           "level": "none",
           "code": "DATA_QUALITY_OK",
           "action": "record",
@@ -358,15 +367,15 @@
         "quality_events": [],
         "runtime_config": {
           "provider_rate_limit": {
-            "per_minute": 120,
+            "per_minute": 90,
             "min_interval_ms": 0,
             "max_wait_ms": 0
           },
           "retry_policy": {
-            "max_retries": 1,
-            "base_ms": 10,
+            "max_retries": 2,
+            "base_ms": 30,
             "factor": 1.8,
-            "max_ms": 80
+            "max_ms": 240
           },
           "quality_thresholds": {
             "error_warn": 0.25,
@@ -393,12 +402,12 @@
       },
       "summary": {
         "current_provider": "flaky",
-        "requests_total": 10,
+        "requests_total": 80,
         "error_rate": 0.0,
         "empty_rate": 0.0,
         "fallback_rate": 0.0,
-        "retry_rate": 0.1,
-        "retry_pressure_rate": 0.1,
+        "retry_rate": 0.1125,
+        "retry_pressure_rate": 0.1125,
         "rate_limited_rate": 0.0,
         "cache_hit_rate": 0.0,
         "quality_alert_level": "none",
@@ -408,7 +417,8 @@
         "tuning_action": "none",
         "quality_feedback_precision": 0.0,
         "quality_false_positive_rate": 0.0,
-        "quality_miss_rate": 0.0
+        "quality_miss_rate": 0.0,
+        "last_failure_code": ""
       },
       "quality": {
         "alert_level": "none",
@@ -450,7 +460,7 @@
         "suggested_env": {},
         "observed": {
           "error_rate": 0.0,
-          "retry_rate": 0.1,
+          "retry_rate": 0.1125,
           "rate_limited_rate": 0.0
         }
       },

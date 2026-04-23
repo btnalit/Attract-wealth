@@ -80,7 +80,7 @@ class TradingService:
         self.order_manager = OrderManager(self.broker)
         self.reconciliation_engine = ReconciliationEngine(self.broker)
         self._order_sync_enabled = os.getenv("ORDER_SYNC_ENABLED", "true").lower() == "true"
-        self._order_sync_interval = float(os.getenv("ORDER_SYNC_INTERVAL", "3"))
+        self._order_sync_interval = float(os.getenv("ORDER_SYNC_INTERVAL", "30"))
         self._order_sync_task: Optional[asyncio.Task] = None
 
         self._china_data = None
@@ -96,9 +96,15 @@ class TradingService:
         self._initialized = True
 
     async def shutdown(self):
-        await self._stop_order_sync_if_needed()
-        if hasattr(self.broker, "disconnect"):
-            await self.broker.disconnect()
+        try:
+            await self._stop_order_sync_if_needed()
+        except (asyncio.CancelledError, Exception):  # noqa: BLE001
+            pass
+        try:
+            if hasattr(self.broker, "disconnect"):
+                await self.broker.disconnect()
+        except (asyncio.CancelledError, Exception):  # noqa: BLE001
+            pass
         self._initialized = False
 
     def get_llm_runtime_config(self) -> dict[str, Any]:
@@ -657,24 +663,233 @@ class TradingService:
     async def get_active_orders(self) -> list[dict[str, Any]]:
         return [asdict(order) for order in self.order_manager.active_orders.values()]
 
+    async def cancel_active_orders(self, reason: str = "manual") -> dict[str, Any]:
+        """批量撤销当前活动订单，并回写订单状态。"""
+        await self._ensure_broker_connected()
+        active_orders = list(self.order_manager.active_orders.items())
+        if not active_orders:
+            return {
+                "channel": self.channel,
+                "reason": str(reason or "manual"),
+                "requested": 0,
+                "cancelled": 0,
+                "failed": 0,
+                "items": [],
+            }
+
+        cancelled = 0
+        failed = 0
+        items: list[dict[str, Any]] = []
+        for local_order_id, local_order in active_orders:
+            candidate_ids = [str(local_order_id)]
+            broker_order_id = self._extract_broker_order_id(getattr(local_order, "message", ""))
+            if broker_order_id and broker_order_id not in candidate_ids:
+                candidate_ids.append(broker_order_id)
+
+            success = False
+            last_error = ""
+            used_order_id = candidate_ids[0]
+            for candidate_id in candidate_ids:
+                used_order_id = candidate_id
+                try:
+                    success = bool(await self.broker.cancel(candidate_id))
+                except Exception as exc:  # noqa: BLE001
+                    last_error = str(exc)
+                    continue
+                if success:
+                    break
+
+            if success:
+                cancelled += 1
+                local_order.status = OrderStatus.CANCELLED
+                TradingLedger.update_trade_status(
+                    trade_id=local_order_id,
+                    status=OrderStatus.CANCELLED,
+                    filled_price=float(getattr(local_order, "filled_price", 0.0) or 0.0),
+                    filled_quantity=int(getattr(local_order, "filled_quantity", 0) or 0),
+                )
+                self.order_manager.active_orders.pop(local_order_id, None)
+                if hasattr(self.order_manager, "_last_signatures"):
+                    self.order_manager._last_signatures.pop(local_order_id, None)  # type: ignore[attr-defined]
+                if hasattr(self.order_manager, "_broker_order_refs"):
+                    self.order_manager._broker_order_refs.pop(local_order_id, None)  # type: ignore[attr-defined]
+                items.append(
+                    {
+                        "order_id": str(local_order_id),
+                        "ticker": str(getattr(local_order, "ticker", "")),
+                        "status": "cancelled",
+                        "used_order_id": used_order_id,
+                    }
+                )
+            else:
+                failed += 1
+                items.append(
+                    {
+                        "order_id": str(local_order_id),
+                        "ticker": str(getattr(local_order, "ticker", "")),
+                        "status": "failed",
+                        "used_order_id": used_order_id,
+                        "error": last_error or "broker_cancel_failed",
+                    }
+                )
+
+        TradingLedger.record_entry(
+            LedgerEntry(
+                category="SYSTEM",
+                action="CANCEL_ACTIVE_ORDERS",
+                detail=f"cancel_active_orders reason={reason}",
+                status="success" if failed == 0 else "warning",
+                metadata={
+                    "channel": self.channel,
+                    "reason": str(reason or "manual"),
+                    "requested": len(active_orders),
+                    "cancelled": cancelled,
+                    "failed": failed,
+                },
+            )
+        )
+        return {
+            "channel": self.channel,
+            "reason": str(reason or "manual"),
+            "requested": len(active_orders),
+            "cancelled": cancelled,
+            "failed": failed,
+            "items": items,
+        }
+
+    async def switch_channel(self, target_channel: str, *, reconnect: bool = True) -> dict[str, Any]:
+        """切换交易通道并重建执行组件。"""
+        requested_raw = str(target_channel or "").strip().lower()
+        alias_map = {"ths": "ths_auto"}
+        requested_channel = alias_map.get(requested_raw, requested_raw)
+        allowed_channels = {"simulation", "ths_auto", "ths_ipc", "qmt"}
+        if requested_channel not in allowed_channels:
+            raise TradingServiceError(
+                code="INVALID_CHANNEL",
+                message="unsupported trading channel",
+                details={
+                    "requested_channel": requested_channel,
+                    "allowed_channels": sorted(list(allowed_channels)),
+                },
+                http_status=400,
+            )
+
+        previous_channel = self.channel
+        if requested_channel == previous_channel:
+            return {
+                "changed": False,
+                "requested_channel": requested_channel,
+                "previous_channel": previous_channel,
+                "active_channel": self.channel,
+                "broker_connected": bool(getattr(getattr(self, "broker", None), "is_connected", False)),
+            }
+
+        previous_broker = self.broker
+        previous_order_manager = self.order_manager
+        previous_reconciliation_engine = self.reconciliation_engine
+        try:
+            await self._stop_order_sync_if_needed()
+            if hasattr(previous_broker, "disconnect"):
+                try:
+                    await previous_broker.disconnect()
+                except Exception:  # noqa: BLE001
+                    pass
+
+            self.channel = requested_channel
+            self.broker = create_broker(requested_channel)
+            self._rebind_execution_components()
+            if reconnect:
+                await self._ensure_broker_connected()
+
+            payload = {
+                "changed": True,
+                "requested_channel": requested_channel,
+                "previous_channel": previous_channel,
+                "active_channel": self.channel,
+                "broker_connected": bool(getattr(getattr(self, "broker", None), "is_connected", False)),
+            }
+            TradingLedger.record_entry(
+                LedgerEntry(
+                    category="SYSTEM",
+                    action="TRADING_CHANNEL_SWITCHED",
+                    detail=f"switch channel {previous_channel} -> {self.channel}",
+                    metadata=payload,
+                )
+            )
+            return payload
+        except TradingServiceError:
+            self.channel = previous_channel
+            self.broker = previous_broker
+            self.order_manager = previous_order_manager
+            self.reconciliation_engine = previous_reconciliation_engine
+            if self._initialized:
+                self._start_order_sync_if_needed()
+            raise
+        except Exception as exc:  # noqa: BLE001
+            self.channel = previous_channel
+            self.broker = previous_broker
+            self.order_manager = previous_order_manager
+            self.reconciliation_engine = previous_reconciliation_engine
+            if self._initialized:
+                self._start_order_sync_if_needed()
+            raise TradingServiceError(
+                code="CHANNEL_SWITCH_FAILED",
+                message="failed to switch trading channel",
+                details={
+                    "requested_channel": requested_channel,
+                    "previous_channel": previous_channel,
+                    "error": str(exc),
+                },
+                http_status=500,
+            ) from exc
+
     async def get_trade_snapshot(self, include_channel_raw: bool = True) -> dict[str, Any]:
         await self._ensure_broker_connected()
         balance = await self._safe_get_balance()
         positions = await self._safe_get_positions()
         orders = await self.broker.get_orders()
+        balance_payload = asdict(balance)
+        positions_payload = [asdict(item) for item in positions]
+        orders_payload = [asdict(item) for item in orders]
+
+        total_value = _to_float(balance_payload.get("total_assets", 0.0))
+        daily_pnl = _to_float(balance_payload.get("daily_pnl", 0.0))
+        holding_value = _to_float(balance_payload.get("market_value", 0.0))
+        cash = _to_float(balance_payload.get("available_cash", 0.0))
+
+        strategies: list[dict[str, Any]] = []
+        for pos in positions_payload:
+            market_value = _to_float(pos.get("market_value", 0.0))
+            unrealized_pnl = _to_float(pos.get("unrealized_pnl", 0.0))
+            daily_return = unrealized_pnl / market_value if market_value > 0 else 0.0
+            strategies.append(
+                {
+                    "name": str(pos.get("ticker", "")).upper(),
+                    "quality_score": 0.0,
+                    "status": "holding",
+                    "daily_return": daily_return,
+                    "market_value": market_value,
+                }
+            )
 
         payload: dict[str, Any] = {
             "channel": self.channel,
             "broker_connected": bool(getattr(getattr(self, "broker", None), "is_connected", False)),
             "channel_info": self.broker.check_health() if hasattr(self.broker, "check_health") else {},
-            "balance": asdict(balance),
-            "positions": [asdict(item) for item in positions],
-            "orders": [asdict(item) for item in orders],
+            "balance": balance_payload,
+            "positions": positions_payload,
+            "orders": orders_payload,
             "reconciliation_guard": self.get_reconciliation_guard_state(),
             "counts": {
                 "positions": len(positions),
                 "orders": len(orders),
             },
+            # 向后兼容旧版 Dashboard 字段
+            "total_value": total_value,
+            "daily_pnl": daily_pnl,
+            "holding_value": holding_value,
+            "cash": cash,
+            "strategies": strategies,
         }
 
         if include_channel_raw and hasattr(self.broker, "get_trade_snapshot"):
@@ -768,16 +983,23 @@ class TradingService:
         }
 
     async def _ensure_broker_connected(self):
-        try:
-            if getattr(self.broker, "is_connected", False):
-                return
-            if await self.broker.connect():
-                return
-        except Exception as exc:  # noqa: BLE001
-            logger.exception("连接交易通道失败: channel=%s err=%s", self.channel, exc)
+        if getattr(self.broker, "is_connected", False):
+            return
+
+        max_retries = 3
+        last_error = None
+        for attempt in range(1, max_retries + 1):
+            try:
+                if await self.broker.connect():
+                    return
+            except Exception as exc:  # noqa: BLE001
+                last_error = exc
+                logger.warning("连接交易通道失败 (第 %d/%d 次): channel=%s err=%s", attempt, max_retries, self.channel, exc)
+            if attempt < max_retries:
+                await asyncio.sleep(2)
 
         if self.channel != "simulation":
-            logger.warning("交易通道不可用，降级至 simulation。原通道: %s", self.channel)
+            logger.warning("交易通道 %s 连续 %d 次连接失败，降级至 simulation。last_error=%s", self.channel, max_retries, last_error)
             self.channel = "simulation"
             self.broker = create_broker("simulation")
             await self.broker.connect()
@@ -873,10 +1095,17 @@ class TradingService:
             logger.warning("新闻数据构建失败，降级 no_news: %s", exc)
 
     def _inject_dataflow_context_snapshot(self, context: dict[str, Any]) -> None:
+        if getattr(self, "_china_data_disabled", False):
+            context["dataflow_quality"] = {}
+            context["dataflow_summary"] = {}
+            context["dataflow_tuning"] = {}
+            context["dataflow_runtime_config"] = {}
+            return
+
         try:
             from src.dataflows.source_manager import data_manager
 
-            metrics = data_manager.get_ger.get_metrics()
+            metrics = data_manager.get_metrics()
             context["dataflow_quality"] = self._json_safe(metrics.get("quality", {}))
             context["dataflow_summary"] = self._json_safe(metrics.get("summary", {}))
             context["dataflow_tuning"] = self._json_safe(metrics.get("tuning", {}))
@@ -998,8 +1227,8 @@ class TradingService:
             report_payload = (
                 report_value.model_dump()
                 if hasattr(report_value, "model_dump")
-                else report_value.dict()
-                if hasattr(report_value, "dict")
+                else dict(report_value)
+                if isinstance(report_value, dict)
                 else report_value
             )
             TradingLedger.record_analysis(
@@ -1272,8 +1501,6 @@ class TradingService:
         for key, value in (reports or {}).items():
             if hasattr(value, "model_dump"):
                 payload = value.model_dump()
-            elif hasattr(value, "dict"):
-                payload = value.dict()
             elif isinstance(value, dict):
                 payload = dict(value)
             else:
@@ -1793,4 +2020,3 @@ class _FallbackVM:
                 "confidence": 0,
             },
         }
-

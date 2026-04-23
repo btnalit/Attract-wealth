@@ -37,6 +37,15 @@ class DayRollRequest(BaseModel):
     force: bool = Field(default=False, description="是否强制在非交易日执行")
 
 
+class CancelAllOrdersRequest(BaseSchema):
+    reason: str = Field(default="manual", description="批量撤单原因")
+
+
+class ChannelSwitchRequest(BaseSchema):
+    channel: str = Field(..., description="目标交易通道：simulation/ths_auto/ths_ipc/qmt")
+    reconnect: bool = Field(default=True, description="切换后是否立即尝试连接新通道")
+
+
 class DirectOrderRequest(BaseSchema):
     ticker: str = Field(..., description="股票代码，例如 000001")
     side: str = Field(..., description="BUY 或 SELL")
@@ -198,6 +207,38 @@ async def sync_orders(request: Request):
         return JSONResponse(
             status_code=500,
             content=error_response("INTERNAL_ERROR", "订单同步失败", {"error": str(exc)}),
+        )
+
+
+@router.post("/orders/cancel-all")
+async def cancel_all_orders(req: CancelAllOrdersRequest, request: Request):
+    """批量撤销当前活动订单。"""
+    try:
+        service = _get_service(request)
+        payload = await service.cancel_active_orders(reason=req.reason)
+        return ok_response(payload, code="ORDERS_CANCEL_ALL_OK")
+    except TradingServiceError as exc:
+        return _error_json(exc)
+    except Exception as exc:  # noqa: BLE001
+        return JSONResponse(
+            status_code=500,
+            content=error_response("INTERNAL_ERROR", "批量撤单失败", {"error": str(exc)}),
+        )
+
+
+@router.post("/channel/switch")
+async def switch_trading_channel(req: ChannelSwitchRequest, request: Request):
+    """切换交易通道并重建执行上下文。"""
+    try:
+        service = _get_service(request)
+        payload = await service.switch_channel(target_channel=req.channel, reconnect=bool(req.reconnect))
+        return ok_response(payload, code="TRADING_CHANNEL_SWITCHED")
+    except TradingServiceError as exc:
+        return _error_json(exc)
+    except Exception as exc:  # noqa: BLE001
+        return JSONResponse(
+            status_code=500,
+            content=error_response("INTERNAL_ERROR", "切换交易通道失败", {"error": str(exc)}),
         )
 
 

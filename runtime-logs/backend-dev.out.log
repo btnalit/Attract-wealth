@@ -1,0 +1,23 @@
+2026-04-23 11:22:10,488 [INFO] __main__: 来财 (LaiCai) 启动中... (Frozen: False)
+2026-04-23 11:22:10,646 [INFO] src.main: 来财 (LaiCai) 启动中... (Frozen: False)
+2026-04-23 11:22:10,707 [INFO] src.main: 正在探测 ths_auto 通道就绪状态...
+2026-04-23 11:22:13,959 [INFO] src.execution.ths_auto.bridge_proxy: [bridge] 发现可用的 32 位 Python (easytrader OK): C:\Users\btnal\AppData\Local\Programs\Python\Python310-32\python.exe
+2026-04-23 11:22:13,963 [INFO] src.execution.ths_auto.easytrader_adapter: [ths_auto] 64 位 Python 检测到 32 位 xiadan.exe，尝试桥接模式...
+2026-04-23 11:22:16,441 [INFO] src.execution.ths_auto.bridge_proxy: [bridge] 发现可用的 32 位 Python (easytrader OK): C:\Users\btnal\AppData\Local\Programs\Python\Python310-32\python.exe
+2026-04-23 11:22:16,444 [INFO] src.execution.ths_auto.easytrader_adapter: [ths_auto] 检测到架构不匹配 (Python=64bit, xiadan=32bit)，启动 32 位桥接: C:\Users\btnal\AppData\Local\Programs\Python\Python310-32\python.exe
+2026-04-23 11:22:16,445 [INFO] src.execution.ths_auto.bridge_proxy: [bridge] starting 32-bit worker: C:\Users\btnal\AppData\Local\Programs\Python\Python310-32\python.exe D:\来财\Attract-wealth\src\execution\ths_auto\bridge_worker.py
+2026-04-23 11:22:16,533 [INFO] src.execution.ths_auto.bridge_proxy: [bridge] worker ready (pid=14272, bits=32)
+2026-04-23 11:22:46,169 [WARNING] src.execution.ths_auto.easytrader_adapter: [ths_auto] 桥接模式失败: ["bridge returned empty response for 'connect'. stderr: "]，尝试原生连接...
+\\同花顺\\xiadan.exe" not found!; ths:Process "D:\\同花顺软件\\同花顺\\xiadan.exe" not found!; universal_client:Process "D:\\同花顺软件\\同花顺\\xiadan.exe" not found!']，尝试原生连接...
+2026-04-23 11:22:27,961 [WARNING] src.main: ths_auto 通道未完全就绪: unknown
+2026-04-23 11:22:30,345 [INFO] src.execution.ths_auto.bridge_proxy: [bridge] 发现可用的 32 位 Python (easytrader OK): C:\Users\btnal\AppData\Local\Programs\Python\Python310-32\python.exe
+2026-04-23 11:22:30,350 [WARNING] src.main: startup preflight has critical failures: {'total': 5, 'failed': 2, 'critical_failed': 2, 'warning_failed': 0}
+Initializing databases in: D:\来财\Attract-wealth\src\core\..\..\data
+Database initialization completed
+2026-04-23 11:22:35,250 [INFO] src.core.ths_path_resolver: THS 路径通过扫描发现: D:\同花顺软件\同花顺
+2026-04-23 11:22:35,304 [INFO] src.execution.ths_auto.easytrader_adapter: [ths_auto] 64 位 Python 检测到 32 位 xiadan.exe，尝试桥接模式...
+2026-04-23 11:22:38,186 [INFO] src.execution.ths_auto.bridge_proxy: [bridge] 发现可用的 32 位 Python (easytrader OK): C:\Users\btnal\AppData\Local\Programs\Python\Python310-32\python.exe
+2026-04-23 11:22:38,189 [INFO] src.execution.ths_auto.easytrader_adapter: [ths_auto] 检测到架构不匹配 (Python=64bit, xiadan=32bit)，启动 32 位桥接: C:\Users\btnal\AppData\Local\Programs\Python\Python310-32\python.exe
+2026-04-23 11:22:38,190 [INFO] src.execution.ths_auto.bridge_proxy: [bridge] starting 32-bit worker: C:\Users\btnal\AppData\Local\Programs\Python\Python310-32\python.exe D:\来财\Attract-wealth\src\execution\ths_auto\bridge_worker.py
+2026-04-23 11:22:38,271 [INFO] src.execution.ths_auto.bridge_proxy: [bridge] worker ready (pid=11820, bits=32)
+2026-04-23 11:22:46,977 [WARNING] src.execution.ths_auto.easytrader_adapter: [ths_auto] 桥接模式失败: ["bridge returned empty response for 'connect'. stderr: "]，尝试原生连接...

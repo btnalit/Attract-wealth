@@ -102,6 +102,7 @@ def test_data_source_manager_fallback_on_provider_error():
     assert metrics["fallback_total"] == 1
     assert metrics["methods"]["get_kline"]["fallback"] == 1
     assert metrics["providers"]["primary"]["failure"] >= 1
+    assert metrics["providers"]["primary"]["last_error_code"] == "PROVIDER_EXCEPTION"
     assert metrics["providers"]["backup"]["success"] >= 1
 
 
@@ -122,6 +123,39 @@ def test_data_source_manager_cache_hit_reduces_backsource():
         assert metrics["local_cache"]["requests"] == 2
         assert metrics["local_cache"]["hits"] == 1
         assert metrics["local_cache"]["misses"] == 1
+    finally:
+        cache.conn.close()
+
+
+def test_data_source_manager_reports_no_provider_error_code():
+    manager = DataSourceManager(cache=None)
+    news = manager.get_news("000001", limit=1)
+    assert news == []
+
+    metrics = manager.get_metrics()
+    assert metrics["last_failure_code"] == "NO_PROVIDER_AVAILABLE"
+    assert metrics["summary"]["last_failure_code"] == "NO_PROVIDER_AVAILABLE"
+
+
+def test_data_source_manager_tracks_cache_decode_error():
+    cache = _build_cache_manager(Path("."))
+    provider = _GoodProvider()
+    manager = DataSourceManager(cache=cache)
+    manager.register("primary", provider, priority=10, is_primary=True)
+
+    try:
+        cache_key = "kline:000001:2026-04-01:2026-04-08:D"
+        manager._cache_set(  # noqa: SLF001
+            cache_key,
+            {"__type__": "dataframe", "records": "invalid_records", "columns": []},
+            ttl=120,
+        )
+        df = manager.get_kline("000001", "2026-04-01", "2026-04-08")
+        assert not df.empty
+
+        metrics = manager.get_metrics()
+        assert metrics["local_cache"]["decode_errors"] >= 1
+        assert metrics["local_cache"]["last_error_code"] == "INVALID_CACHE_PAYLOAD"
     finally:
         cache.conn.close()
 
@@ -250,9 +284,46 @@ def test_data_source_manager_reload_runtime_config_from_env(monkeypatch):
 
 def test_bootstrap_default_sources_can_be_disabled(monkeypatch):
     monkeypatch.setenv("DATA_SOURCE_BOOTSTRAP_AKSHARE", "false")
+    monkeypatch.setenv("DATA_SOURCE_BOOTSTRAP_BAOSTOCK", "false")
     manager = DataSourceManager(cache=None)
     source_manager_module._bootstrap_default_sources(manager)
     assert "akshare" not in manager._providers
+    assert "baostock" not in manager._providers
+
+
+def test_bootstrap_default_sources_registers_akshare_and_baostock(monkeypatch):
+    class _BootstrapProvider(BaseDataSource):
+        def get_kline(self, ticker: str, start_date: str, end_date: str, timeframe: str = "D") -> pd.DataFrame:
+            _ = (ticker, start_date, end_date, timeframe)
+            return pd.DataFrame()
+
+        def get_fundamentals(self, ticker: str) -> dict:
+            _ = ticker
+            return {}
+
+        def get_news(self, ticker: str, limit: int = 10) -> list[dict]:
+            _ = (ticker, limit)
+            return []
+
+    class _AkAdapter(_BootstrapProvider):
+        pass
+
+    class _BaoAdapter(_BootstrapProvider):
+        pass
+
+    monkeypatch.setenv("DATA_SOURCE_BOOTSTRAP_AKSHARE", "true")
+    monkeypatch.setenv("DATA_SOURCE_BOOTSTRAP_BAOSTOCK", "true")
+    monkeypatch.setattr(source_manager_module, "AkShareDataSourceAdapter", _AkAdapter)
+    monkeypatch.setattr(source_manager_module, "BaostockDataSourceAdapter", _BaoAdapter)
+
+    manager = DataSourceManager(cache=None)
+    source_manager_module._bootstrap_default_sources(manager)
+
+    assert "akshare" in manager._providers
+    assert "baostock" in manager._providers
+    assert manager.get_current_provider_name() == "akshare"
+    assert manager.get_provider_instance("baostock") is manager._providers["baostock"]
+    assert manager.get_provider_instance() is manager._providers["akshare"]
 
 
 def test_data_source_manager_quality_feedback_metrics_and_events(monkeypatch):

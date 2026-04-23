@@ -1,6 +1,7 @@
 ﻿from __future__ import annotations
 
 import argparse
+import csv
 import importlib
 import json
 import os
@@ -17,6 +18,8 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from src.core.ths_host_autostart import (  # noqa: E402
+    analyze_host_trigger_chain,
+    collect_host_observability_snapshot,
     DEFAULT_THS_ROOT,
     fetch_trade_snapshot,
     probe_bridge_runtime,
@@ -173,6 +176,77 @@ def _is_xiadan_running() -> tuple[bool | None, str]:
         return None, str(exc)
 
 
+def _collect_xiadan_ui_context() -> dict[str, Any]:
+    context: dict[str, Any] = {
+        "running": False,
+        "process_count": 0,
+        "strategy_page_open": False,
+        "window_titles": [],
+        "processes": [],
+        "error": "",
+    }
+    try:
+        proc = subprocess.run(
+            ["tasklist", "/V", "/FI", "IMAGENAME eq xiadan.exe", "/FO", "CSV", "/NH"],
+            capture_output=True,
+            check=False,
+            text=True,
+            encoding="gbk",
+            errors="ignore",
+        )
+        raw_text = f"{proc.stdout}\n{proc.stderr}".strip()
+        text_lower = raw_text.lower()
+        if "no tasks are running" in text_lower:
+            return context
+        if not raw_text:
+            if proc.returncode != 0:
+                context["error"] = f"tasklist_rc={proc.returncode}"
+            return context
+
+        rows: list[dict[str, Any]] = []
+        for line in proc.stdout.splitlines():
+            raw = str(line or "").strip()
+            if not raw:
+                continue
+            try:
+                row = next(csv.reader([raw]))
+            except Exception:
+                continue
+            if len(row) < 9:
+                continue
+            if str(row[0]).strip().lower() != "xiadan.exe":
+                continue
+            pid_text = str(row[1]).strip().replace(",", "")
+            try:
+                pid = int(pid_text)
+            except Exception:
+                pid = 0
+            window_title = str(row[8]).strip()
+            rows.append(
+                {
+                    "pid": pid,
+                    "session_name": str(row[2]).strip(),
+                    "session_id": str(row[3]).strip(),
+                    "mem_usage": str(row[4]).strip(),
+                    "status": str(row[5]).strip(),
+                    "user_name": str(row[6]).strip(),
+                    "cpu_time": str(row[7]).strip(),
+                    "window_title": window_title,
+                }
+            )
+
+        titles = [str(item.get("window_title", "")).strip() for item in rows if str(item.get("window_title", "")).strip()]
+        context["running"] = bool(rows)
+        context["process_count"] = len(rows)
+        context["window_titles"] = titles
+        context["processes"] = rows
+        context["strategy_page_open"] = any(("策略条件单" in title) or ("信号策略" in title) for title in titles)
+        return context
+    except Exception as exc:  # noqa: BLE001
+        context["error"] = str(exc)
+        return context
+
+
 def run_probe(args: argparse.Namespace) -> dict[str, Any]:
     started_at = _iso_now()
     deadline = time.time() + max(1.0, float(args.timeout_seconds))
@@ -182,7 +256,7 @@ def run_probe(args: argparse.Namespace) -> dict[str, Any]:
     xiadan_known = xiadan_running is not None
 
     report: dict[str, Any] = {
-        "report_version": "1.1",
+        "report_version": "1.2",
         "started_at": started_at,
         "finished_at": "",
         "inputs": {
@@ -212,7 +286,9 @@ def run_probe(args: argparse.Namespace) -> dict[str, Any]:
             "known": xiadan_known,
             "error": xiadan_check_error,
         },
+        "xiadan_ui_context": _collect_xiadan_ui_context(),
         "account_context": read_ths_account_context(Path(str(args.ths_root))),
+        "host_observability": collect_host_observability_snapshot(Path(str(args.ths_root))),
         "samples": [],
         "status": "FAIL",
         "ready": False,
@@ -222,13 +298,25 @@ def run_probe(args: argparse.Namespace) -> dict[str, Any]:
         "snapshot_ok": False,
         "easytrader_diag": {},
         "easytrader_patch": {},
+        "host_trigger_diagnosis": {},
         "hints": [],
     }
+
+    host_observability = report.get("host_observability", {}) if isinstance(report.get("host_observability", {}), dict) else {}
+    host_execution_evidence = bool(host_observability.get("host_execution_evidence", False))
+    host_has_errors = bool(host_observability.get("has_errors", False))
+    if not host_execution_evidence:
+        report["hints"].append("未检测到 my_signals/bootstrap 执行标记，请在 THS 交易会话中触发策略条件单脚本。")
+    if host_has_errors:
+        report["hints"].append("检测到宿主脚本异常持久化日志，请查看 host_observability.*.error_tail。")
 
     if require_xiadan and xiadan_known and not bool(report["xiadan_running"]):
         report["hints"].append("未检测到 xiadan.exe 进程，请先登录同花顺交易客户端。")
     elif require_xiadan and not xiadan_known:
         report["hints"].append("无法读取 xiadan.exe 进程状态（权限受限），将继续按 runtime 探针判定。")
+    xiadan_ui_context = report.get("xiadan_ui_context", {}) if isinstance(report.get("xiadan_ui_context", {}), dict) else {}
+    if bool(xiadan_ui_context.get("running", False)) and not bool(xiadan_ui_context.get("strategy_page_open", False)):
+        report["hints"].append("检测到 xiadan 会话，但未发现“策略条件单/信号策略”窗口。")
 
     last_sample: dict[str, Any] = {}
     while time.time() < deadline:
@@ -254,6 +342,8 @@ def run_probe(args: argparse.Namespace) -> dict[str, Any]:
         else:
             report["hints"].append("未检测到 THS IPC bridge 监听 8089，请确认宿主自动脚本已加载。")
         report["hints"].append("请在同花顺中打开一次“策略条件单/信号策略”触发 my_signals.py 加载后再重试。")
+        if host_execution_evidence:
+            report["hints"].append("已检测到宿主脚本执行标记，当前阻塞更可能在 bridge 启动或 runtime 初始化阶段。")
     elif not args.no_snapshot:
         snapshot = fetch_trade_snapshot(host=args.host, port=args.port, timeout_s=2.0)
         summary = summarize_trade_snapshot(snapshot)
@@ -315,6 +405,22 @@ def run_probe(args: argparse.Namespace) -> dict[str, Any]:
         elif report["status"] in {"FAIL", "WARN"} and not bool(diag.get("ok", False)):
             report["hints"].append("easytrader 诊断也失败，需先排查 xiadan 进程会话、依赖和权限。")
 
+    report["host_trigger_diagnosis"] = analyze_host_trigger_chain(
+        report.get("host_observability", {}),
+        xiadan_running=xiadan_running,
+        runtime_probe=last_sample,
+        ui_context=xiadan_ui_context,
+    )
+    diagnosis = (
+        report.get("host_trigger_diagnosis", {})
+        if isinstance(report.get("host_trigger_diagnosis", {}), dict)
+        else {}
+    )
+    for hint in diagnosis.get("suggestions", []) if isinstance(diagnosis.get("suggestions", []), list) else []:
+        text = str(hint or "").strip()
+        if text and text not in report["hints"]:
+            report["hints"].append(text)
+
     report["finished_at"] = _iso_now()
     return report
 
@@ -343,6 +449,37 @@ def main() -> int:
                 name=account_ctx.get("last_user_name", ""),
                 userid=account_ctx.get("last_userid", ""),
                 mode=account_ctx.get("mode_hint", "unknown"),
+            )
+        )
+
+    host_obs = report.get("host_observability", {}) if isinstance(report.get("host_observability", {}), dict) else {}
+    if host_obs:
+        my_obs = host_obs.get("my_signals", {}) if isinstance(host_obs.get("my_signals", {}), dict) else {}
+        bootstrap_obs = host_obs.get("bootstrap", {}) if isinstance(host_obs.get("bootstrap", {}), dict) else {}
+        print(
+            "[ths-host-probe] host_obs evidence={evidence} errors={errors} my_markers={my_count} bootstrap_markers={bootstrap_count}".format(
+                evidence=host_obs.get("host_execution_evidence", False),
+                errors=host_obs.get("has_errors", False),
+                my_count=my_obs.get("marker_count", 0),
+                bootstrap_count=bootstrap_obs.get("marker_count", 0),
+            )
+        )
+    xiadan_ui = report.get("xiadan_ui_context", {}) if isinstance(report.get("xiadan_ui_context", {}), dict) else {}
+    if xiadan_ui:
+        titles = xiadan_ui.get("window_titles", []) if isinstance(xiadan_ui.get("window_titles", []), list) else []
+        print(
+            "[ths-host-probe] xiadan_ui running={running} strategy_page_open={strategy} windows={count}".format(
+                running=xiadan_ui.get("running", False),
+                strategy=xiadan_ui.get("strategy_page_open", False),
+                count=len(titles),
+            )
+        )
+    trigger_diag = report.get("host_trigger_diagnosis", {}) if isinstance(report.get("host_trigger_diagnosis", {}), dict) else {}
+    if trigger_diag:
+        print(
+            "[ths-host-probe] trigger_stage={stage} trigger_status={status}".format(
+                stage=trigger_diag.get("stage", "UNKNOWN"),
+                status=trigger_diag.get("status", "FAIL"),
             )
         )
 

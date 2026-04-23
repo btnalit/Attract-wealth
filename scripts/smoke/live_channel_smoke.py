@@ -271,6 +271,12 @@ async def _run(args: argparse.Namespace) -> dict[str, Any]:
             balance=balance,
             explicit_initial_cash=args.reconcile_initial_cash,
         )
+        bootstrap_meta = _bootstrap_simulation_broker_from_ledger(
+            broker=broker,
+            initial_cash=initial_cash,
+        )
+        if bootstrap_meta.get("applied", False):
+            report["snapshots"]["reconcile_bootstrap"] = bootstrap_meta
         engine = ReconciliationEngine(broker=broker)
         recon = await engine.run(initial_cash=initial_cash)
         if recon.get("code") in {"RECON_BLOCK", "RECON_ERROR"}:
@@ -374,6 +380,40 @@ def _resolve_reconcile_initial_cash(*, channel: str, balance: Any, explicit_init
     if str(channel or "").strip().lower() == "simulation":
         return 1_000_000.0
     return 0.0
+
+
+def _bootstrap_simulation_broker_from_ledger(*, broker: Any, initial_cash: float) -> dict[str, Any]:
+    """
+    对齐 simulation 通道 broker 与 ledger 的历史快照口径，避免进程重启导致的假阳性阻断。
+    """
+    channel_name = str(getattr(broker, "channel_name", "") or "").strip().lower()
+    if channel_name != "simulation":
+        return {"applied": False, "reason": "non_simulation"}
+    if not _is_true(os.getenv("SMOKE_SIM_RECON_BOOTSTRAP", "true"), default=True):
+        return {"applied": False, "reason": "disabled"}
+    if not hasattr(broker, "load_portfolio_snapshot"):
+        return {"applied": False, "reason": "broker_without_snapshot_loader"}
+
+    from src.core.trading_ledger import TradingLedger
+
+    snapshot = TradingLedger.build_portfolio_snapshot(initial_cash=float(initial_cash), channel=channel_name)
+    cash = float(snapshot.get("cash", initial_cash) or initial_cash)
+    positions = snapshot.get("positions", {})
+    if not isinstance(positions, dict):
+        positions = {}
+
+    broker.load_portfolio_snapshot(
+        cash=cash,
+        positions={str(k): int(v or 0) for k, v in positions.items()},
+        reset_orders=True,
+    )
+    return {
+        "applied": True,
+        "channel": channel_name,
+        "initial_cash": float(initial_cash),
+        "snapshot_cash": cash,
+        "positions_count": len([v for v in positions.values() if int(v or 0) > 0]),
+    }
 
 
 def main() -> int:

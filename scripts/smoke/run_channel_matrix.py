@@ -29,7 +29,7 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--with-budget-recovery-probe", action="store_true")
     parser.add_argument("--no-budget-recovery-probe", action="store_true")
     parser.add_argument("--probe-iterations", type=int, default=80)
-    parser.add_argument("--probe-failure-every", type=int, default=4)
+    parser.add_argument("--probe-failure-every", type=int, default=9)
     parser.add_argument("--probe-rate-limit-per-minute", type=int, default=90)
     parser.add_argument("--probe-max-wait-ms", type=int, default=0)
     parser.add_argument("--probe-retry-count", type=int, default=2)

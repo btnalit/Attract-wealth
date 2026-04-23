@@ -1,9 +1,9 @@
 {
   "report_version": "1.1",
   "channel": "simulation",
-  "started_at": "2026-04-08T14:18:18.400723+00:00",
-  "finished_at": "2026-04-08T14:18:18.400883+00:00",
-  "duration_ms": 0.134,
+  "started_at": "2026-04-23T04:16:51.996572+00:00",
+  "finished_at": "2026-04-23T04:16:52.166307+00:00",
+  "duration_ms": 169.714,
   "status": "PASS",
   "checks": [
     {
@@ -11,49 +11,49 @@
       "ok": true,
       "skipped": false,
       "detail": "ok",
-      "elapsed_ms": 0.006
+      "elapsed_ms": 0.004
     },
     {
       "name": "connect",
       "ok": true,
       "skipped": false,
       "detail": "ok",
-      "elapsed_ms": 0.003
+      "elapsed_ms": 0.002
     },
     {
       "name": "get_balance",
       "ok": true,
       "skipped": false,
       "detail": "ok",
-      "elapsed_ms": 0.011
+      "elapsed_ms": 0.008
     },
     {
       "name": "get_positions",
       "ok": true,
       "skipped": false,
       "detail": "ok",
-      "elapsed_ms": 0.003
+      "elapsed_ms": 0.002
     },
     {
       "name": "get_orders",
       "ok": true,
       "skipped": false,
       "detail": "ok",
-      "elapsed_ms": 0.005
+      "elapsed_ms": 0.003
     },
     {
       "name": "reconciliation_probe",
       "ok": true,
-      "skipped": true,
-      "detail": "reconcile probe disabled",
-      "elapsed_ms": 0.007
+      "skipped": false,
+      "detail": "ok",
+      "elapsed_ms": 169.576
     },
     {
       "name": "order_probe",
       "ok": true,
       "skipped": true,
       "detail": "order probe disabled",
-      "elapsed_ms": 0.004
+      "elapsed_ms": 0.01
     }
   ],
   "snapshots": {
@@ -66,7 +66,46 @@
       "daily_pnl": 0.0
     },
     "positions": [],
-    "orders": []
+    "orders": [],
+    "reconcile_bootstrap": {
+      "applied": true,
+      "channel": "simulation",
+      "initial_cash": 1000000.0,
+      "snapshot_cash": 969994.0,
+      "positions_count": 6
+    },
+    "reconciliation": {
+      "timestamp": 1776917812.1526275,
+      "channel": "simulation",
+      "status": "matched",
+      "issues_count": 0,
+      "issues": [],
+      "broker_snapshot": {
+        "cash": 969994.0,
+        "positions": {
+          "000001": 2500,
+          "SIM09A0": 100,
+          "SIM0EB3": 100,
+          "SIM47BF": 100,
+          "SIMA24F": 100,
+          "SIM8C0B": 100
+        }
+      },
+      "ledger_snapshot": {
+        "cash": 969994.0,
+        "positions": {
+          "000001": 2500,
+          "SIM09A0": 100,
+          "SIM0EB3": 100,
+          "SIM47BF": 100,
+          "SIMA24F": 100,
+          "SIM8C0B": 100
+        }
+      },
+      "alert_level": "none",
+      "action": "record",
+      "code": "RECON_OK"
+    }
   },
   "preflight": {
     "ready": true,
@@ -76,7 +115,7 @@
   "config": {
     "include_order_probe": false,
     "force_live_order": false,
-    "include_reconcile": false,
+    "include_reconcile": true,
     "strict_preflight": true,
     "ticker": "000001",
     "price": 10.0,

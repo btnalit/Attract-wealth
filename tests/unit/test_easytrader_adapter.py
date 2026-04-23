@@ -81,6 +81,7 @@ def test_probe_easytrader_readiness_fails_when_exe_missing():
     assert probe["ok"] is False
     assert probe["connected"] is False
     assert probe["meta"]["reason"] == "exe_not_found"
+    assert probe["meta"]["error_code"] == "THS_EXE_NOT_FOUND"
 
 
 class _ProbeFakeClient:
@@ -179,6 +180,7 @@ def test_probe_easytrader_readiness_runtime_guard_blocks_connection(monkeypatch)
     )
     assert probe["connected"] is False
     assert probe["meta"]["reason"] == "runtime_guard_failed"
+    assert probe["meta"]["error_code"] == "THS_RUNTIME_GUARD_FAILED"
     assert probe["errors"] == ["runtime_guard_failed"]
 
 
@@ -206,8 +208,25 @@ def test_read_client_member_with_retry_eventual_success(monkeypatch):
     payload, diag = read_client_member_with_retry(client, "balance")
     assert payload["available_cash"] == 1000
     assert diag["ok"] is True
+    assert diag["error_code"] == ""
     assert diag["attempts"] == 2
     assert len(diag["errors"]) == 1
+
+
+def test_read_client_member_with_retry_failure_has_error_code(monkeypatch):
+    class _AlwaysFailClient:
+        @property
+        def balance(self):
+            raise RuntimeError("always_fail")
+
+    monkeypatch.setenv("THS_EASYTRADER_READ_RETRIES", "2")
+    monkeypatch.setenv("THS_EASYTRADER_READ_RETRY_INTERVAL_S", "0")
+    payload, diag = read_client_member_with_retry(_AlwaysFailClient(), "balance")
+    assert payload is None
+    assert diag["ok"] is False
+    assert diag["error_code"] == "THS_READ_MEMBER_FAILED"
+    assert diag["attempts"] == 2
+    assert len(diag["errors"]) == 2
 
 
 def test_probe_easytrader_readiness_collects_read_diagnostics(monkeypatch):
@@ -243,3 +262,41 @@ def test_probe_easytrader_readiness_collects_read_diagnostics(monkeypatch):
     assert read_diag["balance"]["ok"] is True
     assert read_diag["balance"]["attempts"] == 2
     assert len(read_diag["balance"]["errors"]) == 1
+
+
+def test_inspect_easytrader_runtime_reports_bridge_detect_error(monkeypatch):
+    monkeypatch.setattr("src.execution.ths_auto.easytrader_adapter._detect_pe_bits", lambda _path: 32)
+    monkeypatch.setattr("src.execution.ths_auto.easytrader_adapter._python_bits", lambda: 64)
+    monkeypatch.setattr("src.execution.ths_auto.easytrader_adapter._find_process_pid", lambda _name: (None, ""))
+    monkeypatch.setattr("src.execution.ths_auto.easytrader_adapter._is_current_process_admin", lambda: False)
+
+    def _raise_bridge_error():
+        raise RuntimeError("bridge_probe_failed")
+
+    monkeypatch.setattr("src.execution.ths_auto.bridge_proxy.discover_python32", _raise_bridge_error)
+    runtime = inspect_easytrader_runtime(exe_path=__file__)
+    assert runtime["bridge_available"] is False
+    assert any(str(item).startswith("bridge_detect_failed:") for item in runtime["errors"])
+
+
+def test_probe_easytrader_readiness_close_client_failure_exposes_error_code(monkeypatch):
+    class _CloseFailClient:
+        balance = {"available_cash": 1000, "total_assets": 1000, "market_value": 0}
+        position = []
+        today_entrusts = []
+        today_trades = []
+
+        def exit(self):
+            raise RuntimeError("close_failed")
+
+    def _fake_create_easytrader_client(**kwargs):
+        return _CloseFailClient(), {"ok": True, "reason": "connected", "broker": "ths", "error_code": ""}
+
+    monkeypatch.setattr(
+        "src.execution.ths_auto.easytrader_adapter.create_easytrader_client",
+        _fake_create_easytrader_client,
+    )
+    probe = probe_easytrader_readiness(exe_path=r"D:\dummy\xiadan.exe", close_client=True)
+    assert probe["connected"] is True
+    assert any(str(item).startswith("THS_CLIENT_CLOSE_FAILED:") for item in probe["errors"])
+    assert probe["meta"]["error_code"] == "THS_CLIENT_CLOSE_FAILED"
