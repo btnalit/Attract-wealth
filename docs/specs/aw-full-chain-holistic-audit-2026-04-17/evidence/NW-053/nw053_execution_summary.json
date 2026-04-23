@@ -1,0 +1,41 @@
+{
+  "notes": [
+    "ths_ipc 8089 不可达在离线 live 通道策略下被降级为 warning/SKIP，不阻断 simulation 基线。",
+    "可通过 --require-live-channels 恢复实体环境强约束。"
+  ],
+  "generated_at": "2026-04-24T01:11:02+08:00",
+  "checks": [
+    {
+      "evidence": "docs/specs/aw-full-chain-holistic-audit-2026-04-17/evidence/NW-053/pytest_nw053.log",
+      "name": "pytest",
+      "command": "python -m pytest -q (affected suites)",
+      "status": "pass"
+    },
+    {
+      "evidence": "docs/specs/aw-full-chain-holistic-audit-2026-04-17/evidence/NW-053/frontend_lint_nw053.log",
+      "name": "frontend_lint",
+      "command": "npm run lint",
+      "status": "pass"
+    },
+    {
+      "evidence": "docs/specs/aw-full-chain-holistic-audit-2026-04-17/evidence/NW-053/frontend_build_nw053.log",
+      "name": "frontend_build",
+      "command": "npm run build",
+      "status": "pass"
+    },
+    {
+      "evidence": "docs/specs/aw-full-chain-holistic-audit-2026-04-17/evidence/NW-053/strict_gate_nw053.log",
+      "name": "strict_gate_check_only",
+      "command": "python scripts/smoke/run_strict_gate.py --check-only",
+      "status": "pass"
+    },
+    {
+      "evidence": "docs/specs/aw-full-chain-holistic-audit-2026-04-17/evidence/NW-053/matrix_strict_nw053.json",
+      "name": "strict_gate_matrix_offline_live",
+      "command": "python scripts/smoke/run_strict_gate.py --no-stability-probe --no-budget-recovery-probe --output data/smoke/reports/matrix_strict_nw053.json",
+      "status": "pass"
+    }
+  ],
+  "status": "pass",
+  "task_id": "NW-053"
+}

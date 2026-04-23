@@ -4,6 +4,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from src.routers.system import router
+from src.services.ths_diagnosis_service import THSDiagnosisService
 
 
 class _FakeBridgeRuntime:
@@ -76,6 +77,16 @@ class _FakeTradingService:
             "dataflow_tuning": {},
             "llm_usage_summary": {},
             "llm_runtime": {},
+            "core_governance": {
+                "tool_registry": {"tool_count": 2},
+                "summary": {
+                    "permission_default_mode": "allow",
+                    "registered_tools": 2,
+                    "tools_with_failures": [],
+                    "hook_errors_total": 0,
+                    "coordinator_runs": 1,
+                },
+            },
             "reconciliation_blocked": False,
             "reconciliation_block_reason": {},
             "calendar": {"today": "2026-04-08"},
@@ -102,6 +113,23 @@ class _FakeEventEngine:
         return {"running": False}
 
 
+class _FakeThsDiagnosisService(THSDiagnosisService):
+    def __init__(self):
+        pass
+
+    def get_host_diagnosis(self, *, host: str, port: int, timeout_s: float, ths_root=None):  # noqa: ANN001
+        return {
+            "status": "FAIL",
+            "ready": False,
+            "host": host,
+            "port": port,
+            "timeout_s": timeout_s,
+            "ths_root": str(ths_root or ""),
+            "host_trigger_diagnosis": {"stage": "UI_TRIGGER_PAGE_NOT_OPEN", "status": "FAIL"},
+            "hints": ["在同花顺交易会话内手动打开一次“策略条件单/信号策略”并保持窗口可见。"],
+        }
+
+
 def _build_client() -> TestClient:
     app = FastAPI()
     app.state.startup_preflight = {
@@ -111,6 +139,7 @@ def _build_client() -> TestClient:
     }
     app.state.ths_bridge_runtime = _FakeBridgeRuntime()
     app.state.ths_bridge = {"ready": False, "message": "init"}
+    app.state.ths_diagnosis_service = _FakeThsDiagnosisService()
     app.state.trading_service = _FakeTradingService()
     app.state.event_engine = _FakeEventEngine()
     app.include_router(router, prefix="/api/system")
@@ -162,16 +191,32 @@ def test_ths_bridge_start_stop_and_state_api():
     assert stop_body["data"]["ths_bridge"]["stopped"] is True
 
 
+def test_ths_host_diagnosis_api():
+    client = _build_client()
+    resp = client.get(
+        "/api/system/ths-host/diagnosis",
+        params={"host": "127.0.0.1", "port": 8089, "timeout_s": 1.2},
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["ok"] is True
+    assert body["code"] == "THS_HOST_DIAG_OK"
+    assert body["data"]["host"] == "127.0.0.1"
+    assert body["data"]["port"] == 8089
+    assert body["data"]["host_trigger_diagnosis"]["stage"] == "UI_TRIGGER_PAGE_NOT_OPEN"
+
+
 def test_audit_evidence_filters_are_passed(monkeypatch):
     captured: dict = {}
 
-    def _fake_list_decision_evidence(**kwargs):
-        captured.update(kwargs)
-        return [{"id": "ev-1", "request_id": kwargs.get("request_id", ""), "degraded": True}]
-
     from src.routers import system as system_router
 
-    monkeypatch.setattr(system_router.TradingLedger, "list_decision_evidence", staticmethod(_fake_list_decision_evidence))
+    class _FakeSystemQueryService:
+        def list_decision_evidence(self, **kwargs):
+            captured.update(kwargs)
+            return [{"id": "ev-1", "request_id": kwargs.get("request_id", ""), "degraded": True}]
+
+    monkeypatch.setattr(system_router, "_get_system_query_service", lambda request: _FakeSystemQueryService())
     client = _build_client()
     resp = client.get(
         "/api/system/audit/evidence",
@@ -193,6 +238,27 @@ def test_audit_evidence_filters_are_passed(monkeypatch):
     assert captured["degraded_only"] is True
 
 
+def test_llm_metrics_delegates_to_system_query_service(monkeypatch):
+    captured: dict = {}
+    from src.routers import system as system_router
+
+    class _FakeSystemQueryService:
+        def get_llm_usage_summary(self, *, hours: int, agent_id: str, session_id: str):
+            captured["hours"] = hours
+            captured["agent_id"] = agent_id
+            captured["session_id"] = session_id
+            return {"cost_usd": 1.23, "call_count": 5}
+
+    monkeypatch.setattr(system_router, "_get_system_query_service", lambda request: _FakeSystemQueryService())
+    client = _build_client()
+    resp = client.get("/api/system/llm/metrics", params={"hours": 12, "agent_id": "trader", "session_id": "s-1"})
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["ok"] is True
+    assert body["data"]["usage_summary"]["cost_usd"] == 1.23
+    assert captured == {"hours": 12, "agent_id": "trader", "session_id": "s-1"}
+
+
 def test_runtime_includes_budget_recovery_metrics():
     client = _build_client()
     resp = client.get("/api/system/runtime")
@@ -202,6 +268,8 @@ def test_runtime_includes_budget_recovery_metrics():
     data = body["data"]
     assert data["budget_recovery_metrics"]["activation_count"] == 3
     assert data["budget_recovery_metrics"]["recovery_success_rate"] == 1.0
+    assert data["core_governance"]["tool_registry"]["tool_count"] == 2
+    assert data["core_governance"]["summary"]["permission_default_mode"] == "allow"
 
 
 def test_system_config_and_wechat_routes_delegate_to_service(monkeypatch):

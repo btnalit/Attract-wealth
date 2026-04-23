@@ -117,7 +117,7 @@ async def lifespan(app: FastAPI):
                 raise RuntimeError("startup preflight failed in strict mode")
 
         init_all_databases()
-        trading_service = TradingService(trading_channel=channel)
+        trading_service = TradingService(trading_channel=channel, event_publisher=stream)
         await trading_service.initialize()
 
         system_store = SystemStore()

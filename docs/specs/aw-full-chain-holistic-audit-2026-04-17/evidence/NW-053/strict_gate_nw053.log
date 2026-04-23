@@ -1,0 +1,29 @@
+[strict-gate] offline live-channel policy downgraded checks: ths_ipc:ths_ipc_bridge
+[strict-gate] Prechecks:
+  - [OK] ths_ipc:trading_channel_supported: TRADING_CHANNEL=ths_ipc
+  - [OK] ths_ipc:data_dir_writable: DATA_DIR=D:\����\Attract-wealth\data
+  - [WARN] ths_ipc:ths_ipc_bridge: 127.0.0.1:8089 unreachable: timed out (offline tolerated)
+      hint: Load THS host script and ensure bridge listens on THS_IPC_PORT.
+  - [WARN] ths_ipc:ths_easytrader_diag: easytrader snapshot probe failed
+      hint: If this check passes but ths_ipc fails, the usual cause is host script not loaded. Open THS signal strategy page once to trigger my_signals.py.
+  - [OK] ths_ipc:pandas_module: pandas import ok
+  - [OK] simulation:trading_channel_supported: TRADING_CHANNEL=simulation
+  - [OK] simulation:data_dir_writable: DATA_DIR=D:\����\Attract-wealth\data
+[strict-gate] precheck warnings: 2 item(s).
+[strict-gate] check-only done.
+[smoke-matrix] output=D:\����\Attract-wealth\data\smoke\reports\matrix_strict_nw053.json all_passed=True
+[strict-gate] offline live-channel policy downgraded checks: ths_ipc:ths_ipc_bridge
+[strict-gate] Prechecks:
+  - [OK] ths_ipc:trading_channel_supported: TRADING_CHANNEL=ths_ipc
+  - [OK] ths_ipc:data_dir_writable: DATA_DIR=D:\����\Attract-wealth\data
+  - [WARN] ths_ipc:ths_ipc_bridge: 127.0.0.1:8089 unreachable: timed out (offline tolerated)
+      hint: Load THS host script and ensure bridge listens on THS_IPC_PORT.
+  - [WARN] ths_ipc:ths_easytrader_diag: easytrader snapshot probe failed
+      hint: If this check passes but ths_ipc fails, the usual cause is host script not loaded. Open THS signal strategy page once to trigger my_signals.py.
+  - [OK] simulation:trading_channel_supported: TRADING_CHANNEL=simulation
+  - [OK] simulation:data_dir_writable: DATA_DIR=D:\����\Attract-wealth\data
+[strict-gate] precheck warnings: 2 item(s).
+[strict-gate] running matrix command:
+  C:\Python313\python.exe D:\����\Attract-wealth\scripts\smoke\run_channel_matrix.py --channels ths_ipc,simulation --output D:\����\Attract-wealth\data\smoke\reports\matrix_strict_nw053.json --allow-skip --include-reconcile
+[strict-gate] report=D:\����\Attract-wealth\data\smoke\reports\matrix_strict_nw053.json
+[strict-gate] all_passed=True pass=1 skip=1 fail=0

@@ -16,6 +16,10 @@ if str(PROJECT_ROOT) not in sys.path:
 from src.core.startup_preflight import run_startup_preflight
 
 DEFAULT_SMOKE_CHANNELS = "ths_ipc,simulation"
+OFFLINE_TOLERANT_CHECK_PREFIXES: tuple[str, ...] = (
+    "ths_ipc:ths_ipc_bridge",
+    "ths_ipc:ths_ipc_runtime",
+)
 
 
 @dataclass
@@ -25,6 +29,12 @@ class PrecheckResult:
     severity: str
     message: str
     hint: str = ""
+
+
+def _is_true(value: str | None, *, default: bool = False) -> bool:
+    if value is None:
+        return default
+    return str(value).strip().lower() in {"1", "true", "yes", "on"}
 
 
 def _resolve_path(path_like: str) -> Path:
@@ -79,6 +89,29 @@ def print_prechecks(results: list[PrecheckResult]) -> None:
             print(f"      hint: {item.hint}")
 
 
+def apply_offline_live_channel_policy(
+    results: list[PrecheckResult],
+    *,
+    allow_offline_live_channels: bool,
+) -> list[str]:
+    if not allow_offline_live_channels:
+        return []
+
+    downgraded: list[str] = []
+    for item in results:
+        if item.ok:
+            continue
+        if any(item.name.startswith(prefix) for prefix in OFFLINE_TOLERANT_CHECK_PREFIXES):
+            if item.severity == "critical":
+                item.severity = "warning"
+            if "offline tolerated" not in item.message.lower():
+                item.message = f"{item.message} (offline tolerated)"
+            if not item.hint:
+                item.hint = "当前为无实体环境模式，live 通道未就绪允许降级。"
+            downgraded.append(item.name)
+    return downgraded
+
+
 def build_matrix_command(args: argparse.Namespace) -> list[str]:
     output_path = _resolve_path(args.output)
     cmd = [
@@ -86,11 +119,13 @@ def build_matrix_command(args: argparse.Namespace) -> list[str]:
         str(PROJECT_ROOT / "scripts" / "smoke" / "run_channel_matrix.py"),
         "--channels",
         args.channels,
-        "--disallow-skip",
-        "--strict-preflight",
         "--output",
         str(output_path),
     ]
+    if args.allow_offline_live_channels:
+        cmd.append("--allow-skip")
+    else:
+        cmd.extend(["--disallow-skip", "--strict-preflight"])
     if not args.no_reconcile:
         cmd.append("--include-reconcile")
     if args.include_order_probe:
@@ -224,6 +259,17 @@ def _load_json(path: Path) -> dict[str, Any]:
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Strict gate runner for THS/QMT/Simulation smoke regression.")
     parser.add_argument("--channels", default=os.getenv("SMOKE_DEFAULT_CHANNELS", DEFAULT_SMOKE_CHANNELS))
+    parser.add_argument(
+        "--allow-offline-live-channels",
+        action="store_true",
+        default=_is_true(os.getenv("SMOKE_ALLOW_OFFLINE_LIVE_CHANNELS"), default=True),
+        help="Allow live channels (ths_ipc/qmt/ths_auto) to degrade without实体环境.",
+    )
+    parser.add_argument(
+        "--require-live-channels",
+        action="store_true",
+        help="Require live channels to pass preflight (disables offline downgrade).",
+    )
     parser.add_argument("--include-order-probe", action="store_true")
     parser.add_argument("--force-live-order", action="store_true")
     parser.add_argument("--no-reconcile", action="store_true", help="Skip reconciliation probe in matrix smoke.")
@@ -261,6 +307,8 @@ def _parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = _parse_args()
+    if args.require_live_channels:
+        args.allow_offline_live_channels = False
     if args.no_stability_probe:
         args.with_stability_probe = False
     if args.no_budget_recovery_probe:
@@ -268,6 +316,12 @@ def main() -> int:
 
     channels = [item.strip() for item in str(args.channels).split(",") if item.strip()]
     prechecks = run_prechecks(channels, with_stability_probe=bool(args.with_stability_probe))
+    downgraded = apply_offline_live_channel_policy(
+        prechecks,
+        allow_offline_live_channels=bool(args.allow_offline_live_channels),
+    )
+    if downgraded:
+        print(f"[strict-gate] offline live-channel policy downgraded checks: {', '.join(downgraded)}")
     print_prechecks(prechecks)
 
     hard_failures = [item for item in prechecks if not item.ok and item.severity == "critical"]

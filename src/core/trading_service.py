@@ -63,8 +63,10 @@ class TradingService:
         vm: Optional[Any] = None,
         risk_gate: Optional[RiskGate] = None,
         broker: Optional[Any] = None,
+        event_publisher: Optional[Any] = None,
     ):
         self.channel = (trading_channel or os.getenv("TRADING_CHANNEL", "ths_auto")).strip().lower()
+        self._event_publisher = event_publisher
         self.vm = vm or self._create_vm_with_fallback()
         self.risk_gate = risk_gate or RiskGate()
         self.broker = broker or create_broker(self.channel)
@@ -1785,7 +1787,7 @@ class TradingService:
         try:
             from src.core.trading_vm import TradingVM
 
-            return TradingVM()
+            return TradingVM(event_publisher=self._event_publisher)
         except Exception as exc:  # noqa: BLE001
             logger.warning("TradingVM 初始化失败，已降级到 FallbackVM: %s", exc)
             return _FallbackVM()
@@ -1878,6 +1880,15 @@ class TradingService:
         except Exception:
             pass
 
+        governance_snapshot: dict[str, Any] = {}
+        if hasattr(self.vm, "get_governance_snapshot"):
+            try:
+                maybe_snapshot = self.vm.get_governance_snapshot()
+                if isinstance(maybe_snapshot, dict):
+                    governance_snapshot = maybe_snapshot
+            except Exception:
+                governance_snapshot = {}
+
         # 3. 聚合全量状态
         return {
             "channel": self.channel,
@@ -1893,6 +1904,7 @@ class TradingService:
             "dataflow_summary": dataflow_summary,
             "dataflow_tuning": dataflow_metrics.get("tuning", {"action": "none", "quality_alert_level": "ok", "suggestions": []}),
             "llm_usage_summary": llm_usage_summary,
+            "core_governance": governance_snapshot,
             "calendar": {
                 "today": str(today),
                 "is_trading_day": self.calendar.is_trading_day(today),

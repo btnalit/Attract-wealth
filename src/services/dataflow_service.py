@@ -19,6 +19,18 @@ _PROVIDER_DISPLAY_NAME = {
     "tushare": "Tushare",
 }
 
+_KLINE_INTERVAL_TO_TIMEFRAME = {
+    "daily": "D",
+    "day": "D",
+    "d": "D",
+    "weekly": "W",
+    "week": "W",
+    "w": "W",
+    "monthly": "M",
+    "month": "M",
+    "m": "M",
+}
+
 
 class DataflowService:
     """Domain service for dataflow provider operations."""
@@ -30,6 +42,71 @@ class DataflowService:
     def _display_name(provider_name: str) -> str:
         key = str(provider_name or "").strip().lower()
         return _PROVIDER_DISPLAY_NAME.get(key, key.upper() if key else "Unknown")
+
+    @staticmethod
+    def _normalize_kline_interval(interval: str | None) -> tuple[str, str]:
+        raw = str(interval or "").strip().lower()
+        if not raw:
+            return "daily", "D"
+        timeframe = _KLINE_INTERVAL_TO_TIMEFRAME.get(raw, "D")
+        if raw in {"daily", "day", "d"}:
+            canonical = "daily"
+        elif raw in {"weekly", "week", "w"}:
+            canonical = "weekly"
+        elif raw in {"monthly", "month", "m"}:
+            canonical = "monthly"
+        else:
+            canonical = "daily"
+        return canonical, timeframe
+
+    @staticmethod
+    def _normalize_kline_limit(limit: int) -> int:
+        try:
+            return max(1, int(limit))
+        except (TypeError, ValueError):
+            return 100
+
+    @staticmethod
+    def _resample_records(records: list[dict[str, Any]], *, timeframe: str) -> list[dict[str, Any]]:
+        if timeframe not in {"W", "M"}:
+            return records
+        if pd is None:
+            return records
+        if not records:
+            return records
+
+        frame = pd.DataFrame(records)
+        if frame.empty or "date" not in frame.columns:
+            return records
+        frame["date"] = pd.to_datetime(frame["date"], errors="coerce")
+        frame = frame.dropna(subset=["date"]).sort_values("date")
+        if frame.empty:
+            return records
+
+        frame = frame.set_index("date")
+        agg: dict[str, str] = {}
+        for column in frame.columns:
+            key = str(column).lower()
+            if key == "open":
+                agg[column] = "first"
+            elif key == "high":
+                agg[column] = "max"
+            elif key == "low":
+                agg[column] = "min"
+            elif key == "close":
+                agg[column] = "last"
+            elif key in {"volume", "amount", "turnover"}:
+                agg[column] = "sum"
+            else:
+                agg[column] = "last"
+
+        rule = "W-FRI" if timeframe == "W" else "M"
+        grouped = frame.resample(rule).agg(agg).dropna(how="all")
+        if grouped.empty:
+            return []
+        grouped = grouped.reset_index()
+        grouped["date"] = grouped["date"].dt.strftime("%Y-%m-%d")
+        return grouped.to_dict(orient="records")
 
     def get_metrics(self) -> dict[str, Any]:
         return self._manager.get_metrics()
@@ -179,27 +256,40 @@ class DataflowService:
             "volume_chg": volume,
         }
 
-    def get_market_kline(self, ticker: str, *, limit: int = 100) -> list[dict[str, Any]]:
+    def get_market_kline(self, ticker: str, *, limit: int = 100, interval: str = "daily") -> list[dict[str, Any]]:
+        limit_value = self._normalize_kline_limit(limit)
+        _, timeframe = self._normalize_kline_interval(interval)
         provider = self._manager.get_provider_instance()
         if provider is not None and hasattr(provider, "get_historical_kline"):
-            payload = provider.get_historical_kline(ticker, limit=limit)
+            payload = provider.get_historical_kline(ticker, limit=limit_value)
             if pd is not None and isinstance(payload, pd.DataFrame):
                 if payload.empty:
                     return []
-                return payload.to_dict(orient="records")
+                records = payload.to_dict(orient="records")
+                records = self._resample_records(records, timeframe=timeframe)
+                if len(records) > limit_value:
+                    records = records[-limit_value:]
+                return records
             if isinstance(payload, list):
-                return [row for row in payload if isinstance(row, dict)]
+                records = [row for row in payload if isinstance(row, dict)]
+                records = self._resample_records(records, timeframe=timeframe)
+                if len(records) > limit_value:
+                    records = records[-limit_value:]
+                return records
 
         end = datetime.now().date()
-        start = end - timedelta(days=max(120, int(limit) * 2))
+        lookback_multiplier = 2 if timeframe == "D" else 8
+        start = end - timedelta(days=max(120, limit_value * lookback_multiplier))
         df = self._manager.get_kline(
             ticker=ticker,
             start_date=start.strftime("%Y-%m-%d"),
             end_date=end.strftime("%Y-%m-%d"),
-            timeframe="D",
+            timeframe=timeframe,
         )
         if pd is None or not isinstance(df, pd.DataFrame) or df.empty:
             return []
-        if len(df) > int(limit):
-            df = df.tail(int(limit))
-        return df.to_dict(orient="records")
+        records = df.to_dict(orient="records")
+        records = self._resample_records(records, timeframe=timeframe)
+        if len(records) > limit_value:
+            records = records[-limit_value:]
+        return records

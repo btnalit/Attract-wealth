@@ -1,0 +1,126 @@
+{
+  "report_version": "1.2",
+  "generated_at": "2026-04-24T01:10:44.413631",
+  "channels": [
+    "ths_ipc",
+    "simulation"
+  ],
+  "allow_skip": true,
+  "counts": {
+    "pass": 1,
+    "skip": 1,
+    "fail": 0
+  },
+  "all_passed": true,
+  "results": [
+    {
+      "channel": "ths_ipc",
+      "status": "SKIP",
+      "gate_ok": true,
+      "returncode": 0,
+      "report": "data\\smoke\\reports\\ths_ipc_latest.json",
+      "stdout": "[smoke] status=SKIP channel=ths_ipc output=data\\smoke\\reports\\ths_ipc_latest.json\n[smoke] check=preflight ok=True skipped=True elapsed_ms=64915.831 detail=preflight skipped (ths_ipc bridge unavailable: timed out)\n",
+      "stderr": "[ths_auto] 桥接模式失败: ['bridge call \\'connect\\' failed: connect_failed: ths:Process \"D:\\\\同花顺软件\\\\同花顺\\\\xiadan.exe\" not found!; ths:Process \"D:\\\\同花顺软件\\\\同花顺\\\\xiadan.exe\" not found!; universal_client:Process \"D:\\\\同花顺软件\\\\同花顺\\\\xiadan.exe\" not found!']，尝试原生连接...\n",
+      "checks": [
+        {
+          "name": "preflight",
+          "ok": true,
+          "skipped": true,
+          "detail": "preflight skipped (ths_ipc bridge unavailable: timed out)",
+          "elapsed_ms": 64915.831
+        }
+      ],
+      "preflight": {
+        "ready": false,
+        "reason": "ths_ipc bridge unavailable: timed out",
+        "metadata": {
+          "host": "127.0.0.1",
+          "port": 8089,
+          "easytrader_diag": {
+            "ok": false,
+            "summary": {},
+            "errors": [
+              "ths:No module named 'easyutils'",
+              "universal_client:No module named 'easyutils'"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "channel": "simulation",
+      "status": "PASS",
+      "gate_ok": true,
+      "returncode": 0,
+      "report": "data\\smoke\\reports\\simulation_latest.json",
+      "stdout": "[smoke] status=PASS channel=simulation output=data\\smoke\\reports\\simulation_latest.json\n[smoke] check=preflight ok=True skipped=False elapsed_ms=0.01 detail=ok\n[smoke] check=connect ok=True skipped=False elapsed_ms=0.007 detail=ok\n[smoke] check=get_balance ok=True skipped=False elapsed_ms=0.021 detail=ok\n[smoke] check=get_positions ok=True skipped=False elapsed_ms=0.006 detail=ok\n[smoke] check=get_orders ok=True skipped=False elapsed_ms=0.011 detail=ok\n[smoke] check=reconciliation_probe ok=True skipped=False elapsed_ms=429.276 detail=ok\n[smoke] check=order_probe ok=True skipped=True elapsed_ms=0.026 detail=order probe disabled\n",
+      "stderr": "",
+      "checks": [
+        {
+          "name": "preflight",
+          "ok": true,
+          "skipped": false,
+          "detail": "ok",
+          "elapsed_ms": 0.01
+        },
+        {
+          "name": "connect",
+          "ok": true,
+          "skipped": false,
+          "detail": "ok",
+          "elapsed_ms": 0.007
+        },
+        {
+          "name": "get_balance",
+          "ok": true,
+          "skipped": false,
+          "detail": "ok",
+          "elapsed_ms": 0.021
+        },
+        {
+          "name": "get_positions",
+          "ok": true,
+          "skipped": false,
+          "detail": "ok",
+          "elapsed_ms": 0.006
+        },
+        {
+          "name": "get_orders",
+          "ok": true,
+          "skipped": false,
+          "detail": "ok",
+          "elapsed_ms": 0.011
+        },
+        {
+          "name": "reconciliation_probe",
+          "ok": true,
+          "skipped": false,
+          "detail": "ok",
+          "elapsed_ms": 429.276
+        },
+        {
+          "name": "order_probe",
+          "ok": true,
+          "skipped": true,
+          "detail": "order probe disabled",
+          "elapsed_ms": 0.026
+        }
+      ],
+      "preflight": {
+        "ready": true,
+        "reason": "simulation ready",
+        "metadata": {}
+      }
+    }
+  ],
+  "stability_probe": {
+    "enabled": false,
+    "status": "SKIP",
+    "gate_ok": true
+  },
+  "budget_recovery_probe": {
+    "enabled": false,
+    "status": "SKIP",
+    "gate_ok": true
+  }
+}

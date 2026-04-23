@@ -7,7 +7,8 @@ from src.routers.monitor import router
 
 
 class _Broker:
-    is_connected = True
+    def __init__(self, connected: bool = True) -> None:
+        self.is_connected = connected
 
 
 class _RiskGate:
@@ -41,16 +42,16 @@ class _RiskGate:
 
 
 class _Service:
-    def __init__(self) -> None:
-        self.channel = "ths_auto"
-        self.broker = _Broker()
+    def __init__(self, channel: str = "ths_auto", connected: bool = True) -> None:
+        self.channel = channel
+        self.broker = _Broker(connected=connected)
         self.risk_gate = _RiskGate()
         self._china_data_disabled = True
 
 
-def _build_client() -> TestClient:
+def _build_client(*, channel: str = "ths_auto", connected: bool = True) -> TestClient:
     app = FastAPI()
-    app.state.trading_service = _Service()
+    app.state.trading_service = _Service(channel=channel, connected=connected)
     app.include_router(router, prefix="/api/v1/monitor")
     return TestClient(app)
 
@@ -64,6 +65,24 @@ def test_monitor_status_marks_ths_auto_as_online():
     channels = body["data"]
     assert channels[0]["name"] == "THS IPC"
     assert channels[0]["status"] == "online"
+
+
+def test_monitor_status_marks_qmt_as_online_when_active():
+    client = _build_client(channel="qmt", connected=True)
+    resp = client.get("/api/v1/monitor/status")
+    assert resp.status_code == 200
+    channels = resp.json()["data"]
+    qmt = next(item for item in channels if item["name"] == "miniQMT")
+    assert qmt["status"] == "online"
+
+
+def test_monitor_status_marks_qmt_as_offline_when_disconnected():
+    client = _build_client(channel="qmt", connected=False)
+    resp = client.get("/api/v1/monitor/status")
+    assert resp.status_code == 200
+    channels = resp.json()["data"]
+    qmt = next(item for item in channels if item["name"] == "miniQMT")
+    assert qmt["status"] == "offline"
 
 
 def test_monitor_risk_metrics_and_toggle_flow():
@@ -85,6 +104,29 @@ def test_monitor_risk_metrics_and_toggle_flow():
     pause_resp = client.post("/api/v1/monitor/risk/toggle", json={"name": "global_pause", "enabled": True})
     assert pause_resp.status_code == 200
     assert pause_resp.json()["data"]["risk_paused"] is True
+
+
+def test_monitor_overview_route_returns_aggregated_payload(monkeypatch):
+    client = _build_client()
+
+    async def _fake_overview(self, *, switches):  # noqa: ARG001
+        return {
+            "generated_at": 1710000000.0,
+            "readiness_score": 88.8,
+            "readiness_level": "stable",
+            "wallet": {"total_assets": 1000000.0},
+            "channels": [{"name": "Simulator", "status": "online"}],
+            "risk": {"is_paused": False},
+            "alerts": [],
+        }
+
+    monkeypatch.setattr("src.services.monitor_service.MonitorService.get_overview", _fake_overview)
+    resp = client.get("/api/v1/monitor/overview")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["ok"] is True
+    assert body["data"]["readiness_level"] == "stable"
+    assert body["data"]["wallet"]["total_assets"] == 1000000.0
 
 
 def test_monitor_audit_reads_from_trading_ledger(monkeypatch):
@@ -212,3 +254,22 @@ def test_monitor_quote_returns_amount_turnover_and_volume_aliases(monkeypatch):
     assert data["turnover"] == 123456.0
     assert data["volume_chg"] == 2.2
     assert data["volume"] == 2.2
+
+
+def test_monitor_kline_forwards_interval_to_service(monkeypatch):
+    client = _build_client()
+    captured: dict = {}
+
+    async def _fake_get_market_kline(self, ticker: str, *, limit: int, interval: str = "daily"):
+        captured["ticker"] = ticker
+        captured["limit"] = limit
+        captured["interval"] = interval
+        return [{"date": "2026-04-24", "close": 10.0}]
+
+    monkeypatch.setattr("src.services.monitor_service.MonitorService.get_market_kline", _fake_get_market_kline)
+    resp = client.get("/api/v1/monitor/kline/600000", params={"limit": 60, "interval": "weekly"})
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["ok"] is True
+    assert len(body["data"]) == 1
+    assert captured == {"ticker": "600000", "limit": 60, "interval": "weekly"}

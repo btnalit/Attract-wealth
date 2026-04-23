@@ -75,6 +75,17 @@ async def get_risk_metrics(request: Request):
         return _error_json(exc)
 
 
+@router.get("/overview")
+async def get_monitor_overview(request: Request):
+    """获取监控总览聚合信息（Dashboard 单入口）。"""
+    try:
+        switches = _get_monitor_switches(request)
+        payload = await _get_monitor_service(request).get_overview(switches=switches)
+        return ok_response(payload)
+    except TradingServiceError as exc:
+        return _error_json(exc)
+
+
 @router.get("/audit")
 async def get_audit_logs(
     request: Request,
@@ -129,9 +140,8 @@ async def get_market_kline(
     limit: int = Query(100),
 ):
     """获取历史 K 线。"""
-    _ = interval
     try:
-        payload = await _get_monitor_service(request).get_market_kline(ticker, limit=limit)
+        payload = await _get_monitor_service(request).get_market_kline(ticker, limit=limit, interval=interval)
         return ok_response(payload)
     except TradingServiceError as exc:
         return _error_json(exc)

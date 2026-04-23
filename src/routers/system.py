@@ -21,10 +21,11 @@ from src.core.dataflow_profiles import (
 from src.core.errors import TradingServiceError, error_response, get_error_catalog, ok_response
 from src.core.startup_preflight import run_startup_preflight
 from src.core.system_store import SystemStore
-from src.core.trading_ledger import TradingLedger
 from src.llm.openai_compat import get_llm_effective_config, get_llm_runtime_metrics
 from src.services.dataflow_service import DataflowService
 from src.services.system_config_service import SystemConfigService
+from src.services.system_query_service import SystemQueryService
+from src.services.ths_diagnosis_service import THSDiagnosisService
 
 router = APIRouter()
 LLM_RUNTIME_CONFIG_KEY = "llm_runtime_config"
@@ -190,6 +191,24 @@ def _get_system_config_service(request: Request) -> SystemConfigService:
     return service
 
 
+def _get_system_query_service(request: Request) -> SystemQueryService:
+    service = getattr(request.app.state, "system_query_service", None)
+    if isinstance(service, SystemQueryService):
+        return service
+    service = SystemQueryService()
+    request.app.state.system_query_service = service
+    return service
+
+
+def _get_ths_diagnosis_service(request: Request) -> THSDiagnosisService:
+    service = getattr(request.app.state, "ths_diagnosis_service", None)
+    if isinstance(service, THSDiagnosisService):
+        return service
+    service = THSDiagnosisService()
+    request.app.state.ths_diagnosis_service = service
+    return service
+
+
 def _get_dataflow_service(request: Request) -> DataflowService:
     service = getattr(request.app.state, "dataflow_service", None)
     if isinstance(service, DataflowService):
@@ -322,6 +341,7 @@ async def runtime_info(request: Request):
             "dataflow_tuning": service_runtime.get("dataflow_tuning", {}),
             "llm_usage_summary": service_runtime.get("llm_usage_summary", {}),
             "llm_runtime": service_runtime.get("llm_runtime", {}),
+            "core_governance": service_runtime.get("core_governance", {}),
             "reconciliation_blocked": service_runtime.get("reconciliation_blocked", False),
             "reconciliation_block_reason": service_runtime.get("reconciliation_block_reason", {}),
             "calendar": service_runtime.get("calendar", {}),
@@ -335,6 +355,32 @@ async def runtime_info(request: Request):
 @router.get("/ths-bridge")
 async def ths_bridge_state(request: Request):
     return ok_response({"ths_bridge": getattr(request.app.state, "ths_bridge", {})}, code="THS_BRIDGE_STATE_OK")
+
+
+@router.get("/ths-host/diagnosis")
+async def ths_host_diagnosis(
+    request: Request,
+    host: str = Query(default="127.0.0.1", description="THS IPC host"),
+    port: int = Query(default=8089, ge=1, le=65535, description="THS IPC port"),
+    timeout_s: float = Query(default=1.2, ge=0.2, le=10.0, description="runtime probe timeout (seconds)"),
+    ths_root: str = Query(default="", description="可选：覆盖 THS 安装目录"),
+):
+    try:
+        service = _get_ths_diagnosis_service(request)
+        payload = service.get_host_diagnosis(
+            host=host,
+            port=port,
+            timeout_s=timeout_s,
+            ths_root=ths_root.strip() or None,
+        )
+        return ok_response(payload, code="THS_HOST_DIAG_OK")
+    except TradingServiceError as exc:
+        return _error_json(exc)
+    except Exception as exc:  # noqa: BLE001
+        return JSONResponse(
+            status_code=500,
+            content=error_response("INTERNAL_ERROR", "获取 THS 宿主诊断失败", {"error": str(exc)}),
+        )
 
 
 @router.post("/ths-bridge/start")
@@ -936,11 +982,13 @@ async def llm_runtime_config_test(req: LLMRuntimeConfigRequest, request: Request
 
 @router.get("/llm/metrics")
 async def llm_metrics(
+    request: Request,
     hours: int = Query(default=24, ge=1, le=168),
     agent_id: str = Query(default=""),
     session_id: str = Query(default=""),
 ):
-    usage_summary = TradingLedger.get_llm_usage_summary(hours=hours, agent_id=agent_id, session_id=session_id)
+    query_service = _get_system_query_service(request)
+    usage_summary = query_service.get_llm_usage_summary(hours=hours, agent_id=agent_id, session_id=session_id)
     runtime = get_llm_runtime_metrics()
     return ok_response(
         {
@@ -953,6 +1001,7 @@ async def llm_metrics(
 
 @router.get("/audit/evidence")
 async def audit_evidence(
+    request: Request,
     limit: int = Query(default=50, ge=1, le=500),
     ticker: str = Query(default=""),
     session_id: str = Query(default=""),
@@ -960,7 +1009,8 @@ async def audit_evidence(
     request_id: str = Query(default=""),
     degraded_only: bool = Query(default=False),
 ):
-    records = TradingLedger.list_decision_evidence(
+    query_service = _get_system_query_service(request)
+    records = query_service.list_decision_evidence(
         limit=limit,
         ticker=ticker,
         session_id=session_id,
