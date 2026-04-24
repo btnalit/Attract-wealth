@@ -322,6 +322,66 @@
         "title": "HTTPValidationError",
         "type": "object"
       },
+      "KnowledgeDeleteRequest": {
+        "properties": {
+          "id": {
+            "description": "知识条目 ID",
+            "title": "Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "title": "KnowledgeDeleteRequest",
+        "type": "object"
+      },
+      "KnowledgeIngestRequest": {
+        "properties": {
+          "content": {
+            "default": "",
+            "description": "条目正文",
+            "title": "Content",
+            "type": "string"
+          },
+          "context": {
+            "additionalProperties": true,
+            "description": "上下文字段（pattern 类型）",
+            "title": "Context",
+            "type": "object"
+          },
+          "priority": {
+            "default": 0,
+            "description": "规则优先级（rule 类型生效）",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Priority",
+            "type": "integer"
+          },
+          "tags": {
+            "description": "标签列表",
+            "items": {
+              "type": "string"
+            },
+            "title": "Tags",
+            "type": "array"
+          },
+          "title": {
+            "default": "",
+            "description": "条目标题",
+            "title": "Title",
+            "type": "string"
+          },
+          "type": {
+            "default": "rule",
+            "description": "pattern/lesson/rule",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "title": "KnowledgeIngestRequest",
+        "type": "object"
+      },
       "LLMRuntimeConfigRequest": {
         "properties": {
           "api_key": {
@@ -390,6 +450,40 @@
           }
         },
         "title": "LLMRuntimeConfigRequest",
+        "type": "object"
+      },
+      "MemoryForgetRequest": {
+        "properties": {
+          "id": {
+            "description": "记忆条目 ID",
+            "title": "Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "title": "MemoryForgetRequest",
+        "type": "object"
+      },
+      "MemoryTierActionRequest": {
+        "properties": {
+          "current_tier": {
+            "default": "WARM",
+            "description": "当前层级 HOT/WARM/COLD",
+            "title": "Current Tier",
+            "type": "string"
+          },
+          "id": {
+            "description": "记忆条目 ID",
+            "title": "Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "title": "MemoryTierActionRequest",
         "type": "object"
       },
       "NotificationTestRequest": {
@@ -1356,6 +1450,226 @@
           }
         },
         "summary": "Search Knowledge",
+        "tags": [
+          "strategy"
+        ]
+      }
+    },
+    "/api/strategy/knowledge/delete": {
+      "post": {
+        "description": "删除一条知识条目。",
+        "operationId": "delete_knowledge_api_strategy_knowledge_delete_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/KnowledgeDeleteRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Knowledge",
+        "tags": [
+          "strategy"
+        ]
+      }
+    },
+    "/api/strategy/knowledge/ingest": {
+      "post": {
+        "description": "摄入一条知识到知识库。",
+        "operationId": "ingest_knowledge_api_strategy_knowledge_ingest_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/KnowledgeIngestRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Ingest Knowledge",
+        "tags": [
+          "strategy"
+        ]
+      }
+    },
+    "/api/strategy/memory/demote": {
+      "post": {
+        "description": "降低记忆层级（HOT->WARM->COLD）。",
+        "operationId": "demote_memory_api_strategy_memory_demote_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MemoryTierActionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Demote Memory",
+        "tags": [
+          "strategy"
+        ]
+      }
+    },
+    "/api/strategy/memory/forget": {
+      "post": {
+        "description": "遗忘记忆条目（仅标记隐藏，不删除知识主数据）。",
+        "operationId": "forget_memory_api_strategy_memory_forget_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MemoryForgetRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Forget Memory",
+        "tags": [
+          "strategy"
+        ]
+      }
+    },
+    "/api/strategy/memory/overrides": {
+      "get": {
+        "description": "查询 MemoryVault 的层级覆盖与遗忘状态。",
+        "operationId": "get_memory_overrides_api_strategy_memory_overrides_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Memory Overrides",
+        "tags": [
+          "strategy"
+        ]
+      }
+    },
+    "/api/strategy/memory/promote": {
+      "post": {
+        "description": "提升记忆层级（COLD->WARM->HOT）。",
+        "operationId": "promote_memory_api_strategy_memory_promote_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MemoryTierActionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Promote Memory",
         "tags": [
           "strategy"
         ]
@@ -2713,6 +3027,89 @@
         ]
       }
     },
+    "/api/system/ths-host/diagnosis": {
+      "get": {
+        "operationId": "ths_host_diagnosis_api_system_ths_host_diagnosis_get",
+        "parameters": [
+          {
+            "description": "THS IPC host",
+            "in": "query",
+            "name": "host",
+            "required": false,
+            "schema": {
+              "default": "127.0.0.1",
+              "description": "THS IPC host",
+              "title": "Host",
+              "type": "string"
+            }
+          },
+          {
+            "description": "THS IPC port",
+            "in": "query",
+            "name": "port",
+            "required": false,
+            "schema": {
+              "default": 8089,
+              "description": "THS IPC port",
+              "maximum": 65535,
+              "minimum": 1,
+              "title": "Port",
+              "type": "integer"
+            }
+          },
+          {
+            "description": "runtime probe timeout (seconds)",
+            "in": "query",
+            "name": "timeout_s",
+            "required": false,
+            "schema": {
+              "default": 1.2,
+              "description": "runtime probe timeout (seconds)",
+              "maximum": 10.0,
+              "minimum": 0.2,
+              "title": "Timeout S",
+              "type": "number"
+            }
+          },
+          {
+            "description": "可选：覆盖 THS 安装目录",
+            "in": "query",
+            "name": "ths_root",
+            "required": false,
+            "schema": {
+              "default": "",
+              "description": "可选：覆盖 THS 安装目录",
+              "title": "Ths Root",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Ths Host Diagnosis",
+        "tags": [
+          "system"
+        ]
+      }
+    },
     "/api/system/watchlist": {
       "get": {
         "operationId": "get_watchlist_api_system_watchlist_get",
@@ -3453,6 +3850,26 @@
           }
         },
         "summary": "Get Market Kline",
+        "tags": [
+          "monitor"
+        ]
+      }
+    },
+    "/api/v1/monitor/overview": {
+      "get": {
+        "description": "获取监控总览聚合信息（Dashboard 单入口）。",
+        "operationId": "get_monitor_overview_api_v1_monitor_overview_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Monitor Overview",
         "tags": [
           "monitor"
         ]

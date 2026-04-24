@@ -1,17 +1,17 @@
 {
   "report_version": "1.1",
   "channel": "ths_ipc",
-  "started_at": "2026-04-23T04:15:32.847071+00:00",
+  "started_at": "2026-04-23T17:09:37.742397+00:00",
   "finished_at": "",
   "duration_ms": 0.0,
-  "status": "FAIL",
+  "status": "SKIP",
   "checks": [
     {
       "name": "preflight",
-      "ok": false,
-      "skipped": false,
-      "detail": "preflight failed: ths_ipc bridge unavailable: timed out",
-      "elapsed_ms": 39688.468
+      "ok": true,
+      "skipped": true,
+      "detail": "preflight skipped (ths_ipc bridge unavailable: timed out)",
+      "elapsed_ms": 64915.831
     }
   ],
   "snapshots": {},
@@ -35,7 +35,7 @@
     "include_order_probe": false,
     "force_live_order": false,
     "include_reconcile": true,
-    "strict_preflight": true,
+    "strict_preflight": false,
     "ticker": "000001",
     "price": 10.0,
     "quantity": 100,

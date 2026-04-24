@@ -1,11 +1,9 @@
 ﻿from __future__ import annotations
 
 import argparse
-import csv
 import importlib
 import json
 import os
-import subprocess
 import sys
 import time
 from datetime import datetime, timezone
@@ -19,9 +17,11 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from src.core.ths_host_autostart import (  # noqa: E402
     analyze_host_trigger_chain,
+    collect_xiadan_ui_context,
     collect_host_observability_snapshot,
     DEFAULT_THS_ROOT,
     fetch_trade_snapshot,
+    is_xiadan_running,
     probe_bridge_runtime,
     read_ths_account_context,
     summarize_trade_snapshot,
@@ -152,101 +152,6 @@ def _resolve_path(path_like: str) -> Path:
     return (PROJECT_ROOT / path).resolve()
 
 
-def _is_xiadan_running() -> tuple[bool | None, str]:
-    try:
-        proc = subprocess.run(
-            ["tasklist", "/FI", "IMAGENAME eq xiadan.exe", "/FO", "CSV", "/NH"],
-            capture_output=True,
-            check=False,
-            text=True,
-            encoding="gbk",
-            errors="ignore",
-        )
-        text = f"{proc.stdout}\n{proc.stderr}".strip().lower()
-        if "access denied" in text:
-            return None, "access_denied"
-        if "no tasks are running" in text:
-            return False, ""
-        if "xiadan.exe" in text:
-            return True, ""
-        if proc.returncode != 0:
-            return None, text.strip() or f"tasklist_rc={proc.returncode}"
-        return False, ""
-    except Exception as exc:  # noqa: BLE001
-        return None, str(exc)
-
-
-def _collect_xiadan_ui_context() -> dict[str, Any]:
-    context: dict[str, Any] = {
-        "running": False,
-        "process_count": 0,
-        "strategy_page_open": False,
-        "window_titles": [],
-        "processes": [],
-        "error": "",
-    }
-    try:
-        proc = subprocess.run(
-            ["tasklist", "/V", "/FI", "IMAGENAME eq xiadan.exe", "/FO", "CSV", "/NH"],
-            capture_output=True,
-            check=False,
-            text=True,
-            encoding="gbk",
-            errors="ignore",
-        )
-        raw_text = f"{proc.stdout}\n{proc.stderr}".strip()
-        text_lower = raw_text.lower()
-        if "no tasks are running" in text_lower:
-            return context
-        if not raw_text:
-            if proc.returncode != 0:
-                context["error"] = f"tasklist_rc={proc.returncode}"
-            return context
-
-        rows: list[dict[str, Any]] = []
-        for line in proc.stdout.splitlines():
-            raw = str(line or "").strip()
-            if not raw:
-                continue
-            try:
-                row = next(csv.reader([raw]))
-            except Exception:
-                continue
-            if len(row) < 9:
-                continue
-            if str(row[0]).strip().lower() != "xiadan.exe":
-                continue
-            pid_text = str(row[1]).strip().replace(",", "")
-            try:
-                pid = int(pid_text)
-            except Exception:
-                pid = 0
-            window_title = str(row[8]).strip()
-            rows.append(
-                {
-                    "pid": pid,
-                    "session_name": str(row[2]).strip(),
-                    "session_id": str(row[3]).strip(),
-                    "mem_usage": str(row[4]).strip(),
-                    "status": str(row[5]).strip(),
-                    "user_name": str(row[6]).strip(),
-                    "cpu_time": str(row[7]).strip(),
-                    "window_title": window_title,
-                }
-            )
-
-        titles = [str(item.get("window_title", "")).strip() for item in rows if str(item.get("window_title", "")).strip()]
-        context["running"] = bool(rows)
-        context["process_count"] = len(rows)
-        context["window_titles"] = titles
-        context["processes"] = rows
-        context["strategy_page_open"] = any(("策略条件单" in title) or ("信号策略" in title) for title in titles)
-        return context
-    except Exception as exc:  # noqa: BLE001
-        context["error"] = str(exc)
-        return context
-
-
 def run_probe(args: argparse.Namespace) -> dict[str, Any]:
     started_at = _iso_now()
     deadline = time.time() + max(1.0, float(args.timeout_seconds))
@@ -286,7 +191,7 @@ def run_probe(args: argparse.Namespace) -> dict[str, Any]:
             "known": xiadan_known,
             "error": xiadan_check_error,
         },
-        "xiadan_ui_context": _collect_xiadan_ui_context(),
+        "xiadan_ui_context": collect_xiadan_ui_context(),
         "account_context": read_ths_account_context(Path(str(args.ths_root))),
         "host_observability": collect_host_observability_snapshot(Path(str(args.ths_root))),
         "samples": [],

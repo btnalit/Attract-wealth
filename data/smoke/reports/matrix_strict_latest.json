@@ -1,6 +1,6 @@
 {
   "report_version": "1.2",
-  "generated_at": "2026-04-23T12:17:07.210114",
+  "generated_at": "2026-04-23T13:53:20.774335",
   "channels": [
     "simulation"
   ],
@@ -18,7 +18,7 @@
       "gate_ok": true,
       "returncode": 0,
       "report": "data\\smoke\\reports\\simulation_latest.json",
-      "stdout": "[smoke] status=PASS channel=simulation output=data\\smoke\\reports\\simulation_latest.json\n[smoke] check=preflight ok=True skipped=False elapsed_ms=0.004 detail=ok\n[smoke] check=connect ok=True skipped=False elapsed_ms=0.002 detail=ok\n[smoke] check=get_balance ok=True skipped=False elapsed_ms=0.008 detail=ok\n[smoke] check=get_positions ok=True skipped=False elapsed_ms=0.002 detail=ok\n[smoke] check=get_orders ok=True skipped=False elapsed_ms=0.003 detail=ok\n[smoke] check=reconciliation_probe ok=True skipped=False elapsed_ms=169.576 detail=ok\n[smoke] check=order_probe ok=True skipped=True elapsed_ms=0.01 detail=order probe disabled\n",
+      "stdout": "[smoke] status=PASS channel=simulation output=data\\smoke\\reports\\simulation_latest.json\n[smoke] check=preflight ok=True skipped=False elapsed_ms=0.006 detail=ok\n[smoke] check=connect ok=True skipped=False elapsed_ms=0.004 detail=ok\n[smoke] check=get_balance ok=True skipped=False elapsed_ms=0.011 detail=ok\n[smoke] check=get_positions ok=True skipped=False elapsed_ms=0.003 detail=ok\n[smoke] check=get_orders ok=True skipped=False elapsed_ms=0.005 detail=ok\n[smoke] check=reconciliation_probe ok=True skipped=False elapsed_ms=186.461 detail=ok\n[smoke] check=order_probe ok=True skipped=True elapsed_ms=0.012 detail=order probe disabled\n",
       "stderr": "",
       "checks": [
         {
@@ -26,49 +26,49 @@
           "ok": true,
           "skipped": false,
           "detail": "ok",
-          "elapsed_ms": 0.004
+          "elapsed_ms": 0.006
         },
         {
           "name": "connect",
           "ok": true,
           "skipped": false,
           "detail": "ok",
-          "elapsed_ms": 0.002
+          "elapsed_ms": 0.004
         },
         {
           "name": "get_balance",
           "ok": true,
           "skipped": false,
           "detail": "ok",
-          "elapsed_ms": 0.008
+          "elapsed_ms": 0.011
         },
         {
           "name": "get_positions",
           "ok": true,
           "skipped": false,
           "detail": "ok",
-          "elapsed_ms": 0.002
+          "elapsed_ms": 0.003
         },
         {
           "name": "get_orders",
           "ok": true,
           "skipped": false,
           "detail": "ok",
-          "elapsed_ms": 0.003
+          "elapsed_ms": 0.005
         },
         {
           "name": "reconciliation_probe",
           "ok": true,
           "skipped": false,
           "detail": "ok",
-          "elapsed_ms": 169.576
+          "elapsed_ms": 186.461
         },
         {
           "name": "order_probe",
           "ok": true,
           "skipped": true,
           "detail": "order probe disabled",
-          "elapsed_ms": 0.01
+          "elapsed_ms": 0.012
         }
       ],
       "preflight": {
@@ -172,8 +172,8 @@
       "release_count": 20,
       "recovery_success_count": 20,
       "recovery_success_rate": 1.0,
-      "avg_recovery_duration_s": 0.24137,
-      "p95_recovery_duration_s": 0.241868,
+      "avg_recovery_duration_s": 0.241383,
+      "p95_recovery_duration_s": 0.241972,
       "active_elapsed_s": 0.0
     },
     "params": {

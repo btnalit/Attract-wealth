@@ -7,7 +7,7 @@ import logging
 from typing import Any
 
 from src.core.trading_ledger import LedgerEntry, TradingLedger
-from src.core.trading_vm import AgentState
+from src.core.agent_state import AgentState
 
 logger = logging.getLogger(__name__)
 

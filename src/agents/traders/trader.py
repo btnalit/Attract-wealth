@@ -9,7 +9,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from src.core.trading_vm import AgentState
+from src.core.agent_state import AgentState
 from src.llm.openai_compat import create_deep_llm
 
 logger = logging.getLogger(__name__)

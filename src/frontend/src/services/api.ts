@@ -1,9 +1,14 @@
 import type {
   CancelAllOrdersRequest,
   ChannelSwitchRequest,
+  DirectOrderRequest,
   LLMRuntimeConfigRequest,
   NotificationTestRequest,
+  StrategyBacktestGridRequest,
   StrategyBacktestRequest,
+  StrategyTransitionRequest,
+  THSBridgeStartRequest,
+  THSBridgeStopRequest,
 } from "../api/generated/openapi-types";
 
 /**
@@ -203,6 +208,41 @@ export interface MonitorRiskPayload {
 }
 
 /**
+ * 监控总览钱包结构。
+ */
+export interface MonitorOverviewWalletPayload {
+  total_assets?: number;
+  available_cash?: number;
+  market_value?: number;
+  daily_pnl?: number;
+  total_pnl?: number;
+  account_name?: string;
+  account_type?: string;
+  updated_at?: number;
+  [key: string]: unknown;
+}
+
+/**
+ * 监控总览结构。
+ */
+export interface MonitorOverviewPayload {
+  generated_at?: number;
+  readiness_score?: number;
+  readiness_level?: string;
+  wallet?: MonitorOverviewWalletPayload;
+  risk?: MonitorRiskPayload;
+  channels?: MonitorStatusPayload[];
+  data_health?: ApiLooseObject;
+  reconciliation_guard?: ApiLooseObject;
+  positions?: TradingPositionPayload[];
+  recent_orders?: ApiLooseObject[];
+  alerts?: ApiLooseObject[];
+  decision_summary?: ApiLooseObject;
+  counts?: ApiLooseObject;
+  [key: string]: unknown;
+}
+
+/**
  * 资金快照结构。
  */
 export interface TradingBalancePayload {
@@ -345,9 +385,116 @@ export interface LlmConfigPayload {
 }
 
 /**
+ * THS runtime 探针结构。
+ */
+export interface ThsHostRuntimeProbePayload {
+  reachable?: boolean;
+  runtime_ok?: boolean;
+  runtime?: ApiLooseObject;
+  error?: string;
+  [key: string]: unknown;
+}
+
+/**
+ * THS 宿主触发诊断结构。
+ */
+export interface ThsHostTriggerDiagnosisPayload {
+  stage?: string;
+  status?: string;
+  summary?: string;
+  blockers?: string[];
+  suggestions?: string[];
+  facts?: ApiLooseObject;
+  [key: string]: unknown;
+}
+
+/**
+ * xiadan UI 诊断结构。
+ */
+export interface ThsXiadanUiContextPayload {
+  running?: boolean;
+  process_count?: number;
+  strategy_page_open?: boolean;
+  strategy_window_keywords?: string[];
+  strategy_related_windows?: string[];
+  window_titles?: string[];
+  processes?: ApiLooseObject[];
+  error?: string;
+  [key: string]: unknown;
+}
+
+/**
+ * THS 宿主诊断结构。
+ */
+export interface ThsHostDiagnosisPayload {
+  checked_at?: number;
+  status?: string;
+  ready?: boolean;
+  host?: string;
+  port?: number;
+  timeout_s?: number;
+  ths_root?: string;
+  xiadan_running?: boolean | null;
+  xiadan_process_check?: ApiLooseObject;
+  xiadan_ui_context?: ThsXiadanUiContextPayload;
+  account_context?: ApiLooseObject;
+  runtime_probe?: ThsHostRuntimeProbePayload;
+  host_observability?: ApiLooseObject;
+  host_trigger_diagnosis?: ThsHostTriggerDiagnosisPayload;
+  hints?: string[];
+  [key: string]: unknown;
+}
+
+/**
+ * THS Bridge 状态结构。
+ */
+export interface ThsBridgeStatePayload {
+  ths_bridge?: ApiLooseObject;
+  [key: string]: unknown;
+}
+
+/**
+ * 知识条目摄入请求结构。
+ */
+export interface StrategyKnowledgeIngestPayload {
+  type: "pattern" | "lesson" | "rule";
+  title: string;
+  content: string;
+  tags?: string[];
+  priority?: number;
+  context?: ApiLooseObject;
+}
+
+/**
+ * 知识条目删除请求结构。
+ */
+export interface StrategyKnowledgeDeletePayload {
+  id: string;
+}
+
+/**
+ * 记忆层级动作请求结构。
+ */
+export interface StrategyMemoryTierActionPayload {
+  id: string;
+  current_tier: "HOT" | "WARM" | "COLD";
+}
+
+/**
+ * 记忆遗忘动作请求结构。
+ */
+export interface StrategyMemoryForgetPayload {
+  id: string;
+}
+
+/**
  * Monitor 域 API。
  */
 export const monitorApi = {
+  /**
+   * 获取驾驶舱总览聚合数据。
+   */
+  getOverview: <T = MonitorOverviewPayload>() => api.get<T>("/api/v1/monitor/overview"),
   /**
    * 获取风险指标快照。
    */
@@ -369,6 +516,11 @@ export const monitorApi = {
    * 获取行情报价。
    */
   getQuote: <T = ApiLooseObject>(symbol: string) => api.get<T>(`/api/v1/monitor/quote/${symbol}`),
+  /**
+   * 获取历史 K 线。
+   */
+  getKline: <T = ApiLooseObject[]>(ticker: string, limit = 120, interval = "daily") =>
+    api.get<T>(`/api/v1/monitor/kline/${ticker}`, { limit, interval }),
   /**
    * 获取数据源健康状态。
    */
@@ -400,14 +552,53 @@ export const strategyApi = {
    */
   runBacktest: <T = ApiLooseObject>(payload: StrategyBacktestRequest) => api.post<T>("/api/strategy/backtest", payload),
   /**
+   * 启动一次参数网格回测（用于蒙特卡洛/参数分布模拟）。
+   */
+  runBacktestGrid: <T = ApiLooseObject>(payload: StrategyBacktestGridRequest) =>
+    api.post<T>("/api/strategy/backtest/grid", payload),
+  /**
    * 查询策略版本差异。
    */
   getVersionDiff: <T = ApiLooseObject>(id: string) => api.get<T>(`/api/strategy/versions/${id}/diff`),
+  /**
+   * 迁移策略版本状态。
+   */
+  transitionVersion: <T = ApiLooseObject>(id: string, payload: StrategyTransitionRequest) =>
+    api.post<T>(`/api/strategy/versions/${id}/transition`, payload),
   /**
    * 查询知识库条目。
    */
   getKnowledge: <T = ApiLooseObject>(type?: string, q?: string) =>
     api.get<T>("/api/strategy/knowledge", { type, q }),
+  /**
+   * 摄入一条知识到知识库。
+   */
+  ingestKnowledge: <T = ApiLooseObject>(payload: StrategyKnowledgeIngestPayload) =>
+    api.post<T>("/api/strategy/knowledge/ingest", payload),
+  /**
+   * 删除一条知识条目。
+   */
+  deleteKnowledge: <T = ApiLooseObject>(payload: StrategyKnowledgeDeletePayload) =>
+    api.post<T>("/api/strategy/knowledge/delete", payload),
+  /**
+   * 查询记忆层级覆盖与遗忘状态。
+   */
+  getMemoryOverrides: <T = ApiLooseObject>() => api.get<T>("/api/strategy/memory/overrides"),
+  /**
+   * 提升一条记忆层级（COLD->WARM->HOT）。
+   */
+  promoteMemory: <T = ApiLooseObject>(payload: StrategyMemoryTierActionPayload) =>
+    api.post<T>("/api/strategy/memory/promote", payload),
+  /**
+   * 降低一条记忆层级（HOT->WARM->COLD）。
+   */
+  demoteMemory: <T = ApiLooseObject>(payload: StrategyMemoryTierActionPayload) =>
+    api.post<T>("/api/strategy/memory/demote", payload),
+  /**
+   * 遗忘一条记忆（仅隐藏标记）。
+   */
+  forgetMemory: <T = ApiLooseObject>(payload: StrategyMemoryForgetPayload) =>
+    api.post<T>("/api/strategy/memory/forget", payload),
 };
 
 /**
@@ -426,6 +617,11 @@ export const tradingApi = {
    * 同步订单状态。
    */
   syncOrders: <T = ApiLooseObject>() => api.post<T>("/api/trading/orders/sync"),
+  /**
+   * 提交直下单请求。
+   */
+  placeDirectOrder: <T = ApiLooseObject>(payload: DirectOrderRequest) =>
+    api.post<T>("/api/trading/orders/direct", payload),
   /**
    * 切换交易通道。
    */
@@ -463,6 +659,25 @@ export const systemApi = {
    */
   getRuntime: <T = ApiLooseObject>() => api.get<T>("/api/system/runtime"),
   /**
+   * 获取 THS 宿主 runtime 诊断信息。
+   */
+  getThsHostDiagnosis: <T = ThsHostDiagnosisPayload>(query?: ApiQuery) =>
+    api.get<T>("/api/system/ths-host/diagnosis", query),
+  /**
+   * 获取 THS Bridge 当前状态。
+   */
+  getThsBridgeState: <T = ThsBridgeStatePayload>() => api.get<T>("/api/system/ths-bridge"),
+  /**
+   * 启动 THS Bridge。
+   */
+  startThsBridge: <T = ApiLooseObject>(payload: THSBridgeStartRequest) =>
+    api.post<T>("/api/system/ths-bridge/start", payload),
+  /**
+   * 停止 THS Bridge。
+   */
+  stopThsBridge: <T = ApiLooseObject>(payload: THSBridgeStopRequest) =>
+    api.post<T>("/api/system/ths-bridge/stop", payload),
+  /**
    * 获取数据源目录与当前主源状态。
    */
   getDataflowProviders: <T = DataflowProvidersPayload>() => api.get<T>("/api/system/dataflow/providers"),
@@ -476,4 +691,14 @@ export const systemApi = {
    */
   testWechatNotification: <T = ApiLooseObject>(payload: NotificationTestRequest) =>
     api.post<T>("/api/system/notification/test/wechat", payload),
+};
+
+/**
+ * Stream 域 API。
+ */
+export const streamApi = {
+  /**
+   * 获取统一 SSE 事件流地址。
+   */
+  getEventsUrl: () => apiUrl("/api/v1/stream/events"),
 };

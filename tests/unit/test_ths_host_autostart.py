@@ -5,8 +5,10 @@ from src.core.ths_host_autostart import (
     AUTOSTART_MARK_BEGIN,
     AUTOSTART_MARK_END,
     build_autostart_injection_block,
+    collect_xiadan_ui_context,
     collect_host_observability_snapshot,
     inject_autostart_block,
+    is_xiadan_running,
     read_ths_account_context,
     render_host_bootstrap_script,
     summarize_trade_snapshot,
@@ -159,3 +161,35 @@ def test_summarize_trade_snapshot_success_payload():
     assert summary["positions_count"] == 1
     assert summary["open_orders_count"] == 1
     assert summary["full_orders_count"] == 2
+
+
+def test_is_xiadan_running_access_denied(monkeypatch):
+    from src.core import ths_host_autostart as module
+
+    class _Proc:
+        returncode = 0
+        stdout = "INFO: Access is denied."
+        stderr = ""
+
+    monkeypatch.setattr(module.subprocess, "run", lambda *args, **kwargs: _Proc())  # noqa: ARG005
+    running, error = is_xiadan_running()
+    assert running is None
+    assert error == "access_denied"
+
+
+def test_collect_xiadan_ui_context_detects_strategy_window(monkeypatch):
+    from src.core import ths_host_autostart as module
+
+    class _Proc:
+        returncode = 0
+        stdout = (
+            '"xiadan.exe","1234","Console","1","10,000 K","Running","DESKTOP\\\\u","0:00:01","网上股票交易系统5.0 - 策略条件单"\n'
+        )
+        stderr = ""
+
+    monkeypatch.setattr(module.subprocess, "run", lambda *args, **kwargs: _Proc())  # noqa: ARG005
+    context = collect_xiadan_ui_context()
+    assert context["running"] is True
+    assert context["process_count"] == 1
+    assert context["strategy_page_open"] is True
+    assert context["strategy_related_windows"] == ["网上股票交易系统5.0 - 策略条件单"]

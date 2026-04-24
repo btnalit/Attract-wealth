@@ -107,6 +107,28 @@ class StrategyTransitionRequest(BaseModel):
     strategy_template: str = Field(default="", description="门禁模板上下文")
 
 
+class KnowledgeIngestRequest(BaseModel):
+    type: str = Field(default="rule", description="pattern/lesson/rule")
+    title: str = Field(default="", description="条目标题")
+    content: str = Field(default="", description="条目正文")
+    tags: list[str] = Field(default_factory=list, description="标签列表")
+    priority: int = Field(default=0, ge=0, le=100, description="规则优先级（rule 类型生效）")
+    context: dict[str, Any] = Field(default_factory=dict, description="上下文字段（pattern 类型）")
+
+
+class KnowledgeDeleteRequest(BaseModel):
+    id: str = Field(..., description="知识条目 ID")
+
+
+class MemoryTierActionRequest(BaseModel):
+    id: str = Field(..., description="记忆条目 ID")
+    current_tier: str = Field(default="WARM", description="当前层级 HOT/WARM/COLD")
+
+
+class MemoryForgetRequest(BaseModel):
+    id: str = Field(..., description="记忆条目 ID")
+
+
 def _error_json(exc: TradingServiceError) -> JSONResponse:
     return JSONResponse(
         status_code=exc.http_status,
@@ -294,12 +316,6 @@ def _get_latest_report(strategy_service: StrategyService, strategy_id: str) -> d
     return item if isinstance(item, dict) else None
 
 
-def _load_knowledge_core():
-    from src.evolution.knowledge_core import KnowledgeCore
-
-    return KnowledgeCore
-
-
 def _normalize_knowledge_type(raw: str) -> str:
     value = str(raw or "").strip().lower()
     mapping = {
@@ -312,6 +328,13 @@ def _normalize_knowledge_type(raw: str) -> str:
         "all": "all",
     }
     return mapping.get(value, "all")
+
+
+def _normalize_memory_tier(raw: str) -> str | None:
+    value = str(raw or "").strip().upper()
+    if value in {"HOT", "WARM", "COLD"}:
+        return value
+    return None
 
 
 def _normalize_knowledge_tags(raw: Any) -> list[str]:
@@ -332,7 +355,7 @@ def _normalize_knowledge_tags(raw: Any) -> list[str]:
     return []
 
 
-def _normalize_knowledge_vector(raw: Any, *, seed: str) -> list[float]:
+def _normalize_knowledge_vector(raw: Any) -> list[float] | None:
     if isinstance(raw, (list, tuple)) and len(raw) >= 2:
         try:
             x = float(raw[0])
@@ -342,11 +365,16 @@ def _normalize_knowledge_vector(raw: Any, *, seed: str) -> list[float]:
             return [round(max(-1.0, min(1.0, x)), 6), round(max(-1.0, min(1.0, y)), 6)]
         except (TypeError, ValueError):
             pass
+    return None
 
-    digest = hashlib.sha256(seed.encode("utf-8")).digest()
-    x = int.from_bytes(digest[:2], "big") / 65535.0
-    y = int.from_bytes(digest[2:4], "big") / 65535.0
-    return [round(x * 2 - 1, 6), round(y * 2 - 1, 6)]
+
+def _resolve_memory_tier(relevance: float) -> str:
+    score = max(0.0, min(100.0, float(relevance)))
+    if score >= 80.0:
+        return "HOT"
+    if score >= 55.0:
+        return "WARM"
+    return "COLD"
 
 
 def _normalize_knowledge_entry(raw: dict[str, Any], *, default_type: str) -> dict[str, Any]:
@@ -379,14 +407,16 @@ def _normalize_knowledge_entry(raw: dict[str, Any], *, default_type: str) -> dic
     else:
         relevance = relevance_raw
     relevance = round(max(0.0, min(100.0, relevance)), 2)
+    memory_tier = _resolve_memory_tier(relevance)
 
-    vector = _normalize_knowledge_vector(raw.get("vector"), seed=f"{entry_id}|{title}|{item_type}")
+    vector = _normalize_knowledge_vector(raw.get("vector"))
 
     return {
         "id": entry_id,
         "title": title,
         "type": item_type,
         "relevance": relevance,
+        "memory_tier": memory_tier,
         "summary": summary,
         "tags": tags,
         "fullContent": full_content,
@@ -493,12 +523,14 @@ def _get_strategy_service(request: Request) -> StrategyService:
         strategy_service = StrategyService(
             strategy_store=getattr(request.app.state, "strategy_store", None),
             backtest_runner=getattr(request.app.state, "backtest_runner", None),
+            memory_vault_dao=getattr(request.app.state, "memory_vault_dao", None),
         )
         request.app.state.strategy_service = strategy_service
     else:
         strategy_service.sync_dependencies(
             strategy_store=getattr(request.app.state, "strategy_store", None),
             backtest_runner=getattr(request.app.state, "backtest_runner", None),
+            memory_vault_dao=getattr(request.app.state, "memory_vault_dao", None),
         )
     return strategy_service
 
@@ -1098,12 +1130,15 @@ async def search_knowledge(
     top_k: int = Query(10, ge=1, le=100),
 ):
     """Search knowledge base and return frontend-friendly normalized entries."""
-    _ = request
+    strategy_service = _get_strategy_service(request)
     knowledge_type = _normalize_knowledge_type(type)
     query_text = str(q or "").strip()
     try:
-        knowledge_core_cls = _load_knowledge_core()
-        kb = knowledge_core_cls()
+        raw_results = strategy_service.search_knowledge(
+            knowledge_type=knowledge_type,
+            query_text=query_text,
+            top_k=top_k,
+        )
     except ImportError as exc:
         logger.warning("KnowledgeCore import failed, return empty knowledge list: %s", exc)
         return ok_response([], code="KNOWLEDGE_CORE_UNAVAILABLE")
@@ -1113,22 +1148,203 @@ async def search_knowledge(
             content=error_response("INTERNAL_ERROR", "Knowledge core init failed", {"error": str(exc)}),
         )
 
-    try:
-        if knowledge_type == "pattern":
-            raw_results = kb.search_patterns(query_text, top_k)
-        elif knowledge_type == "lesson":
-            raw_results = kb.search_lessons(query_text, top_k)
-        elif knowledge_type == "rule":
-            raw_results = kb.search_rules(query_text, top_k)
-        else:
-            raw_results = kb.search_all(query_text, top_k)
+    payload = _flatten_knowledge_results(raw_results, requested_type=knowledge_type, top_k=top_k)
+    return ok_response(payload, code="KNOWLEDGE_SEARCH_OK")
 
-        payload = _flatten_knowledge_results(raw_results, requested_type=knowledge_type, top_k=top_k)
-        return ok_response(payload, code="KNOWLEDGE_SEARCH_OK")
-    except Exception as exc:
+
+@router.post("/knowledge/ingest")
+async def ingest_knowledge(req: KnowledgeIngestRequest, request: Request):
+    """摄入一条知识到知识库。"""
+    strategy_service = _get_strategy_service(request)
+    knowledge_type = _normalize_knowledge_type(req.type)
+    if knowledge_type == "all":
+        return JSONResponse(
+            status_code=400,
+            content=error_response(
+                "INVALID_STRATEGY_REQUEST",
+                "知识类型不合法",
+                {"type": req.type, "allowed": ["pattern", "lesson", "rule"]},
+            ),
+        )
+
+    title = str(req.title or "").strip()
+    content = str(req.content or "").strip()
+    if not content:
+        return JSONResponse(
+            status_code=400,
+            content=error_response("INVALID_STRATEGY_REQUEST", "content 不能为空", {"field": "content"}),
+        )
+    if knowledge_type in {"pattern", "lesson"} and not title:
+        return JSONResponse(
+            status_code=400,
+            content=error_response("INVALID_STRATEGY_REQUEST", "title 不能为空", {"field": "title"}),
+        )
+
+    try:
+        payload = strategy_service.ingest_knowledge(
+            knowledge_type=knowledge_type,
+            title=title,
+            content=content,
+            tags=_normalize_knowledge_tags(req.tags),
+            priority=int(req.priority),
+            context=dict(req.context or {}),
+        )
+        return ok_response(payload, code="KNOWLEDGE_INGEST_OK")
+    except ImportError as exc:
+        logger.warning("KnowledgeCore import failed for ingest: %s", exc)
+        return JSONResponse(
+            status_code=503,
+            content=error_response("KNOWLEDGE_CORE_UNAVAILABLE", "Knowledge core not available", {"error": str(exc)}),
+        )
+    except Exception as exc:  # noqa: BLE001
         return JSONResponse(
             status_code=500,
-            content=error_response("INTERNAL_ERROR", "Knowledge search failed", {"error": str(exc)}),
+            content=error_response("INTERNAL_ERROR", "Knowledge ingest failed", {"error": str(exc)}),
+        )
+
+
+@router.post("/knowledge/delete")
+async def delete_knowledge(req: KnowledgeDeleteRequest, request: Request):
+    """删除一条知识条目。"""
+    strategy_service = _get_strategy_service(request)
+    entry_id = str(req.id or "").strip()
+    if not entry_id:
+        return JSONResponse(
+            status_code=400,
+            content=error_response("INVALID_STRATEGY_REQUEST", "id 不能为空", {"field": "id"}),
+        )
+
+    try:
+        deleted = strategy_service.delete_knowledge(entry_id=entry_id)
+        if not deleted:
+            return JSONResponse(
+                status_code=404,
+                content=error_response("KNOWLEDGE_NOT_FOUND", "知识条目不存在", {"id": entry_id}),
+            )
+        return ok_response({"id": entry_id, "deleted": True}, code="KNOWLEDGE_DELETE_OK")
+    except ImportError as exc:
+        logger.warning("KnowledgeCore import failed for delete: %s", exc)
+        return JSONResponse(
+            status_code=503,
+            content=error_response("KNOWLEDGE_CORE_UNAVAILABLE", "Knowledge core not available", {"error": str(exc)}),
+        )
+    except Exception as exc:  # noqa: BLE001
+        return JSONResponse(
+            status_code=500,
+            content=error_response("INTERNAL_ERROR", "Knowledge delete failed", {"error": str(exc)}),
+        )
+
+
+# ---------------------------------------------------------------------------
+# Memory Vault API (Phase 5 QA Rework — T-MV-01)
+# ---------------------------------------------------------------------------
+
+@router.get("/memory/overrides")
+async def get_memory_overrides(request: Request):
+    """查询 MemoryVault 的层级覆盖与遗忘状态。"""
+    strategy_service = _get_strategy_service(request)
+    try:
+        payload = strategy_service.get_memory_overrides()
+        return ok_response(payload, code="MEMORY_OVERRIDES_OK")
+    except Exception as exc:  # noqa: BLE001
+        return JSONResponse(
+            status_code=500,
+            content=error_response("INTERNAL_ERROR", "Memory overrides query failed", {"error": str(exc)}),
+        )
+
+
+@router.post("/memory/promote")
+async def promote_memory(req: MemoryTierActionRequest, request: Request):
+    """提升记忆层级（COLD->WARM->HOT）。"""
+    strategy_service = _get_strategy_service(request)
+    entry_id = str(req.id or "").strip()
+    if not entry_id:
+        return JSONResponse(
+            status_code=400,
+            content=error_response("INVALID_STRATEGY_REQUEST", "id 不能为空", {"field": "id"}),
+        )
+    current_tier = _normalize_memory_tier(req.current_tier)
+    if not current_tier:
+        return JSONResponse(
+            status_code=400,
+            content=error_response(
+                "INVALID_STRATEGY_REQUEST",
+                "current_tier 不合法",
+                {"field": "current_tier", "allowed": ["HOT", "WARM", "COLD"]},
+            ),
+        )
+    try:
+        payload = strategy_service.promote_memory(entry_id=entry_id, current_tier=current_tier)
+        return ok_response(payload, code="MEMORY_PROMOTE_OK")
+    except ValueError as exc:
+        return JSONResponse(
+            status_code=400,
+            content=error_response("INVALID_STRATEGY_REQUEST", "记忆提升参数不合法", {"error": str(exc)}),
+        )
+    except Exception as exc:  # noqa: BLE001
+        return JSONResponse(
+            status_code=500,
+            content=error_response("INTERNAL_ERROR", "Memory promote failed", {"error": str(exc)}),
+        )
+
+
+@router.post("/memory/demote")
+async def demote_memory(req: MemoryTierActionRequest, request: Request):
+    """降低记忆层级（HOT->WARM->COLD）。"""
+    strategy_service = _get_strategy_service(request)
+    entry_id = str(req.id or "").strip()
+    if not entry_id:
+        return JSONResponse(
+            status_code=400,
+            content=error_response("INVALID_STRATEGY_REQUEST", "id 不能为空", {"field": "id"}),
+        )
+    current_tier = _normalize_memory_tier(req.current_tier)
+    if not current_tier:
+        return JSONResponse(
+            status_code=400,
+            content=error_response(
+                "INVALID_STRATEGY_REQUEST",
+                "current_tier 不合法",
+                {"field": "current_tier", "allowed": ["HOT", "WARM", "COLD"]},
+            ),
+        )
+    try:
+        payload = strategy_service.demote_memory(entry_id=entry_id, current_tier=current_tier)
+        return ok_response(payload, code="MEMORY_DEMOTE_OK")
+    except ValueError as exc:
+        return JSONResponse(
+            status_code=400,
+            content=error_response("INVALID_STRATEGY_REQUEST", "记忆降级参数不合法", {"error": str(exc)}),
+        )
+    except Exception as exc:  # noqa: BLE001
+        return JSONResponse(
+            status_code=500,
+            content=error_response("INTERNAL_ERROR", "Memory demote failed", {"error": str(exc)}),
+        )
+
+
+@router.post("/memory/forget")
+async def forget_memory(req: MemoryForgetRequest, request: Request):
+    """遗忘记忆条目（仅标记隐藏，不删除知识主数据）。"""
+    strategy_service = _get_strategy_service(request)
+    entry_id = str(req.id or "").strip()
+    if not entry_id:
+        return JSONResponse(
+            status_code=400,
+            content=error_response("INVALID_STRATEGY_REQUEST", "id 不能为空", {"field": "id"}),
+        )
+    try:
+        payload = strategy_service.forget_memory(entry_id=entry_id)
+        return ok_response(payload, code="MEMORY_FORGET_OK")
+    except ValueError as exc:
+        return JSONResponse(
+            status_code=400,
+            content=error_response("INVALID_STRATEGY_REQUEST", "记忆遗忘参数不合法", {"error": str(exc)}),
+        )
+    except Exception as exc:  # noqa: BLE001
+        return JSONResponse(
+            status_code=500,
+            content=error_response("INTERNAL_ERROR", "Memory forget failed", {"error": str(exc)}),
         )
 
 
@@ -1144,23 +1360,7 @@ async def list_strategy_history(
     """返回策略演化事件历史，供 EvolutionCenter 前端消费。"""
     strategy_service = _get_strategy_service(request)
     try:
-        versions = strategy_service.list_strategy_versions(limit=limit)
-        events = []
-        _TYPE_MAP = {
-            "BUILT_IN": "BASE",
-            "MUTATION": "MUTATION",
-            "CROSSOVER": "CROSSOVER",
-            "BACKTEST": "FIX",
-        }
-        for v in versions:
-            origin = (v.get("origin") or "BUILT_IN").upper()
-            events.append({
-                "id": v["id"],
-                "timestamp": v.get("created_at", 0),
-                "type": _TYPE_MAP.get(origin, "FIX"),
-                "strategy_name": v.get("name", ""),
-                "message": f"v{v.get('version', 1)} {origin.lower()} — status: {v.get('status', 'draft')}",
-            })
+        events = strategy_service.list_strategy_history(limit=limit)
         return ok_response(events)
     except Exception as exc:
         return JSONResponse(

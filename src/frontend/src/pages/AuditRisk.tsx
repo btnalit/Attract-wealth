@@ -15,7 +15,7 @@ import { Button } from '../components/ui/button';
 import { monitorApi } from '../services/api';
 
 // --- Types ---
-interface RiskGaugeData { label: string; current: number; threshold: number; color: string; unit: string }
+interface RiskGaugeData { label: string; current: number | null; threshold: number | null; color: string; unit: string; decimals?: number }
 interface AuditLog { id: string; time: string; type: string; severity: string; description: string; payload: any }
 interface RiskSwitch { id: string; label: string; description: string; enabled: boolean }
 
@@ -62,14 +62,45 @@ const parsePayloadData = <T,>(payload: unknown): T => {
   return payload as T;
 };
 
+const toOptionalNumber = (value: unknown): number | null => {
+  if (value === null || value === undefined) {
+    return null;
+  }
+  if (typeof value === 'string' && value.trim() === '') {
+    return null;
+  }
+  const num = Number(value);
+  return Number.isFinite(num) ? num : null;
+};
+
+const toPercent = (value: unknown): number | null => {
+  const num = toOptionalNumber(value);
+  return num === null ? null : Number((num * 100).toFixed(2));
+};
+
+const toEpochMs = (value: unknown): number | null => {
+  const ts = toOptionalNumber(value);
+  if (ts === null || ts <= 0) {
+    return null;
+  }
+  return ts > 1_000_000_000_000 ? ts : ts * 1000;
+};
+
+const formatAuditTime = (value: unknown): string => {
+  const ts = toEpochMs(value);
+  return ts === null ? '--' : new Date(ts).toLocaleTimeString();
+};
+
+const formatGaugeValue = (value: number | null, decimals = 0): string => {
+  if (value === null) {
+    return '--';
+  }
+  return value.toFixed(decimals);
+};
+
 const toSwitches = (payload: unknown): RiskSwitch[] => {
   if (!payload || typeof payload !== 'object') {
-    return SWITCH_ORDER.slice(0, 3).map((id) => ({
-      id,
-      label: SWITCH_META[id]?.label || id,
-      description: SWITCH_META[id]?.description || '',
-      enabled: id !== 'deviation',
-    }));
+    return [];
   }
 
   const source = payload as Record<string, unknown>;
@@ -88,9 +119,16 @@ const toSwitches = (payload: unknown): RiskSwitch[] => {
 
 // --- HELPER COMPONENT: GAUGE ---
 const RiskGauge: FC<{ gauge: RiskGaugeData }> = ({ gauge }) => {
-  const percentage = Math.min((gauge.current / gauge.threshold) * 100, 100);
+  const hasCurrent = gauge.current !== null;
+  const hasThreshold = gauge.threshold !== null;
+  const hasData = hasCurrent && hasThreshold;
+  const percentage = hasData && Number(gauge.threshold) > 0
+    ? Math.min((Number(gauge.current) / Number(gauge.threshold)) * 100, 100)
+    : 0;
   const strokeDasharray = 283; // 2 * PI * 45
   const strokeDashoffset = strokeDasharray - (percentage / 100) * strokeDasharray;
+  const decimals = gauge.decimals ?? 0;
+  const gaugeColor = hasData ? gauge.color : 'text-info-gray/40';
 
   return (
     <div className="bg-bg-card border border-border rounded-sm p-5 flex flex-col items-center group hover:border-neon-cyan/50 transition-all">
@@ -111,12 +149,16 @@ const RiskGauge: FC<{ gauge: RiskGaugeData }> = ({ gauge }) => {
             strokeDasharray={strokeDasharray}
             strokeDashoffset={strokeDashoffset}
             strokeLinecap="round"
-            className={cn(gauge.color, "transition-all duration-1000 ease-out")}
+            className={cn(gaugeColor, "transition-all duration-1000 ease-out")}
           />
         </svg>
         <div className="absolute inset-0 flex flex-col items-center justify-center">
-          <span className="text-2xl font-orbitron font-bold text-white leading-none">{gauge.current}</span>
-          <span className="text-[10px] text-info-gray/60 mt-1 uppercase tracking-tighter">阈值: {gauge.threshold}{gauge.unit}</span>
+          <span className={cn('text-2xl font-orbitron font-bold leading-none', hasData ? 'text-white' : 'text-info-gray/70')}>
+            {formatGaugeValue(gauge.current, decimals)}
+          </span>
+          <span className="text-[10px] text-info-gray/60 mt-1 uppercase tracking-tighter">
+            阈值: {formatGaugeValue(gauge.threshold, decimals)}{gauge.unit}
+          </span>
         </div>
       </div>
       <h3 className="font-orbitron text-xs font-bold text-info-gray uppercase tracking-widest group-hover:text-neon-cyan transition-colors">
@@ -132,9 +174,13 @@ export const AuditRisk: FC = () => {
   const [switches, setSwitches] = useState<RiskSwitch[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedLog, setExpandedLog] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState('');
+  const [actionMessage, setActionMessage] = useState('');
+  const [emergencyLocking, setEmergencyLocking] = useState(false);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
+    setErrorMessage('');
     try {
       const [riskPayload, auditPayload] = await Promise.all([
         monitorApi.getRisk<Record<string, unknown>>(),
@@ -142,10 +188,10 @@ export const AuditRisk: FC = () => {
       ]);
       const d = parsePayloadData<Record<string, unknown>>(riskPayload) || {};
       setGauges([
-        { label: '最大回撤', current: Number(d.max_drawdown_current ?? 0.024) * 100, threshold: Number(d.max_drawdown_threshold ?? 0.10) * 100, color: 'text-up-green', unit: '%' },
-        { label: '单仓限制', current: Number(d.position_limit_current ?? 0.15) * 100, threshold: Number(d.position_limit_threshold ?? 0.30) * 100, color: 'text-neon-cyan', unit: '%' },
-        { label: '每日交易频次', current: Number(d.trade_frequency_day ?? 12), threshold: 500, color: 'text-warn-gold', unit: 'req' },
-        { label: 'API 速率限制', current: Number(d.api_rate_limit_percent ?? 42.0), threshold: 100, color: 'text-neon-magenta', unit: '%' },
+        { label: '最大回撤', current: toPercent(d.max_drawdown_current), threshold: toPercent(d.max_drawdown_threshold), color: 'text-up-green', unit: '%', decimals: 2 },
+        { label: '单仓限制', current: toPercent(d.position_limit_current), threshold: toPercent(d.position_limit_threshold), color: 'text-neon-cyan', unit: '%', decimals: 2 },
+        { label: '每日交易频次', current: toOptionalNumber(d.trade_frequency_day), threshold: 500, color: 'text-warn-gold', unit: 'req', decimals: 0 },
+        { label: 'API 速率限制', current: toOptionalNumber(d.api_rate_limit_percent), threshold: 100, color: 'text-neon-magenta', unit: '%', decimals: 2 },
       ]);
       setSwitches(toSwitches(d.switches));
 
@@ -153,7 +199,7 @@ export const AuditRisk: FC = () => {
       const safeRaw = Array.isArray(raw) ? raw : [];
       setAuditLogs(safeRaw.map((l: any, i: number) => ({
         id: `LOG_${i}`,
-        time: new Date((Number(l.timestamp) || 0) * 1000).toLocaleTimeString(),
+        time: formatAuditTime(l.timestamp),
         type: String(l.type ?? ''),
         severity: String(l.severity ?? ''),
         description: String(l.message ?? ''),
@@ -161,8 +207,11 @@ export const AuditRisk: FC = () => {
       })));
 
     } catch (err) {
-      console.warn('[AuditRisk] API fetch failed:', err);
-      setSwitches(toSwitches(null));
+      const errMsg = err instanceof Error ? err.message : '审计与风控数据拉取失败。';
+      setErrorMessage(errMsg);
+      setGauges([]);
+      setAuditLogs([]);
+      setSwitches([]);
     } finally {
       setLoading(false);
     }
@@ -173,7 +222,9 @@ export const AuditRisk: FC = () => {
   const toggleSwitch = async (id: string) => {
     const s = switches.find(x => x.id === id);
     if (!s) return;
-    
+
+    setErrorMessage('');
+    setActionMessage('');
     try {
       const payload = await monitorApi.toggleRiskSwitch<Record<string, unknown>>({ name: id, enabled: !s.enabled });
       const parsed = parsePayloadData<Record<string, unknown>>(payload) || {};
@@ -183,8 +234,33 @@ export const AuditRisk: FC = () => {
       } else {
         setSwitches(prev => prev.map(item => item.id === id ? { ...item, enabled: !item.enabled } : item));
       }
+      setActionMessage(`${s.label} 已${s.enabled ? '关闭' : '开启'}。`);
     } catch (err) {
-      console.error('Failed to toggle switch:', err);
+      const errMsg = err instanceof Error ? err.message : '风控开关切换失败。';
+      setErrorMessage(errMsg);
+    }
+  };
+
+  const forceEmergencyLock = async () => {
+    setEmergencyLocking(true);
+    setErrorMessage('');
+    setActionMessage('');
+    try {
+      const payload = await monitorApi.toggleRiskSwitch<Record<string, unknown>>({
+        name: 'global_pause',
+        enabled: true,
+      });
+      const parsed = parsePayloadData<Record<string, unknown>>(payload) || {};
+      const serverSwitches = parsed.switches;
+      if (serverSwitches && typeof serverSwitches === 'object') {
+        setSwitches(toSwitches(serverSwitches));
+      }
+      setActionMessage('已触发全局暂停（Global Pause）。');
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : '触发紧急锁定失败。';
+      setErrorMessage(errMsg);
+    } finally {
+      setEmergencyLocking(false);
     }
   };
 
@@ -200,14 +276,28 @@ export const AuditRisk: FC = () => {
           <span>刷新</span>
         </Button>
       </div>
+      {errorMessage && (
+        <div className="text-xs text-down-red bg-down-red/10 border border-down-red/40 rounded-sm px-3 py-2">
+          {errorMessage}
+        </div>
+      )}
+      {actionMessage && (
+        <div className="text-xs text-up-green bg-up-green/10 border border-up-green/40 rounded-sm px-3 py-2">
+          {actionMessage}
+        </div>
+      )}
 
       {/* Risk Limit Dashboard */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {gauges.length > 0 ? gauges.map((g, i) => (
           <RiskGauge key={i} gauge={g} />
-        )) : Array(4).fill(0).map((_, i) => (
+        )) : loading ? Array(4).fill(0).map((_, i) => (
           <div key={i} className="h-48 bg-bg-card/50 border border-border animate-pulse rounded-sm" />
-        ))}
+        )) : (
+          <div className="col-span-2 lg:col-span-4 h-24 rounded-sm border border-dashed border-border flex items-center justify-center text-xs text-info-gray/60">
+            当前暂无可展示的风控指标。
+          </div>
+        )}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
@@ -232,7 +322,7 @@ export const AuditRisk: FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/30">
-                {auditLogs.map(log => (
+                {auditLogs.length > 0 ? auditLogs.map(log => (
                   <Fragment key={log.id}>
                     <tr 
                       className={cn(
@@ -273,7 +363,13 @@ export const AuditRisk: FC = () => {
                       </tr>
                     )}
                   </Fragment>
-                ))}
+                )) : (
+                  <tr>
+                    <td colSpan={4} className="px-4 py-6 text-center text-info-gray/60">
+                      暂无审计日志
+                    </td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>
@@ -287,7 +383,7 @@ export const AuditRisk: FC = () => {
           </div>
           
           <div className="p-4 space-y-4">
-            {switches.map((s) => (
+            {switches.length > 0 ? switches.map((s) => (
               <div key={s.id} className="flex flex-col gap-2 p-3 bg-bg-primary/50 border border-border/50 rounded hover:border-neon-cyan/30 transition-all group">
                 <div className="flex justify-between items-center">
                   <span className="text-white font-bold text-xs uppercase tracking-wider">{s.label}</span>
@@ -308,13 +404,21 @@ export const AuditRisk: FC = () => {
                   {s.description}
                 </p>
               </div>
-            ))}
+            )) : (
+              <div className="text-xs text-info-gray/60 px-1">
+                暂无可切换的风控开关。
+              </div>
+            )}
           </div>
 
           <div className="mt-auto p-4 bg-bg-primary/30 border-t border-border">
-            <button className="w-full flex items-center justify-center gap-2 py-2 bg-down-red/10 border border-down-red/50 text-down-red text-xs font-bold uppercase rounded-sm hover:bg-down-red/20 transition-all">
-              <ShieldX className="h-4 w-4" />
-              强制紧急锁定
+            <button
+              onClick={() => void forceEmergencyLock()}
+              disabled={emergencyLocking}
+              className="w-full flex items-center justify-center gap-2 py-2 bg-down-red/10 border border-down-red/50 text-down-red text-xs font-bold uppercase rounded-sm hover:bg-down-red/20 transition-all disabled:opacity-60"
+            >
+              {emergencyLocking ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldX className="h-4 w-4" />}
+              {emergencyLocking ? '锁定中...' : '强制紧急锁定'}
             </button>
           </div>
         </div>

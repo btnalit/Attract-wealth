@@ -75,6 +75,21 @@ class FakeBroker(BaseBroker):
     async def get_orders(self, date: str | None = None):
         return []
 
+    def check_health(self) -> dict:
+        return {
+            "name": "fake-broker",
+            "channel": self.channel_name,
+            "status": "active" if self._connected else "dead",
+            "is_connected": self._connected,
+        }
+
+    async def get_trade_snapshot(self) -> dict:
+        return {
+            "status": "success",
+            "data": {"orders": []},
+            "meta": {"channel": self.channel_name},
+        }
+
     def new_day(self):
         self.new_day_called = True
 
@@ -322,6 +337,7 @@ def test_budget_recovery_guard_auto_releases(monkeypatch):
     runtime = service.get_runtime_state()
     assert "budget_recovery_metrics" in runtime
     assert runtime["budget_recovery_metrics"]["activation_count"] == 1
+    assert "core_governance" in runtime
 
 
 def test_day_roll_resets_state_and_calls_broker_new_day(monkeypatch):
@@ -442,6 +458,21 @@ def test_get_trade_snapshot(monkeypatch):
     assert snapshot["holding_value"] == 0.0
     assert snapshot["cash"] == 1_000_000.0
     assert isinstance(snapshot["strategies"], list)
+
+
+def test_get_trade_snapshot_includes_channel_info_and_raw(monkeypatch):
+    _patch_ledger(monkeypatch)
+    broker = FakeBroker()
+    service = TradingService(trading_channel="simulation", vm=HoldVM(), broker=broker)
+    service._china_data_disabled = True
+
+    import asyncio
+
+    snapshot = asyncio.run(service.get_trade_snapshot(include_channel_raw=True))
+    assert snapshot["channel_info"]["channel"] == "simulation"
+    assert snapshot["channel_info"]["status"] == "active"
+    assert snapshot["channel_raw"]["status"] == "success"
+    assert snapshot["channel_raw"]["meta"]["channel"] == "simulation"
 
 
 def test_execute_persists_evidence_with_trace_and_policy(monkeypatch):

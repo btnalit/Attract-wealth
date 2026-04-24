@@ -18,9 +18,12 @@ import { cn } from '../lib/utils';
 import { PageTitle } from '../components/PageTitle';
 import {
   monitorApi,
+  apiUrl,
+  systemApi,
   tradingApi,
   type ApiLooseObject,
   type MonitorStatusPayload,
+  type ThsHostDiagnosisPayload,
   type TradingSnapshotChannelInfo,
   type TradingSnapshotOrderPayload,
   type TradingSnapshotPayload,
@@ -30,8 +33,8 @@ interface Channel {
   id: string;
   name: string;
   status: string;
-  latency: number;
-  throughput: number;
+  latency: number | null;
+  throughput: number | null;
   lastSync: string;
 }
 
@@ -40,8 +43,8 @@ interface Order {
   symbol: string;
   name: string;
   side: string;
-  price: number;
-  qty: number;
+  price: number | null;
+  qty: number | null;
   status: string;
   duration: string;
 }
@@ -51,10 +54,12 @@ interface Fill {
   time: string;
   symbol: string;
   side: string;
-  avgPrice: number;
-  qty: number;
+  avgPrice: number | null;
+  qty: number | null;
   status: string;
 }
+
+type OrderRefreshStatus = 'idle' | 'running' | 'success' | 'error';
 
 const STATUS_MAP: Record<string, { label: string; color: string }> = {
   PENDING: { label: '待报', color: 'text-info-gray/60 bg-info-gray/10 border-info-gray/20' },
@@ -66,31 +71,33 @@ const STATUS_MAP: Record<string, { label: string; color: string }> = {
   FAILED: { label: '失败', color: 'text-down-red bg-down-red/10 border-down-red/20' },
 };
 
-const MOCK_CHANNELS: Channel[] = [
-  { id: 'ths_ipc', name: 'THS IPC', status: 'offline', latency: 0, throughput: 0, lastSync: '--' },
-  { id: 'simulator', name: 'Simulator', status: 'offline', latency: 0, throughput: 0, lastSync: '--' },
-  { id: 'miniqmt', name: 'miniQMT', status: 'paused', latency: 0, throughput: 0, lastSync: '--' },
-];
-
-const toNumber = (value: unknown, fallback = 0): number => {
+const toOptionalNumber = (value: unknown): number | null => {
   const num = Number(value);
-  return Number.isFinite(num) ? num : fallback;
+  return Number.isFinite(num) ? num : null;
 };
 
-const toTimestamp = (value: unknown): number => {
-  const num = toNumber(value, 0);
-  if (num <= 0) {
-    return 0;
+const toTimestamp = (value: unknown): number | null => {
+  const num = toOptionalNumber(value);
+  if (num === null || num <= 0) {
+    return null;
   }
   return num > 1_000_000_000_000 ? num : num * 1000;
 };
 
 const formatClock = (value: unknown): string => {
   const ts = toTimestamp(value);
-  if (ts <= 0) {
+  if (ts === null) {
     return '--';
   }
   return new Date(ts).toLocaleTimeString();
+};
+
+const formatDuration = (value: unknown): string => {
+  const durationMs = toOptionalNumber(value);
+  if (durationMs === null || durationMs < 0) {
+    return '--';
+  }
+  return `${(durationMs / 1000).toFixed(1)}s`;
 };
 
 const normalizeStatus = (value: unknown, fallback = 'PENDING'): string => {
@@ -109,11 +116,11 @@ const buildFillsFromSnapshotOrders = (orders: TradingSnapshotOrderPayload[]): Fi
   return orders
     .map((order, index) => {
       const status = normalizeStatus(order.status, 'SUBMITTED');
-      const filledQty = toNumber(order.filled_quantity ?? order.filled_qty ?? order.quantity ?? order.qty, 0);
-      const avgPrice = toNumber(order.filled_price ?? order.avg_price ?? order.price, 0);
+      const filledQty = toOptionalNumber(order.filled_quantity ?? order.filled_qty ?? order.quantity ?? order.qty);
+      const avgPrice = toOptionalNumber(order.filled_price ?? order.avg_price ?? order.price);
       const side = normalizeStatus(order.side, 'BUY');
       const symbol = String(order.ticker ?? order.symbol ?? '--');
-      const updatedAt = order.updated_at ?? order.update_time ?? order.timestamp ?? order.created_at ?? Date.now();
+      const updatedAt = order.updated_at ?? order.update_time ?? order.timestamp ?? order.created_at;
 
       return {
         id: String(order.order_id ?? order.id ?? `${symbol}-${index}`),
@@ -126,16 +133,30 @@ const buildFillsFromSnapshotOrders = (orders: TradingSnapshotOrderPayload[]): Fi
         sortAt: toTimestamp(updatedAt),
       };
     })
-    .filter((item) => item.qty > 0 && ['FILLED', 'PARTIAL', 'SUBMITTED'].includes(item.status))
-    .sort((a, b) => b.sortAt - a.sortAt)
+    .filter((item) => item.qty !== null && item.qty > 0 && ['FILLED', 'PARTIAL', 'SUBMITTED'].includes(item.status))
+    .sort((a, b) => {
+      if (a.sortAt === b.sortAt) {
+        return 0;
+      }
+      if (a.sortAt === null) {
+        return 1;
+      }
+      if (b.sortAt === null) {
+        return -1;
+      }
+      return b.sortAt - a.sortAt;
+    })
     .slice(0, 30)
     .map(({ sortAt: _sortAt, ...rest }) => rest);
 };
 
 export const ExecutionMonitor: React.FC = () => {
-  const [channels, setChannels] = useState<Channel[]>(MOCK_CHANNELS);
+  const [channels, setChannels] = useState<Channel[]>([]);
+  const [runtimeState, setRuntimeState] = useState<ApiLooseObject | null>(null);
   const [thsInfo, setThsInfo] = useState<TradingSnapshotChannelInfo | null>(null);
+  const [thsDiagnosis, setThsDiagnosis] = useState<ThsHostDiagnosisPayload | null>(null);
   const [orders, setOrders] = useState<Order[]>([]);
+  const [orderRefreshStates, setOrderRefreshStates] = useState<Record<string, OrderRefreshStatus>>({});
   const [fills, setFills] = useState<Fill[]>([]);
   const [loading, setLoading] = useState(true);
   const [syncingOrders, setSyncingOrders] = useState(false);
@@ -143,34 +164,48 @@ export const ExecutionMonitor: React.FC = () => {
   const [switchingChannel, setSwitchingChannel] = useState(false);
   const [cancelingOrders, setCancelingOrders] = useState(false);
   const [actionMessage, setActionMessage] = useState<string>('');
+  const [fetchErrors, setFetchErrors] = useState<string[]>([]);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
+    setFetchErrors([]);
     try {
-      const [statusResult, ordersResult, snapshotResult] = await Promise.allSettled([
+      const [statusResult, ordersResult, snapshotResult, diagnosisResult, runtimeResult] = await Promise.allSettled([
         monitorApi.getStatus<MonitorStatusPayload[]>(),
         tradingApi.getActiveOrders(50),
         tradingApi.getSnapshot(),
+        systemApi.getThsHostDiagnosis(),
+        systemApi.getRuntime<ApiLooseObject>(),
       ]);
+      const nextErrors: string[] = [];
+      const nextChannels: Channel[] = [];
 
       if (statusResult.status === 'fulfilled') {
         const statusPayload = parsePayloadData<MonitorStatusPayload[]>(statusResult.value);
         if (Array.isArray(statusPayload)) {
-          setChannels(
-            statusPayload.map((item) => {
+          nextChannels.push(
+            ...statusPayload.map((item) => {
               const name = String(item.name ?? 'unknown');
               const status = String(item.status ?? 'offline').toLowerCase();
               return {
                 id: name.toLowerCase().replace(/\s+/g, '_'),
                 name,
                 status,
-                latency: Math.round(toNumber(item.latency_ms, 0)),
-                throughput: Math.round(toNumber(item.throughput, 0)),
+                latency: (() => {
+                  const latency = toOptionalNumber(item.latency_ms);
+                  return latency === null ? null : Math.round(latency);
+                })(),
+                throughput: (() => {
+                  const throughput = toOptionalNumber(item.throughput);
+                  return throughput === null ? null : Math.round(throughput);
+                })(),
                 lastSync: formatClock(item.last_sync),
               };
             }),
           );
         }
+      } else {
+        nextErrors.push(`通道状态拉取失败: ${String(statusResult.reason)}`);
       }
 
       if (ordersResult.status === 'fulfilled') {
@@ -182,15 +217,18 @@ export const ExecutionMonitor: React.FC = () => {
               symbol: String(item.ticker ?? item.symbol ?? '--'),
               name: String(item.ticker ?? item.symbol ?? '--'),
               side: normalizeStatus(item.side, 'BUY'),
-              price: toNumber(item.price, 0),
-              qty: toNumber(item.quantity ?? item.qty, 0),
+              price: toOptionalNumber(item.price),
+              qty: toOptionalNumber(item.quantity ?? item.qty),
               status: normalizeStatus(item.status, 'PENDING'),
-              duration: `${(toNumber(item.holding_time, 0) / 1000).toFixed(1)}s`,
+              duration: formatDuration(item.holding_time),
             })),
           );
         } else {
           setOrders([]);
         }
+      } else {
+        setOrders([]);
+        nextErrors.push(`活动订单拉取失败: ${String(ordersResult.reason)}`);
       }
 
       if (snapshotResult.status === 'fulfilled') {
@@ -199,12 +237,49 @@ export const ExecutionMonitor: React.FC = () => {
         const snapshotOrders = Array.isArray(snapshotPayload?.orders) ? snapshotPayload.orders : [];
         setFills(buildFillsFromSnapshotOrders(snapshotOrders));
       } else {
+        setThsInfo(null);
         setFills([]);
+        nextErrors.push(`交易快照拉取失败: ${String(snapshotResult.reason)}`);
       }
+
+      if (diagnosisResult.status === 'fulfilled') {
+        const diagnosisPayload = parsePayloadData<ThsHostDiagnosisPayload>(diagnosisResult.value);
+        setThsDiagnosis(diagnosisPayload);
+      } else {
+        setThsDiagnosis(null);
+        nextErrors.push(`THS 宿主诊断拉取失败: ${String(diagnosisResult.reason)}`);
+      }
+
+      if (runtimeResult.status === 'fulfilled') {
+        const runtimePayload = parsePayloadData<ApiLooseObject>(runtimeResult.value);
+        setRuntimeState(runtimePayload ?? null);
+        if (nextChannels.length === 0 && runtimePayload && typeof runtimePayload === 'object') {
+          const activeChannel = String(runtimePayload.channel ?? 'unknown').trim() || 'unknown';
+          const brokerConnected = Boolean(runtimePayload.broker_connected);
+          nextChannels.push({
+            id: activeChannel.toLowerCase(),
+            name: activeChannel.toUpperCase(),
+            status: brokerConnected ? 'online' : 'offline',
+            latency: null,
+            throughput: null,
+            lastSync: formatClock(runtimePayload.last_sync ?? runtimePayload.updated_at ?? runtimePayload.timestamp),
+          });
+        }
+      } else {
+        setRuntimeState(null);
+        nextErrors.push(`系统运行时拉取失败: ${String(runtimeResult.reason)}`);
+      }
+
+      setChannels(nextChannels);
+      setFetchErrors(nextErrors);
     } catch (error) {
       console.warn('[ExecutionMonitor] 数据拉取失败', error);
+      setChannels([]);
+      setRuntimeState(null);
       setOrders([]);
       setFills([]);
+      setThsDiagnosis(null);
+      setFetchErrors([`监控数据拉取失败: ${String(error)}`]);
     } finally {
       setLoading(false);
     }
@@ -214,7 +289,21 @@ export const ExecutionMonitor: React.FC = () => {
     void fetchData();
   }, [fetchData]);
 
+  const runtimeDetailUrl = useMemo(() => apiUrl('/api/system/runtime'), []);
   const latestFills = useMemo(() => fills.slice(0, 20), [fills]);
+  const triggerDiagnosis = useMemo(
+    () => (thsDiagnosis?.host_trigger_diagnosis ?? {}) as ApiLooseObject,
+    [thsDiagnosis],
+  );
+  const diagnosisHints = useMemo(() => {
+    const hints = thsDiagnosis?.hints;
+    return Array.isArray(hints) ? hints.slice(0, 3) : [];
+  }, [thsDiagnosis]);
+  const strategyRelatedWindows = useMemo(() => {
+    const uiContext = (thsDiagnosis?.xiadan_ui_context ?? {}) as ApiLooseObject;
+    const windows = uiContext.strategy_related_windows;
+    return Array.isArray(windows) ? windows.slice(0, 2).map((item) => String(item)) : [];
+  }, [thsDiagnosis]);
 
   const handleSyncOrders = async () => {
     setSyncingOrders(true);
@@ -227,6 +316,20 @@ export const ExecutionMonitor: React.FC = () => {
       setActionMessage(`同步失败: ${String(error)}`);
     } finally {
       setSyncingOrders(false);
+    }
+  };
+
+  const handleRefreshOrderStatus = async (order: Order) => {
+    setOrderRefreshStates((prev) => ({ ...prev, [order.id]: 'running' }));
+    setActionMessage('');
+    try {
+      await tradingApi.syncOrders();
+      await fetchData();
+      setOrderRefreshStates((prev) => ({ ...prev, [order.id]: 'success' }));
+      setActionMessage(`订单 ${order.id} 状态已刷新。`);
+    } catch (error) {
+      setOrderRefreshStates((prev) => ({ ...prev, [order.id]: 'error' }));
+      setActionMessage(`订单 ${order.id} 刷新失败: ${String(error)}`);
     }
   };
 
@@ -285,9 +388,11 @@ export const ExecutionMonitor: React.FC = () => {
         reason: 'execution_monitor_ui',
       });
       const cancelResult = parsePayloadData<{ cancelled?: number; failed?: number }>(cancelPayload);
-      const cancelled = toNumber(cancelResult?.cancelled, 0);
-      const failed = toNumber(cancelResult?.failed, 0);
-      setActionMessage(`批量撤单完成: 成功 ${cancelled} 笔，失败 ${failed} 笔。`);
+      const cancelled = toOptionalNumber(cancelResult?.cancelled);
+      const failed = toOptionalNumber(cancelResult?.failed);
+      const cancelledDisplay = cancelled === null ? '--' : String(Math.round(cancelled));
+      const failedDisplay = failed === null ? '--' : String(Math.round(failed));
+      setActionMessage(`批量撤单完成: 成功 ${cancelledDisplay} 笔，失败 ${failedDisplay} 笔。`);
       await fetchData();
     } catch (error) {
       setActionMessage(`批量撤单失败: ${String(error)}`);
@@ -331,6 +436,48 @@ export const ExecutionMonitor: React.FC = () => {
       {actionMessage && (
         <div className="text-xs px-3 py-2 border border-border rounded bg-bg-card text-info-gray">{actionMessage}</div>
       )}
+      {fetchErrors.length > 0 && (
+        <div className="text-xs px-3 py-2 border border-down-red/40 rounded bg-down-red/10 text-down-red space-y-1">
+          {fetchErrors.slice(0, 3).map((item, idx) => (
+            <div key={`${item}-${idx}`}>{item}</div>
+          ))}
+        </div>
+      )}
+
+      {runtimeState && (
+        <div className="bg-bg-card border border-border rounded-sm p-4 border-l-4 border-l-neon-cyan/40">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs">
+            <div className="flex flex-col">
+              <span className="text-[9px] text-info-gray/50 uppercase font-mono">Active Channel</span>
+              <span className="text-white font-semibold">{String(runtimeState.channel ?? '--')}</span>
+            </div>
+            <div className="flex flex-col">
+              <span className="text-[9px] text-info-gray/50 uppercase font-mono">Broker</span>
+              <span className={cn('font-semibold', Boolean(runtimeState.broker_connected) ? 'text-up-green' : 'text-down-red')}>
+                {Boolean(runtimeState.broker_connected) ? 'CONNECTED' : 'DISCONNECTED'}
+              </span>
+            </div>
+            <div className="flex flex-col">
+              <span className="text-[9px] text-info-gray/50 uppercase font-mono">Risk Pause</span>
+              <span className={cn('font-semibold', Boolean((runtimeState.risk as ApiLooseObject | undefined)?.is_paused) ? 'text-warn-gold' : 'text-up-green')}>
+                {Boolean((runtimeState.risk as ApiLooseObject | undefined)?.is_paused) ? 'PAUSED' : 'RUNNING'}
+              </span>
+            </div>
+            <div className="flex flex-col">
+              <span className="text-[9px] text-info-gray/50 uppercase font-mono">Governance Tools</span>
+              <span className="text-neon-cyan font-mono">
+                {(() => {
+                  const toolCount = toOptionalNumber(
+                    ((runtimeState.core_governance as ApiLooseObject | undefined)?.tool_registry as ApiLooseObject | undefined)
+                      ?.tool_count,
+                  );
+                  return toolCount === null ? '--' : Math.round(toolCount);
+                })()}
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
 
       {thsInfo && (
         <div className="bg-bg-card border border-border rounded-sm p-4 border-l-4 border-l-neon-cyan/50">
@@ -369,6 +516,93 @@ export const ExecutionMonitor: React.FC = () => {
         </div>
       )}
 
+      {thsDiagnosis && (
+        <div className="bg-bg-card border border-border rounded-sm p-4 border-l-4 border-l-warn-gold/50">
+          <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
+            <div className="flex flex-col gap-1">
+              <div className="flex items-center gap-2">
+                <AlertOctagon className="h-4 w-4 text-warn-gold" />
+                <span className="font-orbitron font-bold text-sm tracking-widest uppercase">THS 宿主诊断</span>
+              </div>
+              <p className="text-info-gray/60 text-[10px] font-mono">系统 API 聚合 runtime/trigger/UI 上下文诊断</p>
+            </div>
+
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 w-full lg:w-auto">
+              <div className="flex flex-col">
+                <span className="text-[9px] text-info-gray/50 uppercase font-mono">诊断状态</span>
+                <span
+                  className={cn(
+                    'text-xs font-bold',
+                    String(thsDiagnosis.status ?? '').toUpperCase() === 'PASS' ? 'text-up-green' : 'text-down-red',
+                  )}
+                >
+                  {String(thsDiagnosis.status ?? '--')}
+                </span>
+              </div>
+              <div className="flex flex-col">
+                <span className="text-[9px] text-info-gray/50 uppercase font-mono">Trigger Stage</span>
+                <span className="text-xs text-white font-mono">{String(triggerDiagnosis.stage ?? '--')}</span>
+              </div>
+              <div className="flex flex-col">
+                <span className="text-[9px] text-info-gray/50 uppercase font-mono">Runtime</span>
+                <span
+                  className={cn(
+                    'text-xs font-bold',
+                    Boolean(thsDiagnosis.runtime_probe?.runtime_ok) ? 'text-up-green' : 'text-down-red',
+                  )}
+                >
+                  {Boolean(thsDiagnosis.runtime_probe?.runtime_ok) ? 'HOST_READY' : 'NOT_READY'}
+                </span>
+              </div>
+              <div className="flex flex-col">
+                <span className="text-[9px] text-info-gray/50 uppercase font-mono">策略页</span>
+                <span
+                  className={cn(
+                    'text-xs font-bold',
+                    Boolean(thsDiagnosis.xiadan_ui_context?.strategy_page_open) ? 'text-up-green' : 'text-warn-gold',
+                  )}
+                >
+                  {Boolean(thsDiagnosis.xiadan_ui_context?.strategy_page_open) ? 'OPEN' : 'NOT_OPEN'}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {(diagnosisHints.length > 0 || strategyRelatedWindows.length > 0) && (
+            <div className="mt-3 grid grid-cols-1 lg:grid-cols-2 gap-3">
+              <div className="border border-border/60 rounded-sm p-3 bg-bg-primary/30">
+                <p className="text-[10px] text-info-gray/60 uppercase font-mono mb-2">诊断建议</p>
+                {diagnosisHints.length === 0 ? (
+                  <p className="text-xs text-info-gray/60">暂无建议</p>
+                ) : (
+                  <div className="space-y-1">
+                    {diagnosisHints.map((hint, idx) => (
+                      <p key={`${hint}-${idx}`} className="text-xs text-info-gray leading-relaxed">
+                        {idx + 1}. {hint}
+                      </p>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <div className="border border-border/60 rounded-sm p-3 bg-bg-primary/30">
+                <p className="text-[10px] text-info-gray/60 uppercase font-mono mb-2">策略页命中窗口</p>
+                {strategyRelatedWindows.length === 0 ? (
+                  <p className="text-xs text-info-gray/60">未检测到命中窗口标题</p>
+                ) : (
+                  <div className="space-y-1">
+                    {strategyRelatedWindows.map((title, idx) => (
+                      <p key={`${title}-${idx}`} className="text-xs text-white truncate" title={title}>
+                        {title}
+                      </p>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {channels.map((channel) => (
           <div key={channel.id} className="bg-bg-card border border-border rounded-sm p-4 relative group hover:border-neon-cyan/30 transition-colors">
@@ -392,14 +626,21 @@ export const ExecutionMonitor: React.FC = () => {
             <div className="grid grid-cols-2 gap-4 text-xs font-mono">
               <div className="flex flex-col">
                 <span className="text-info-gray/50 uppercase">延迟</span>
-                <span className={cn('text-lg', channel.latency > 50 ? 'text-warn-gold' : 'text-up-green')}>
-                  {channel.latency} <span className="text-[10px] text-info-gray/50">ms</span>
+                <span
+                  className={cn(
+                    'text-lg',
+                    channel.latency === null ? 'text-info-gray/70' : channel.latency > 50 ? 'text-warn-gold' : 'text-up-green',
+                  )}
+                >
+                  {channel.latency === null ? '--' : channel.latency}{' '}
+                  {channel.latency === null ? null : <span className="text-[10px] text-info-gray/50">ms</span>}
                 </span>
               </div>
               <div className="flex flex-col">
                 <span className="text-info-gray/50 uppercase">吞吐</span>
                 <span className="text-lg text-white">
-                  {channel.throughput} <span className="text-[10px] text-info-gray/50">cmd/s</span>
+                  {channel.throughput === null ? '--' : channel.throughput}{' '}
+                  {channel.throughput === null ? null : <span className="text-[10px] text-info-gray/50">cmd/s</span>}
                 </span>
               </div>
               <div className="flex flex-col col-span-2">
@@ -408,9 +649,15 @@ export const ExecutionMonitor: React.FC = () => {
               </div>
             </div>
 
-            <div className="absolute top-0 right-0 p-1 opacity-0 group-hover:opacity-100 transition-opacity">
-              <ExternalLink className="h-3 w-3 text-info-gray cursor-pointer hover:text-white" />
-            </div>
+            <a
+              href={runtimeDetailUrl}
+              target="_blank"
+              rel="noreferrer"
+              title="查看系统 runtime 详情（JSON）"
+              className="absolute top-0 right-0 p-1 opacity-0 group-hover:opacity-100 transition-opacity text-info-gray hover:text-white"
+            >
+              <ExternalLink className="h-3 w-3" />
+            </a>
           </div>
         ))}
       </div>
@@ -456,6 +703,10 @@ export const ExecutionMonitor: React.FC = () => {
                 ) : (
                   orders.map((order) => (
                     <tr key={order.id} className="hover:bg-bg-hover transition-colors group">
+                      {/*
+                        行级刷新动作统一走 tradingApi.syncOrders + fetchData；
+                        没有单笔刷新接口时，保持按钮层面的可观测状态（进行中/成功/失败）。
+                      */}
                       <td className="px-4 py-3 font-mono text-info-gray">{order.id}</td>
                       <td className="px-4 py-3">
                         <div className="flex flex-col">
@@ -469,8 +720,8 @@ export const ExecutionMonitor: React.FC = () => {
                           {order.side}
                         </div>
                       </td>
-                      <td className="px-4 py-3 text-right font-mono">{order.price.toFixed(2)}</td>
-                      <td className="px-4 py-3 text-right font-mono">{order.qty}</td>
+                      <td className="px-4 py-3 text-right font-mono">{order.price === null ? '--' : order.price.toFixed(2)}</td>
+                      <td className="px-4 py-3 text-right font-mono">{order.qty === null ? '--' : order.qty}</td>
                       <td className="px-4 py-3">
                         <span
                           className={cn(
@@ -483,9 +734,37 @@ export const ExecutionMonitor: React.FC = () => {
                       </td>
                       <td className="px-4 py-3 font-mono text-info-gray/60">{order.duration}</td>
                       <td className="px-4 py-3 text-right">
-                        <button className="opacity-0 group-hover:opacity-100 p-1 hover:text-down-red transition-all" title="刷新订单状态">
-                          <RotateCw className="h-3.5 w-3.5" />
-                        </button>
+                        {(() => {
+                          const refreshStatus = orderRefreshStates[order.id] ?? 'idle';
+                          const isRefreshing = refreshStatus === 'running';
+                          const label =
+                            refreshStatus === 'running'
+                              ? '刷新中'
+                              : refreshStatus === 'success'
+                                ? '已刷新'
+                                : refreshStatus === 'error'
+                                  ? '失败'
+                                  : '刷新';
+                          return (
+                            <button
+                              onClick={() => void handleRefreshOrderStatus(order)}
+                              disabled={isRefreshing}
+                              title={`刷新订单状态（${label}）`}
+                              className={cn(
+                                'p-1 rounded-sm transition-all text-[10px] flex items-center gap-1 border',
+                                refreshStatus === 'idle' &&
+                                  'opacity-0 group-hover:opacity-100 border-border/40 text-info-gray hover:text-neon-cyan hover:border-neon-cyan/40',
+                                refreshStatus === 'running' &&
+                                  'opacity-100 border-neon-cyan/40 text-neon-cyan cursor-not-allowed',
+                                refreshStatus === 'success' && 'opacity-100 border-up-green/40 text-up-green',
+                                refreshStatus === 'error' && 'opacity-100 border-down-red/40 text-down-red',
+                              )}
+                            >
+                              {isRefreshing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCw className="h-3.5 w-3.5" />}
+                              <span>{label}</span>
+                            </button>
+                          );
+                        })()}
                       </td>
                     </tr>
                   ))
@@ -534,11 +813,11 @@ export const ExecutionMonitor: React.FC = () => {
                   <div className="grid grid-cols-2 gap-2 text-[11px] font-mono">
                     <div className="flex justify-between border-r border-border/50 pr-2">
                       <span className="text-info-gray/50 uppercase">均价</span>
-                      <span className="text-white font-bold">{fill.avgPrice.toFixed(2)}</span>
+                      <span className="text-white font-bold">{fill.avgPrice === null ? '--' : fill.avgPrice.toFixed(2)}</span>
                     </div>
                     <div className="flex justify-between pl-2">
                       <span className="text-info-gray/50 uppercase">成交数量</span>
-                      <span className="text-white font-bold">{fill.qty}</span>
+                      <span className="text-white font-bold">{fill.qty === null ? '--' : fill.qty}</span>
                     </div>
                   </div>
 

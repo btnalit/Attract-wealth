@@ -8,6 +8,8 @@ import time
 from pathlib import Path
 from typing import Any
 
+from src.core.ths_host_autostart import probe_bridge_runtime
+
 DEFAULT_THS_BRIDGE_SCRIPT = Path(r"D:\同花顺软件\同花顺\script\laicai_bridge.py")
 DEFAULT_THS_BRIDGE_STDOUT = Path("data/smoke/reports/ths_bridge_stdout.log")
 DEFAULT_THS_BRIDGE_STDERR = Path("data/smoke/reports/ths_bridge_stderr.log")
@@ -70,6 +72,8 @@ class THSBridgeRuntime:
             "stderr_log": "",
             "message": "not_started",
             "stopped": False,
+            "require_host_runtime": True,
+            "runtime_probe": {},
         }
 
     def start(self, *, channel: str, allow_disabled: bool = False) -> dict[str, Any]:
@@ -79,6 +83,7 @@ class THSBridgeRuntime:
         port = int(os.getenv("THS_IPC_PORT", "8089"))
         timeout_s = float(os.getenv("THS_BRIDGE_START_TIMEOUT_S", "12"))
         start_command = os.getenv("THS_BRIDGE_START_COMMAND", "").strip()
+        require_host_runtime = _is_true(os.getenv("STARTUP_REQUIRE_THS_HOST_RUNTIME"), default=True)
 
         script = _resolve_path(
             os.getenv("THS_BRIDGE_SCRIPT", str(DEFAULT_THS_BRIDGE_SCRIPT)),
@@ -111,6 +116,8 @@ class THSBridgeRuntime:
             "start_command": start_command,
             "message": "not_requested",
             "stopped": False,
+            "require_host_runtime": require_host_runtime,
+            "runtime_probe": {},
         }
 
         if selected != "ths_ipc":
@@ -124,8 +131,14 @@ class THSBridgeRuntime:
         already_ready, _ = _wait_port(host, port, timeout_s=0.25)
         if already_ready:
             self._state["existing"] = True
-            self._state["ready"] = True
-            self._state["message"] = "bridge already listening"
+            runtime_probe = probe_bridge_runtime(host=host, port=port, timeout_s=1.2)
+            runtime_ok = bool(runtime_probe.get("runtime_ok", False))
+            self._state["runtime_probe"] = runtime_probe
+            self._state["ready"] = bool(runtime_ok or not require_host_runtime)
+            if require_host_runtime and not runtime_ok:
+                self._state["message"] = "bridge already listening but runtime is not THS host"
+            else:
+                self._state["message"] = "bridge already listening"
             return dict(self._state)
 
         if not start_command and not script.exists():
@@ -162,6 +175,15 @@ class THSBridgeRuntime:
 
         ready, reason = _wait_port(host, port, timeout_s=timeout_s)
         if ready:
+            runtime_probe = probe_bridge_runtime(host=host, port=port, timeout_s=1.2)
+            runtime_ok = bool(runtime_probe.get("runtime_ok", False))
+            self._state["runtime_probe"] = runtime_probe
+            if require_host_runtime and not runtime_ok:
+                self._state["message"] = "bridge started but runtime is not THS host"
+                self._state["ready"] = False
+                self.stop(force=True, reason="runtime_not_host")
+                return dict(self._state)
+
             self._state["ready"] = True
             self._state["message"] = "bridge started and ready"
             return dict(self._state)

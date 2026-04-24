@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState, type MouseEvent } from 'react';
+import { useCallback, useEffect, useMemo, useState, type MouseEvent } from 'react';
 import { 
   ReactFlow, 
   Controls, 
@@ -9,9 +9,10 @@ import {
   MarkerType,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { useAgentStore } from '../store/agentStore';
+import { useAgentStore, type AgentStatus } from '../store/agentStore';
 import { useSSE } from '../hooks/useSSE';
 import AgentNode from '../components/AgentNode';
+import { monitorApi, type MonitorOverviewPayload } from '../services/api';
 import { 
   Play, 
 
@@ -77,10 +78,102 @@ const initialEdges: Edge[] = [
   markerEnd: { type: MarkerType.ArrowClosed, color: '#00f0ff' },
 }));
 
+const toOptionalNumber = (value: unknown): number | null => {
+  if (value === null || value === undefined) {
+    return null;
+  }
+  if (typeof value === 'string' && value.trim() === '') {
+    return null;
+  }
+  const num = Number(value);
+  return Number.isFinite(num) ? num : null;
+};
+
+const toTimestamp = (value: unknown): number | null => {
+  const num = toOptionalNumber(value);
+  if (num === null || num <= 0) {
+    return null;
+  }
+  return num > 1_000_000_000_000 ? num : num * 1000;
+};
+
+const resolveWorkshopNodeId = (type: unknown, message: unknown, payload: unknown): string | null => {
+  const source = `${String(type ?? '')} ${String(message ?? '')}`.toLowerCase();
+  const payloadText = payload && typeof payload === 'object' ? JSON.stringify(payload).toLowerCase() : '';
+  const text = `${source} ${payloadText}`;
+
+  if (text.includes('fundamental') || text.includes('基本面')) {
+    return 'FundamentalAnalyst';
+  }
+  if (text.includes('technical') || text.includes('技术')) {
+    return 'TechnicalAnalyst';
+  }
+  if (text.includes('news') || text.includes('新闻')) {
+    return 'NewsAnalyst';
+  }
+  if (text.includes('sentiment') || text.includes('情绪')) {
+    return 'SentimentAnalyst';
+  }
+  if (text.includes('debate') || text.includes('research') || text.includes('辩论')) {
+    return 'DebateResearcher';
+  }
+  if (text.includes('risk') || text.includes('风控')) {
+    return 'RiskGuard';
+  }
+  if (
+    text.includes('trade') ||
+    text.includes('order') ||
+    text.includes('execution') ||
+    text.includes('下单') ||
+    text.includes('成交')
+  ) {
+    return text.includes('成交') || text.includes('filled') ? 'ExecutionOutput' : 'TraderDecision';
+  }
+  if (text.includes('collect') || text.includes('market') || text.includes('行情') || text.includes('data') || text.includes('数据')) {
+    return 'DataCollector';
+  }
+  return null;
+};
+
+const resolveWorkshopLogType = (type: unknown, message: unknown): 'input' | 'output' | 'info' => {
+  const text = `${String(type ?? '')} ${String(message ?? '')}`.toLowerCase();
+  if (text.includes('collect') || text.includes('data') || text.includes('行情') || text.includes('输入')) {
+    return 'input';
+  }
+  if (text.includes('trade') || text.includes('order') || text.includes('execution') || text.includes('输出') || text.includes('成交')) {
+    return 'output';
+  }
+  return 'info';
+};
+
+const resolveWorkshopNodeStatus = (severity: unknown, message: unknown): AgentStatus => {
+  const sev = String(severity ?? '').trim().toLowerCase();
+  const msg = String(message ?? '').trim().toLowerCase();
+  if (sev === 'high' || msg.includes('error') || msg.includes('failed') || msg.includes('拒单') || msg.includes('失败')) {
+    return 'error';
+  }
+  if (msg.includes('pending') || msg.includes('running') || msg.includes('processing') || msg.includes('执行中')) {
+    return 'thinking';
+  }
+  return 'success';
+};
+
 const AgentWorkshop = () => {
-  useSSE(); // Activate SSE stream
-  const { logs, activeNodeId, resetGraph, pnl } = useAgentStore();
+  const { isConnected } = useSSE();
+  const {
+    logs,
+    activeNodeId,
+    resetGraph,
+    pnl,
+    agents,
+    updatePnl,
+    clearLogs,
+    addLog,
+    setActiveNode,
+    updateAgentStatus,
+  } = useAgentStore();
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  const [hasPnlSnapshot, setHasPnlSnapshot] = useState(false);
 
   const onNodeClick = useCallback((_event: MouseEvent, node: Node) => {
     setSelectedNodeId(node.id);
@@ -90,6 +183,92 @@ const AgentWorkshop = () => {
     logs.filter(log => log.nodeId === (selectedNodeId || activeNodeId)),
     [logs, selectedNodeId, activeNodeId]
   );
+
+  const activeAgentCount = useMemo(
+    () => Object.values(agents).filter((item) => item.status === 'thinking').length,
+    [agents],
+  );
+
+  const latestUpdateText = useMemo(() => {
+    const timestamps = Object.values(agents)
+      .map((item) => toOptionalNumber(item.lastUpdate))
+      .filter((item): item is number => item !== null && Number.isFinite(item) && item > 0);
+    if (timestamps.length === 0) {
+      return '--';
+    }
+    return new Date(Math.max(...timestamps)).toLocaleTimeString();
+  }, [agents]);
+
+  const hydrateFromAuditLogs = useCallback(async () => {
+    const payload = await monitorApi.getAuditLogs<Array<Record<string, unknown>>>(80);
+    const rows = Array.isArray(payload) ? payload : [];
+    if (rows.length === 0) {
+      return;
+    }
+
+    clearLogs();
+    let latestNode: string | null = null;
+    rows
+      .slice()
+      .sort((a, b) => {
+        const left = toTimestamp(a.timestamp);
+        const right = toTimestamp(b.timestamp);
+        if (left === null && right === null) return 0;
+        if (left === null) return 1;
+        if (right === null) return -1;
+        return left - right;
+      })
+      .slice(-80)
+      .forEach((item, index) => {
+        const message = String(item.message ?? item.detail ?? `${String(item.type ?? 'SYSTEM')} 事件`);
+        const nodeId = resolveWorkshopNodeId(item.type, message, item.payload);
+        const timestamp = toTimestamp(item.timestamp);
+        if (nodeId) {
+          latestNode = nodeId;
+          const status = resolveWorkshopNodeStatus(item.severity, message);
+          const progress = status === 'success' ? 100 : status === 'thinking' ? 60 : 0;
+          updateAgentStatus(nodeId, status, undefined, progress);
+        }
+        addLog({
+          timestamp: timestamp === null ? '--' : new Date(timestamp).toLocaleTimeString(),
+          nodeId: nodeId || `SYSTEM_${index}`,
+          type: resolveWorkshopLogType(item.type, message),
+          message,
+        });
+      });
+    if (latestNode) {
+      setActiveNode(latestNode);
+    }
+  }, [addLog, clearLogs, setActiveNode, updateAgentStatus]);
+
+  const bootstrapWorkshop = useCallback(async () => {
+    try {
+      const overviewPayload = await monitorApi.getOverview<MonitorOverviewPayload>();
+      const wallet = overviewPayload?.wallet;
+      const pnlValue = toOptionalNumber(wallet?.daily_pnl ?? wallet?.total_pnl);
+      if (pnlValue !== null) {
+        updatePnl(pnlValue);
+        setHasPnlSnapshot(true);
+      }
+
+      if (!isConnected || logs.length === 0) {
+        await hydrateFromAuditLogs();
+      }
+    } catch (error) {
+      console.warn('[AgentWorkshop] API 启动水位拉取失败', error);
+    }
+  }, [hydrateFromAuditLogs, isConnected, logs.length, updatePnl]);
+
+  useEffect(() => {
+    void bootstrapWorkshop();
+  }, [bootstrapWorkshop]);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      void bootstrapWorkshop();
+    }, 12000);
+    return () => window.clearInterval(timer);
+  }, [bootstrapWorkshop]);
 
   return (
     <div className="flex h-[calc(100vh-80px)] w-full overflow-hidden bg-bg-primary">
@@ -118,11 +297,12 @@ const AgentWorkshop = () => {
           
           <Panel position="top-right" className="bg-bg-card/90 border border-border p-2 rounded-lg backdrop-blur-md flex flex-col gap-2">
             <button 
-              onClick={() => console.log('Start Run')}
-              className="flex items-center gap-2 px-4 py-2 bg-neon-cyan/20 hover:bg-neon-cyan/30 text-neon-cyan rounded-md border border-neon-cyan/30 transition-all group"
+              onClick={() => setSelectedNodeId(activeNodeId)}
+              disabled={!activeNodeId}
+              className="flex items-center gap-2 px-4 py-2 bg-neon-cyan/20 hover:bg-neon-cyan/30 text-neon-cyan rounded-md border border-neon-cyan/30 transition-all group disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Play className="w-4 h-4 fill-neon-cyan group-hover:scale-110 transition-transform" />
-              <span className="text-xs font-bold uppercase tracking-widest font-mono">运行工作流</span>
+              <span className="text-xs font-bold uppercase tracking-widest font-mono">聚焦活跃节点</span>
             </button>
             <button 
               onClick={() => resetGraph()}
@@ -138,9 +318,13 @@ const AgentWorkshop = () => {
               <span className="text-[10px] text-info-gray uppercase font-mono">本次执行盈亏</span>
               <div className={clsx(
                 "text-2xl font-bold font-mono tracking-tighter font-orbitron",
-                pnl >= 0 ? "text-up-green shadow-[0_0_20px_rgba(0,255,157,0.1)]" : "text-down-red"
+                !hasPnlSnapshot
+                  ? "text-info-gray/70"
+                  : pnl >= 0
+                    ? "text-up-green shadow-[0_0_20px_rgba(0,255,157,0.1)]"
+                    : "text-down-red"
               )}>
-                {pnl >= 0 ? '+' : ''}{pnl.toFixed(2)} USD
+                {hasPnlSnapshot ? `${pnl >= 0 ? '+' : ''}${pnl.toFixed(2)} USD` : '--'}
               </div>
             </div>
           </Panel>
@@ -193,20 +377,22 @@ const AgentWorkshop = () => {
           <h3 className="text-[10px] font-bold text-info-gray uppercase tracking-widest mb-3">算力资源监控</h3>
           <div className="grid grid-cols-2 gap-3">
             <div className="p-3 bg-bg-card border border-border rounded">
-              <span className="text-[9px] text-info-gray uppercase font-mono block mb-1">推理耗时</span>
-              <span className="text-sm font-bold text-white font-mono">1.2s</span>
+              <span className="text-[9px] text-info-gray uppercase font-mono block mb-1">SSE 连接</span>
+              <span className={clsx('text-sm font-bold font-mono', isConnected ? 'text-up-green' : 'text-down-red')}>
+                {isConnected ? 'ONLINE' : 'OFFLINE'}
+              </span>
             </div>
             <div className="p-3 bg-bg-card border border-border rounded">
-              <span className="text-[9px] text-info-gray uppercase font-mono block mb-1">Token 消耗</span>
-              <span className="text-sm font-bold text-white font-mono">4.2k</span>
+              <span className="text-[9px] text-info-gray uppercase font-mono block mb-1">活跃节点</span>
+              <span className="text-sm font-bold text-white font-mono">{activeAgentCount}/{initialNodes.length}</span>
             </div>
             <div className="p-3 bg-bg-card border border-border rounded">
-              <span className="text-[9px] text-info-gray uppercase font-mono block mb-1">决策置信度</span>
-              <span className="text-sm font-bold text-up-green font-mono">92%</span>
+              <span className="text-[9px] text-info-gray uppercase font-mono block mb-1">日志缓存</span>
+              <span className="text-sm font-bold text-up-green font-mono">{logs.length}</span>
             </div>
             <div className="p-3 bg-bg-card border border-border rounded">
-              <span className="text-[9px] text-info-gray uppercase font-mono block mb-1">异常重试</span>
-              <span className="text-sm font-bold text-warn-gold font-mono">0</span>
+              <span className="text-[9px] text-info-gray uppercase font-mono block mb-1">最近更新</span>
+              <span className="text-sm font-bold text-warn-gold font-mono">{latestUpdateText}</span>
             </div>
           </div>
         </div>

@@ -4,8 +4,8 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from src.core.errors import TradingServiceError
-from src.routers import strategy as strategy_router
 from src.routers.strategy import router
+from src.services.strategy_service import StrategyService
 
 
 class _FakeStrategyStore:
@@ -235,10 +235,30 @@ class _FakeBacktestRunner:
         }
 
 
+class _FakeMemoryVaultDao:
+    def __init__(self):
+        self.tiers: dict[str, str] = {}
+        self.forgotten: set[str] = set()
+
+    def get_overrides(self):
+        return {"tiers": dict(self.tiers), "forgotten": sorted(self.forgotten), "updated_at": 1.0}
+
+    def set_tier(self, *, entry_id: str, tier: str):
+        self.tiers[entry_id] = tier
+        self.forgotten.discard(entry_id)
+        return {"id": entry_id, "tier": tier}
+
+    def forget(self, *, entry_id: str):
+        self.tiers.pop(entry_id, None)
+        self.forgotten.add(entry_id)
+        return {"id": entry_id, "forgotten": True}
+
+
 def _build_client() -> TestClient:
     app = FastAPI()
     app.state.strategy_store = _FakeStrategyStore()
     app.state.backtest_runner = _FakeBacktestRunner()
+    app.state.memory_vault_dao = _FakeMemoryVaultDao()
     app.include_router(router, prefix="/api/strategy")
     return TestClient(app)
 
@@ -377,6 +397,38 @@ def test_strategy_router_promote_rejected_when_gate_failed():
     assert body["code"] == "STRATEGY_VERSION_GATE_FAILED"
 
 
+def test_strategy_history_endpoint_returns_structured_ooda():
+    client = _build_client()
+    create_resp = client.post(
+        "/api/strategy/versions",
+        json={
+            "name": "history_demo",
+            "origin": "MUTATION",
+            "metrics": {
+                "trade_count": 36,
+                "win_rate": 0.63,
+                "max_drawdown": 0.11,
+                "net_pnl": 1888,
+                "sharpe": 1.02,
+            },
+            "status": "candidate",
+        },
+    )
+    assert create_resp.status_code == 200
+
+    history_resp = client.get("/api/strategy/history", params={"limit": 20})
+    assert history_resp.status_code == 200
+    body = history_resp.json()
+    assert body["ok"] is True
+    assert isinstance(body["data"], list)
+    assert len(body["data"]) >= 1
+    event = body["data"][0]
+    assert event["type"] == "MUTATION"
+    assert isinstance(event["ooda"], dict)
+    assert set(event["ooda"].keys()) >= {"observe", "orient", "decide", "act", "trades", "pnl", "deviations"}
+    assert "win rate" in event["ooda"]["orient"]
+
+
 def test_strategy_version_diff_endpoint_with_parent_baseline():
     client = _build_client()
     base_resp = client.post(
@@ -475,7 +527,19 @@ def test_strategy_knowledge_endpoint_returns_normalized_items(monkeypatch):
         def search_all(self, _query: str, _top_k: int):
             return {"patterns": [], "lessons": [], "rules": []}
 
-    monkeypatch.setattr(strategy_router, "_load_knowledge_core", lambda: _FakeKnowledgeCore)
+        def add_pattern(self, name: str, description: str, context: dict):
+            return f"p::{name}::{description}::{context.get('source', '')}"
+
+        def add_lesson(self, title: str, content: str, tags: list[str]):
+            return f"l::{title}::{content}::{len(tags)}"
+
+        def add_expert_rule(self, rule_text: str, priority: int = 0):
+            return f"r::{rule_text}::{priority}"
+
+        def delete_entry(self, entry_id: str):
+            return entry_id == "p-1"
+
+    monkeypatch.setattr(StrategyService, "_create_knowledge_core", lambda self: _FakeKnowledgeCore())
     client = _build_client()
     resp = client.get("/api/strategy/knowledge", params={"type": "patterns", "q": "breakout", "top_k": 5})
     assert resp.status_code == 200
@@ -490,18 +554,81 @@ def test_strategy_knowledge_endpoint_returns_normalized_items(monkeypatch):
     assert item["type"] == "Pattern"
     assert item["title"] == "Breakout"
     assert item["relevance"] == 86.0
+    assert item["memory_tier"] == "HOT"
     assert item["tags"] == ["pattern", "volume"]
     assert isinstance(item["vector"], list)
     assert len(item["vector"]) == 2
     assert item["summary"]
     assert item["fullContent"]
 
+    ingest_resp = client.post(
+        "/api/strategy/knowledge/ingest",
+        json={
+            "type": "pattern",
+            "title": "Breakout",
+            "content": "Price breaks resistance with volume",
+            "tags": ["pattern", "volume"],
+            "context": {"source": "unit_test"},
+        },
+    )
+    assert ingest_resp.status_code == 200
+    ingest_body = ingest_resp.json()
+    assert ingest_body["ok"] is True
+    assert ingest_body["code"] == "KNOWLEDGE_INGEST_OK"
+    assert ingest_body["data"]["entry_type"] == "pattern"
+    assert ingest_body["data"]["id"].startswith("p::")
+
+    delete_resp = client.post("/api/strategy/knowledge/delete", json={"id": "p-1"})
+    assert delete_resp.status_code == 200
+    delete_body = delete_resp.json()
+    assert delete_body["ok"] is True
+    assert delete_body["code"] == "KNOWLEDGE_DELETE_OK"
+    assert delete_body["data"]["deleted"] is True
+
+
+def test_strategy_knowledge_endpoint_does_not_generate_fake_vector(monkeypatch):
+    class _FakeKnowledgeCoreNoVector:
+        def search_patterns(self, _query: str, _top_k: int):
+            return [{"id": "p-novec", "name": "NoVec", "description": "No vector payload", "relevance_score": 0.73}]
+
+        def search_lessons(self, _query: str, _top_k: int):
+            return []
+
+        def search_rules(self, _query: str, _top_k: int):
+            return []
+
+        def search_all(self, _query: str, _top_k: int):
+            return {"patterns": [], "lessons": [], "rules": []}
+
+        def add_pattern(self, name: str, description: str, context: dict):
+            return f"p::{name}::{description}::{context.get('source', '')}"
+
+        def add_lesson(self, title: str, content: str, tags: list[str]):
+            return f"l::{title}::{content}::{len(tags)}"
+
+        def add_expert_rule(self, rule_text: str, priority: int = 0):
+            return f"r::{rule_text}::{priority}"
+
+        def delete_entry(self, entry_id: str):
+            return entry_id == "p-novec"
+
+    monkeypatch.setattr(StrategyService, "_create_knowledge_core", lambda self: _FakeKnowledgeCoreNoVector())
+    client = _build_client()
+    resp = client.get("/api/strategy/knowledge", params={"type": "patterns", "q": "novec", "top_k": 5})
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["ok"] is True
+    assert len(body["data"]) == 1
+    assert body["data"][0]["id"] == "p-novec"
+    assert body["data"][0]["vector"] is None
+    assert body["data"][0]["memory_tier"] == "WARM"
+
 
 def test_strategy_knowledge_endpoint_degrades_to_empty_when_core_missing(monkeypatch):
-    def _raise_import_error():
+    def _raise_import_error(_self):
         raise ImportError("knowledge core not available")
 
-    monkeypatch.setattr(strategy_router, "_load_knowledge_core", _raise_import_error)
+    monkeypatch.setattr(StrategyService, "_create_knowledge_core", _raise_import_error)
     client = _build_client()
     resp = client.get("/api/strategy/knowledge", params={"type": "rules", "q": "risk", "top_k": 3})
     assert resp.status_code == 200
@@ -510,3 +637,66 @@ def test_strategy_knowledge_endpoint_degrades_to_empty_when_core_missing(monkeyp
     assert body["ok"] is True
     assert body["code"] == "KNOWLEDGE_CORE_UNAVAILABLE"
     assert body["data"] == []
+
+    ingest_resp = client.post(
+        "/api/strategy/knowledge/ingest",
+        json={"type": "rule", "title": "止损", "content": "单笔亏损超过2%立即平仓"},
+    )
+    assert ingest_resp.status_code == 503
+    ingest_body = ingest_resp.json()
+    assert ingest_body["ok"] is False
+    assert ingest_body["code"] == "KNOWLEDGE_CORE_UNAVAILABLE"
+
+
+def test_strategy_memory_override_endpoints_work() -> None:
+    client = _build_client()
+
+    initial_resp = client.get("/api/strategy/memory/overrides")
+    assert initial_resp.status_code == 200
+    initial_body = initial_resp.json()
+    assert initial_body["ok"] is True
+    assert initial_body["code"] == "MEMORY_OVERRIDES_OK"
+    assert initial_body["data"]["tiers"] == {}
+    assert initial_body["data"]["forgotten"] == []
+
+    promote_resp = client.post(
+        "/api/strategy/memory/promote",
+        json={"id": "m-1", "current_tier": "WARM"},
+    )
+    assert promote_resp.status_code == 200
+    promote_body = promote_resp.json()
+    assert promote_body["ok"] is True
+    assert promote_body["code"] == "MEMORY_PROMOTE_OK"
+    assert promote_body["data"] == {"id": "m-1", "tier": "HOT"}
+
+    demote_resp = client.post(
+        "/api/strategy/memory/demote",
+        json={"id": "m-1", "current_tier": "HOT"},
+    )
+    assert demote_resp.status_code == 200
+    demote_body = demote_resp.json()
+    assert demote_body["ok"] is True
+    assert demote_body["code"] == "MEMORY_DEMOTE_OK"
+    assert demote_body["data"] == {"id": "m-1", "tier": "WARM"}
+
+    forget_resp = client.post("/api/strategy/memory/forget", json={"id": "m-1"})
+    assert forget_resp.status_code == 200
+    forget_body = forget_resp.json()
+    assert forget_body["ok"] is True
+    assert forget_body["code"] == "MEMORY_FORGET_OK"
+    assert forget_body["data"] == {"id": "m-1", "forgotten": True}
+
+    final_resp = client.get("/api/strategy/memory/overrides")
+    assert final_resp.status_code == 200
+    final_body = final_resp.json()
+    assert final_body["data"]["tiers"] == {}
+    assert final_body["data"]["forgotten"] == ["m-1"]
+
+    invalid_tier_resp = client.post(
+        "/api/strategy/memory/promote",
+        json={"id": "m-2", "current_tier": "UNKNOWN"},
+    )
+    assert invalid_tier_resp.status_code == 400
+    invalid_tier_body = invalid_tier_resp.json()
+    assert invalid_tier_body["ok"] is False
+    assert invalid_tier_body["code"] == "INVALID_STRATEGY_REQUEST"

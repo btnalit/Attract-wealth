@@ -12,6 +12,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from openai import AsyncOpenAI
+from src.core.cost_tracker import CostTracker
 from src.llm.config_provider import llm_config_provider
 
 
@@ -104,6 +105,7 @@ _CONFIG_KEYS = (
     "LLM_MAX_TOKENS",
     "LLM_TEMPERATURE",
 )
+_COST_TRACKER = CostTracker()
 
 
 def _config_value(name: str, default: str = "") -> str:
@@ -437,18 +439,18 @@ class UnifiedLLMClient:
 
     def _is_daily_budget_exceeded(self, current_call_cost: float, daily_budget: float) -> bool:
         try:
-            from src.core.trading_ledger import TradingLedger
-
-            summary = TradingLedger.get_llm_usage_summary(hours=24)
-            return float(summary.get("cost_usd", 0.0)) + max(0.0, current_call_cost) > daily_budget
+            status = _COST_TRACKER.daily_budget_status(
+                daily_budget_usd=daily_budget,
+                current_call_cost=current_call_cost,
+                hours=24,
+            )
+            return bool(status.get("exceeded", False))
         except Exception:
             return False
 
     def _persist_usage(self, usage: LLMUsage) -> None:
         try:
-            from src.core.trading_ledger import TradingLedger
-
-            TradingLedger.record_llm_usage(
+            _COST_TRACKER.record_usage(
                 {
                     "id": str(uuid.uuid4()),
                     "timestamp": time.time(),

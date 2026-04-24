@@ -6,7 +6,7 @@ from __future__ import annotations
 import json
 
 from src.agents.analysts.base import AnalystReport, BaseAnalyst
-from src.core.trading_vm import AgentState
+from src.core.agent_state import AgentState
 
 
 class FundamentalAnalyst(BaseAnalyst):

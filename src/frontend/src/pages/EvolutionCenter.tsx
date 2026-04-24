@@ -19,26 +19,27 @@ import { cn } from '../lib/utils';
 import { PageTitle } from '../components/PageTitle';
 import { apiUrl, strategyApi } from '../services/api';
 
-type StrategyType = 'BASE' | 'FIX' | 'DERIVED' | 'CAPTURED' | 'MUTATION' | 'CROSSOVER';
-type StrategyStatus = 'ACTIVE' | 'EVOLVING' | 'PAUSED' | 'CANDIDATE' | 'RETIRED' | 'DRAFT' | 'REJECTED';
+type StrategyType = 'BASE' | 'FIX' | 'DERIVED' | 'CAPTURED' | 'MUTATION' | 'CROSSOVER' | 'UNKNOWN';
+type StrategyStatus = 'ACTIVE' | 'EVOLVING' | 'PAUSED' | 'CANDIDATE' | 'RETIRED' | 'DRAFT' | 'REJECTED' | 'UNKNOWN';
 type EvolutionTab = 'Overview' | 'Tree' | 'OODA' | 'Comparison';
 
 interface Strategy {
   id: string;
   name: string;
-  version: string;
-  quality: number;
+  version: number | null;
+  quality: number | null;
+  gatePassed: boolean | null;
   status: StrategyStatus;
   type: StrategyType;
   parentId?: string;
   createdAt: string;
   description: string;
   returns: number[];
-  maxDrawdown: number;
-  sharpe: number;
-  winRate: number;
-  tradeCount: number;
-  netPnl: number;
+  maxDrawdown: number | null;
+  sharpe: number | null;
+  winRate: number | null;
+  tradeCount: number | null;
+  netPnl: number | null;
   latestBacktestId?: string;
 }
 
@@ -48,6 +49,15 @@ interface EvolutionEvent {
   type: StrategyType;
   strategyName: string;
   message: string;
+  ooda?: {
+    observe?: string;
+    orient?: string;
+    decide?: string;
+    act?: string;
+    trades?: number | null;
+    pnl?: number | null;
+    deviations?: number | null;
+  };
 }
 
 interface OODALog {
@@ -57,9 +67,9 @@ interface OODALog {
   orient: string;
   decide: string;
   act: string;
-  trades: number;
-  pnl: number;
-  deviations: number;
+  trades: number | null;
+  pnl: number | null;
+  deviations: number | null;
 }
 
 interface VersionMetricDelta {
@@ -142,6 +152,12 @@ const toNumber = (value: unknown, fallback = 0): number => {
 const clamp = (value: number, min: number, max: number): number => Math.max(min, Math.min(max, value));
 
 const toTimestamp = (value: unknown): number => {
+  if (typeof value === 'string' && value.trim()) {
+    const parsed = Date.parse(value);
+    if (!Number.isNaN(parsed)) {
+      return parsed;
+    }
+  }
   const num = toNumber(value, 0);
   if (num <= 0) {
     return 0;
@@ -154,13 +170,7 @@ const toISOString = (value: unknown): string => {
   if (ts > 0) {
     return new Date(ts).toISOString();
   }
-  if (typeof value === 'string' && value.trim()) {
-    const parsed = Date.parse(value);
-    if (!Number.isNaN(parsed)) {
-      return new Date(parsed).toISOString();
-    }
-  }
-  return new Date().toISOString();
+  return '';
 };
 
 const parsePayloadData = <T,>(payload: unknown): T => {
@@ -170,13 +180,86 @@ const parsePayloadData = <T,>(payload: unknown): T => {
   return payload as T;
 };
 
-const normalizeRatio = (value: unknown): number => {
-  const raw = toNumber(value, 0);
-  if (raw <= 0) {
-    return 0;
+const normalizeOptionalRatio = (value: unknown): number | null => {
+  const raw = Number(value);
+  if (!Number.isFinite(raw)) {
+    return null;
   }
   const ratio = raw > 1 ? raw / 100 : raw;
   return clamp(ratio, 0, 1);
+};
+
+const normalizeQualityScore = (value: unknown): number | null => {
+  const raw = Number(value);
+  if (!Number.isFinite(raw)) {
+    return null;
+  }
+  const ratio = Math.abs(raw) > 1 ? raw / 100 : raw;
+  return clamp(ratio, 0, 1);
+};
+
+const normalizeDisplayText = (value: unknown, fallback = '--'): string => {
+  const text = String(value ?? '').trim();
+  return text.length > 0 ? text : fallback;
+};
+
+const normalizeOptionalNumber = (value: unknown): number | null => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
+const normalizeOptionalCount = (value: unknown): number | null => {
+  const parsed = normalizeOptionalNumber(value);
+  if (parsed === null) {
+    return null;
+  }
+  return Math.max(0, Math.round(parsed));
+};
+
+const normalizeOptionalVersion = (value: unknown): number | null => {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) {
+    return null;
+  }
+  const version = Math.trunc(parsed);
+  return version > 0 ? version : null;
+};
+
+const formatLocalDate = (value: unknown): string => {
+  const ts = toTimestamp(value);
+  if (ts <= 0) {
+    return '--';
+  }
+  return new Date(ts).toLocaleDateString();
+};
+
+const formatLocalTime = (value: unknown): string => {
+  const ts = toTimestamp(value);
+  if (ts <= 0) {
+    return '--';
+  }
+  return new Date(ts).toLocaleTimeString();
+};
+
+const formatPercent = (value: number | null, digits = 1): string => {
+  if (value === null) {
+    return '--';
+  }
+  return `${(value * 100).toFixed(digits)}%`;
+};
+
+const formatDecimal = (value: number | null, digits = 2): string => {
+  if (value === null) {
+    return '--';
+  }
+  return value.toFixed(digits);
+};
+
+const formatVersionLabel = (value: number | null): string => {
+  if (value === null) {
+    return '--';
+  }
+  return `v${value}`;
 };
 
 const normalizeType = (value: unknown): StrategyType => {
@@ -190,8 +273,9 @@ const normalizeType = (value: unknown): StrategyType => {
     DERIVED: 'DERIVED',
     FIX: 'FIX',
     BASE: 'BASE',
+    UNKNOWN: 'UNKNOWN',
   };
-  return fromOrigin[raw] ?? 'DERIVED';
+  return fromOrigin[raw] ?? 'UNKNOWN';
 };
 
 const normalizeStatus = (value: unknown): StrategyStatus => {
@@ -204,8 +288,9 @@ const normalizeStatus = (value: unknown): StrategyStatus => {
     RETIRED: 'RETIRED',
     DRAFT: 'DRAFT',
     REJECTED: 'REJECTED',
+    UNKNOWN: 'UNKNOWN',
   };
-  return map[raw] ?? 'ACTIVE';
+  return map[raw] ?? 'UNKNOWN';
 };
 
 const extractCurve = (metrics: Record<string, unknown>): number[] => {
@@ -226,15 +311,6 @@ const extractCurve = (metrics: Record<string, unknown>): number[] => {
   return [];
 };
 
-const buildFallbackCurve = (metrics: Record<string, unknown>): number[] => {
-  const netPnl = toNumber(metrics.net_pnl ?? metrics.total_pnl ?? 0, 0);
-  const sharpe = toNumber(metrics.sharpe_ratio ?? metrics.sharpe ?? 0, 0);
-  const winRate = normalizeRatio(metrics.win_rate);
-  const trend = clamp(netPnl / 10000, -20, 20);
-  const momentum = clamp(sharpe * 2 + winRate * 10, -15, 15);
-  return [0, trend * 0.4, trend * 0.75 + momentum * 0.2, trend + momentum * 0.35];
-};
-
 const typeColorClass = (type: StrategyType): string => {
   if (type === 'BASE') {
     return 'text-neon-cyan border-neon-cyan/30 bg-neon-cyan/10';
@@ -251,8 +327,31 @@ const typeColorClass = (type: StrategyType): string => {
   return 'text-info-gray border-info-gray/30 bg-info-gray/10';
 };
 
+const eventTypeBadgeClass = (type: StrategyType): string => {
+  if (type === 'FIX') {
+    return 'bg-warn-gold/20 text-warn-gold';
+  }
+  if (type === 'MUTATION' || type === 'CROSSOVER') {
+    return 'bg-neon-magenta/20 text-neon-magenta';
+  }
+  if (type === 'BASE') {
+    return 'bg-neon-cyan/20 text-neon-cyan';
+  }
+  if (type === 'CAPTURED') {
+    return 'bg-up-green/20 text-up-green';
+  }
+  return 'bg-info-gray/20 text-info-gray';
+};
+
 const MiniSparkline: FC<{ data: number[]; color?: string }> = ({ data, color = '#00f0ff' }) => {
-  const safeData = data.length >= 2 ? data : [0, 0];
+  if (data.length < 2) {
+    return (
+      <div className="flex h-[30px] w-[100px] items-center justify-center rounded border border-dashed border-border/50 text-[9px] text-info-gray/60">
+        无曲线
+      </div>
+    );
+  }
+  const safeData = data;
   const min = Math.min(...safeData);
   const max = Math.max(...safeData);
   const range = Math.max(1e-6, max - min);
@@ -329,29 +428,31 @@ export const EvolutionCenter: FC = () => {
           const mergedMetrics = { ...metrics, ...backtestMetrics };
           const curve = extractCurve(mergedMetrics);
 
-          const qualityRaw = toNumber(metrics.quality_score, Number.NaN);
-          const quality = Number.isFinite(qualityRaw)
-            ? clamp(qualityRaw, 0, 1)
-            : (mergedMetrics.version_gate as { passed?: boolean } | undefined)?.passed
-              ? 0.85
-              : 0.6;
+          const quality = normalizeQualityScore(mergedMetrics.quality_score);
+          const versionGate =
+            mergedMetrics.version_gate && typeof mergedMetrics.version_gate === 'object'
+              ? (mergedMetrics.version_gate as Record<string, unknown>)
+              : null;
+          const gatePassedRaw = versionGate?.passed;
+          const gatePassed = typeof gatePassedRaw === 'boolean' ? gatePassedRaw : null;
 
           return {
             id,
-            name: String(item.name ?? 'Unknown Strategy'),
-            version: String(item.version ?? 1),
+            name: normalizeDisplayText(item.name ?? item.id),
+            version: normalizeOptionalVersion(item.version),
             quality,
+            gatePassed,
             status: normalizeStatus(item.status),
             type: normalizeType(item.evolution_type ?? item.origin),
             parentId: item.parent_id ? String(item.parent_id) : undefined,
             createdAt: toISOString(item.created_at),
-            description: String(item.description ?? item.content ?? 'No strategy description.'),
-            returns: curve.length > 0 ? curve : buildFallbackCurve(mergedMetrics),
-            maxDrawdown: clamp(toNumber(mergedMetrics.max_drawdown, 0), 0, 1),
-            sharpe: toNumber(mergedMetrics.sharpe_ratio ?? mergedMetrics.sharpe, 0),
-            winRate: normalizeRatio(mergedMetrics.win_rate),
-            tradeCount: Math.max(0, Math.round(toNumber(mergedMetrics.trade_count, 0))),
-            netPnl: toNumber(mergedMetrics.net_pnl ?? mergedMetrics.total_pnl, 0),
+            description: normalizeDisplayText(item.description ?? item.content),
+            returns: curve,
+            maxDrawdown: normalizeOptionalRatio(mergedMetrics.max_drawdown),
+            sharpe: normalizeOptionalNumber(mergedMetrics.sharpe_ratio ?? mergedMetrics.sharpe),
+            winRate: normalizeOptionalRatio(mergedMetrics.win_rate),
+            tradeCount: normalizeOptionalCount(mergedMetrics.trade_count),
+            netPnl: normalizeOptionalNumber(mergedMetrics.net_pnl ?? mergedMetrics.total_pnl),
             latestBacktestId: String(latestBacktest.id ?? ''),
           } satisfies Strategy;
         });
@@ -373,13 +474,27 @@ export const EvolutionCenter: FC = () => {
         const historyItems = Array.isArray(historyPayload) ? historyPayload : [];
         setEvents(
           historyItems
-            .map((item) => ({
-              id: String(item.id ?? ''),
-              timestamp: toISOString(item.timestamp),
-              type: normalizeType(item.type),
-              strategyName: String(item.strategy_name ?? 'Unknown'),
-              message: String(item.message ?? ''),
-            }))
+            .map((item) => {
+              const rawOoda = item.ooda && typeof item.ooda === 'object' ? (item.ooda as Record<string, unknown>) : null;
+              return {
+                id: String(item.id ?? ''),
+                timestamp: toISOString(item.timestamp),
+                type: normalizeType(item.type),
+                strategyName: normalizeDisplayText(item.strategy_name),
+                message: normalizeDisplayText(item.message, ''),
+                ooda: rawOoda
+                  ? {
+                      observe: normalizeDisplayText(rawOoda.observe, ''),
+                      orient: normalizeDisplayText(rawOoda.orient, ''),
+                      decide: normalizeDisplayText(rawOoda.decide, ''),
+                      act: normalizeDisplayText(rawOoda.act, ''),
+                      trades: normalizeOptionalCount(rawOoda.trades),
+                      pnl: normalizeOptionalNumber(rawOoda.pnl),
+                      deviations: normalizeOptionalCount(rawOoda.deviations),
+                    }
+                  : undefined,
+              } satisfies EvolutionEvent;
+            })
             .sort((a, b) => toTimestamp(b.timestamp) - toTimestamp(a.timestamp)),
         );
       } else {
@@ -475,56 +590,61 @@ export const EvolutionCenter: FC = () => {
     return maxDepth;
   }, [childrenByParent, rootStrategies]);
 
-  const complianceRate = useMemo(() => {
-    if (strategies.length === 0) {
-      return 0;
+  const complianceRateText = useMemo(() => {
+    const knownStrategies = strategies.filter((strategy) => strategy.gatePassed !== null);
+    if (knownStrategies.length === 0) {
+      return '--';
     }
-    const compliantCount = strategies.filter((strategy) => strategy.maxDrawdown <= 0.2).length;
-    return (compliantCount / strategies.length) * 100;
+    const passedCount = knownStrategies.filter((strategy) => strategy.gatePassed).length;
+    return `${((passedCount / knownStrategies.length) * 100).toFixed(1)}%`;
   }, [strategies]);
 
+  const todayEvolutionCount = useMemo(() => {
+    const now = new Date();
+    const start = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    const end = start + 24 * 3600 * 1000;
+    return events.filter((event) => {
+      const ts = toTimestamp(event.timestamp);
+      return ts >= start && ts < end;
+    }).length;
+  }, [events]);
+
   const oodaLogs = useMemo(() => {
-    const strategyByName = new Map<string, Strategy>();
-    for (const strategy of strategies) {
-      strategyByName.set(strategy.name, strategy);
+    if (events.length === 0) {
+      return [];
     }
 
-    const sourceEvents = events.length > 0
-      ? events.slice(0, 12)
-      : strategies
-          .slice(0, 12)
-          .map((strategy) => ({
-            id: strategy.id,
-            timestamp: strategy.createdAt,
-            type: strategy.type,
-            strategyName: strategy.name,
-            message: `v${strategy.version} 鍒涘缓/鏇存柊`,
-          }));
+    const sourceEvents = events.slice(0, 12);
 
     return sourceEvents.map((event, index) => {
-      const linked = strategyByName.get(event.strategyName);
-      const drawdownPercent = linked ? (linked.maxDrawdown * 100).toFixed(2) : '0.00';
-      const winRatePercent = linked ? (linked.winRate * 100).toFixed(2) : '0.00';
-      const sharpe = linked ? linked.sharpe.toFixed(2) : '0.00';
-      const tradeCount = linked?.tradeCount ?? 0;
-      const pnl = linked?.netPnl ?? 0;
+      const ooda = event.ooda;
+      const observe = ooda?.observe?.trim() || event.message || '--';
+      const orient = ooda?.orient?.trim() || '--';
+      const decide = ooda?.decide?.trim() || '--';
+      const act = ooda?.act?.trim() || '--';
 
       return {
         id: event.id || `ooda-${index}`,
-        date: new Date(event.timestamp).toLocaleDateString(),
-        observe: event.message || `${event.strategyName} triggered ${event.type}`,
-        orient: `win rate ${winRatePercent}% | max DD ${drawdownPercent}% | sharpe ${sharpe}`,
-        decide: `evaluate the next action based on ${event.type} event signal.`,
-        act: `${event.strategyName} keeps running under current policy.`,
-        trades: tradeCount,
-        pnl,
-        deviations: linked ? Number(linked.maxDrawdown > 0.2) : 0,
+        date: formatLocalDate(event.timestamp),
+        observe,
+        orient,
+        decide,
+        act,
+        trades: normalizeOptionalCount(ooda?.trades),
+        pnl: normalizeOptionalNumber(ooda?.pnl),
+        deviations: normalizeOptionalCount(ooda?.deviations),
       } satisfies OODALog;
     });
-  }, [events, strategies]);
+  }, [events]);
 
   const comparisonStrategies = useMemo(() => {
-    return [...strategies].sort((a, b) => b.quality - a.quality).slice(0, 8);
+    return [...strategies]
+      .sort((a, b) => {
+        const left = a.quality ?? Number.NEGATIVE_INFINITY;
+        const right = b.quality ?? Number.NEGATIVE_INFINITY;
+        return right - left;
+      })
+      .slice(0, 8);
   }, [strategies]);
 
   const handleOpenBacktest = () => {
@@ -632,31 +752,42 @@ export const EvolutionCenter: FC = () => {
             ) : filteredStrategies.length === 0 ? (
               <div className="p-6 text-center text-info-gray text-xs">No matched strategy</div>
             ) : (
-              filteredStrategies.map((strategy) => (
-                <div
-                  key={strategy.id}
-                  onClick={() => setSelectedId(strategy.id)}
-                  className={cn(
-                    'p-4 cursor-pointer transition-all border-l-2',
-                    selectedId === strategy.id ? 'bg-neon-cyan/5 border-l-neon-cyan' : 'border-l-transparent hover:bg-white/5',
-                  )}
-                >
-                  <div className="flex justify-between items-start mb-1">
-                    <span className="text-xs font-bold text-white uppercase truncate pr-2">{strategy.name}</span>
-                    <span className="text-[9px] font-mono text-info-gray">v{strategy.version}</span>
-                  </div>
-                  <div className="flex items-center gap-2 mb-3">
-                    <span className={cn('text-[8px] font-bold px-1.5 py-0.5 rounded-sm border', typeColorClass(strategy.type))}>
-                      {strategy.type}
-                    </span>
-                    <div className="flex-1 h-1 bg-gray-800 rounded-full overflow-hidden">
-                      <div className="h-full bg-neon-cyan" style={{ width: `${strategy.quality * 100}%` }} />
+              filteredStrategies.map((strategy) => {
+                const qualityPercent = strategy.quality === null ? null : strategy.quality * 100;
+                return (
+                  <div
+                    key={strategy.id}
+                    onClick={() => setSelectedId(strategy.id)}
+                    className={cn(
+                      'p-4 cursor-pointer transition-all border-l-2',
+                      selectedId === strategy.id ? 'bg-neon-cyan/5 border-l-neon-cyan' : 'border-l-transparent hover:bg-white/5',
+                    )}
+                  >
+                    <div className="flex justify-between items-start mb-1">
+                      <span className="text-xs font-bold text-white uppercase truncate pr-2">{strategy.name}</span>
+                      <span className="text-[9px] font-mono text-info-gray">{formatVersionLabel(strategy.version)}</span>
                     </div>
-                    <span className="text-[9px] text-neon-cyan">{(strategy.quality * 100).toFixed(0)}%</span>
+                    <div className="flex items-center gap-2 mb-3">
+                      <span className={cn('text-[8px] font-bold px-1.5 py-0.5 rounded-sm border', typeColorClass(strategy.type))}>
+                        {strategy.type}
+                      </span>
+                      <div className="flex-1 h-1 bg-gray-800 rounded-full overflow-hidden">
+                        <div
+                          className={cn('h-full', qualityPercent === null ? 'bg-info-gray/35' : 'bg-neon-cyan')}
+                          style={{ width: `${qualityPercent ?? 0}%` }}
+                        />
+                      </div>
+                      <span className={cn('text-[9px]', qualityPercent === null ? 'text-info-gray/60' : 'text-neon-cyan')}>
+                        {qualityPercent === null ? '--' : `${qualityPercent.toFixed(0)}%`}
+                      </span>
+                    </div>
+                    <MiniSparkline
+                      data={strategy.returns}
+                      color={strategy.quality !== null && strategy.quality > 0.8 ? '#00FF9D' : '#00f0ff'}
+                    />
                   </div>
-                  <MiniSparkline data={strategy.returns} color={strategy.quality > 0.8 ? '#00FF9D' : '#00f0ff'} />
-                </div>
-              ))
+                );
+              })
             )}
           </div>
         </div>
@@ -677,7 +808,7 @@ export const EvolutionCenter: FC = () => {
                   <StatCard
                     icon={<Zap />}
                     label="今日演进"
-                    value={events.filter((event) => event.timestamp.startsWith(new Date().toISOString().split('T')[0])).length.toString()}
+                    value={todayEvolutionCount.toString()}
                     color="text-warn-gold"
                   />
                   <StatCard
@@ -686,7 +817,7 @@ export const EvolutionCenter: FC = () => {
                     value={strategies.filter((strategy) => strategy.type === 'CAPTURED').length.toString()}
                     color="text-up-green"
                   />
-                  <StatCard icon={<Shield />} label="合规等级" value={`${complianceRate.toFixed(1)}%`} color="text-neon-cyan" />
+                  <StatCard icon={<Shield />} label="合规等级" value={complianceRateText} color="text-neon-cyan" />
                 </div>
 
                 <div className="space-y-4">
@@ -701,11 +832,11 @@ export const EvolutionCenter: FC = () => {
                         <div key={event.id} className="group relative pl-6 border-l border-border/50 py-1 hover:border-neon-cyan transition-colors">
                           <div className="absolute left-[-4.5px] top-2 h-2 w-2 rounded-full bg-border group-hover:bg-neon-cyan shadow-[0_0_8px_rgba(0,240,255,0.5)] transition-all" />
                           <div className="flex items-center gap-3 mb-1">
-                            <span className="text-[10px] font-mono text-info-gray/60">{new Date(event.timestamp).toLocaleTimeString()}</span>
+                            <span className="text-[10px] font-mono text-info-gray/60">{formatLocalTime(event.timestamp)}</span>
                             <span
                               className={cn(
                                 'text-[9px] font-bold px-1 rounded-sm uppercase',
-                                event.type === 'FIX' ? 'bg-warn-gold/20 text-warn-gold' : 'bg-neon-magenta/20 text-neon-magenta',
+                                eventTypeBadgeClass(event.type),
                               )}
                             >
                               {event.type}
@@ -755,11 +886,15 @@ export const EvolutionCenter: FC = () => {
                         <div className="flex gap-4">
                           <div className="flex flex-col items-end">
                             <span className="text-[9px] text-info-gray/50 uppercase">Trades</span>
-                            <span className="text-xs font-bold text-white">{log.trades}</span>
+                            <span className={cn('text-xs font-bold', log.trades === null ? 'text-info-gray/60' : 'text-white')}>
+                              {log.trades === null ? '--' : log.trades}
+                            </span>
                           </div>
                           <div className="flex flex-col items-end">
                             <span className="text-[9px] text-info-gray/50 uppercase">PnL</span>
-                            <span className={cn('text-xs font-bold', log.pnl >= 0 ? 'text-up-green' : 'text-down-red')}>¥{log.pnl.toFixed(2)}</span>
+                            <span className={cn('text-xs font-bold', log.pnl === null ? 'text-info-gray/60' : log.pnl >= 0 ? 'text-up-green' : 'text-down-red')}>
+                              {log.pnl === null ? '--' : `¥${log.pnl.toFixed(2)}`}
+                            </span>
                           </div>
                         </div>
                       </div>
@@ -798,15 +933,28 @@ export const EvolutionCenter: FC = () => {
                         <td className="px-4 py-3">
                           <div className="flex flex-col">
                             <span className="text-white font-semibold uppercase">{strategy.name}</span>
-                            <span className="text-[10px] text-info-gray/70">v{strategy.version} · {strategy.type}</span>
+                            <span className="text-[10px] text-info-gray/70">{formatVersionLabel(strategy.version)} · {strategy.type}</span>
                           </div>
                         </td>
-                        <td className="px-4 py-3 text-right text-neon-cyan">{(strategy.quality * 100).toFixed(1)}%</td>
-                        <td className="px-4 py-3 text-right text-white">{(strategy.winRate * 100).toFixed(1)}%</td>
-                        <td className="px-4 py-3 text-right text-white">{strategy.sharpe.toFixed(2)}</td>
-                        <td className="px-4 py-3 text-right text-warn-gold">{(strategy.maxDrawdown * 100).toFixed(2)}%</td>
-                        <td className={cn('px-4 py-3 text-right font-semibold', strategy.netPnl >= 0 ? 'text-up-green' : 'text-down-red')}>
-                          {strategy.netPnl.toFixed(2)}
+                        <td className={cn('px-4 py-3 text-right', strategy.quality === null ? 'text-info-gray/60' : 'text-neon-cyan')}>
+                          {strategy.quality === null ? '--' : `${(strategy.quality * 100).toFixed(1)}%`}
+                        </td>
+                        <td className={cn('px-4 py-3 text-right', strategy.winRate === null ? 'text-info-gray/60' : 'text-white')}>
+                          {formatPercent(strategy.winRate, 1)}
+                        </td>
+                        <td className={cn('px-4 py-3 text-right', strategy.sharpe === null ? 'text-info-gray/60' : 'text-white')}>
+                          {formatDecimal(strategy.sharpe, 2)}
+                        </td>
+                        <td className={cn('px-4 py-3 text-right', strategy.maxDrawdown === null ? 'text-info-gray/60' : 'text-warn-gold')}>
+                          {formatPercent(strategy.maxDrawdown, 2)}
+                        </td>
+                        <td
+                          className={cn(
+                            'px-4 py-3 text-right font-semibold',
+                            strategy.netPnl === null ? 'text-info-gray/60' : strategy.netPnl >= 0 ? 'text-up-green' : 'text-down-red',
+                          )}
+                        >
+                          {formatDecimal(strategy.netPnl, 2)}
                         </td>
                       </tr>
                     ))}
@@ -831,12 +979,12 @@ export const EvolutionCenter: FC = () => {
                 <p className="text-[11px] text-info-gray/80 leading-relaxed italic">{selectedStrategy.description}</p>
               </div>
               <div className="grid grid-cols-2 gap-4">
-                <Metric label="Win Rate" value={`${(selectedStrategy.winRate * 100).toFixed(1)}%`} />
-                <Metric label="Sharpe" value={selectedStrategy.sharpe.toFixed(2)} />
-                <Metric label="Max DD" value={`${(selectedStrategy.maxDrawdown * 100).toFixed(1)}%`} />
-                <Metric label="Created" value={new Date(selectedStrategy.createdAt).toLocaleDateString()} />
-                <Metric label="Trades" value={selectedStrategy.tradeCount.toString()} />
-                <Metric label="Net PnL" value={selectedStrategy.netPnl.toFixed(2)} />
+                <Metric label="Win Rate" value={formatPercent(selectedStrategy.winRate, 1)} />
+                <Metric label="Sharpe" value={formatDecimal(selectedStrategy.sharpe, 2)} />
+                <Metric label="Max DD" value={formatPercent(selectedStrategy.maxDrawdown, 1)} />
+                <Metric label="Created" value={formatLocalDate(selectedStrategy.createdAt)} />
+                <Metric label="Trades" value={selectedStrategy.tradeCount === null ? '--' : selectedStrategy.tradeCount.toString()} />
+                <Metric label="Net PnL" value={formatDecimal(selectedStrategy.netPnl, 2)} />
               </div>
               <div className="pt-4 space-y-2">
                 <button
@@ -980,9 +1128,11 @@ const TreeNode: FC<{
         <div className="flex items-center justify-between gap-3">
           <div className="flex flex-col">
             <span className="text-white text-xs font-semibold uppercase">{node.name}</span>
-            <span className="text-[10px] text-info-gray/70">v{node.version} · {node.type}</span>
+            <span className="text-[10px] text-info-gray/70">{formatVersionLabel(node.version)} · {node.type}</span>
           </div>
-          <span className="text-[10px] text-neon-cyan">{(node.quality * 100).toFixed(0)}%</span>
+          <span className={cn('text-[10px]', node.quality === null ? 'text-info-gray/60' : 'text-neon-cyan')}>
+            {node.quality === null ? '--' : `${(node.quality * 100).toFixed(0)}%`}
+          </span>
         </div>
       </div>
       {children.map((child) => (

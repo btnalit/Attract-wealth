@@ -3,7 +3,9 @@
 """
 from __future__ import annotations
 
+from dataclasses import asdict
 import logging
+import os
 import random
 import time
 from typing import Any, Dict, List
@@ -39,6 +41,22 @@ class QMTBroker(BaseBroker):
     @property
     def is_connected(self) -> bool:
         return self._is_connected
+
+    def check_health(self) -> dict[str, Any]:
+        """返回 miniQMT 通道健康状态（供 trading snapshot/monitor 使用）。"""
+        return {
+            "name": "miniQMT",
+            "channel": self.channel_name,
+            "account_id": self.account_id,
+            "path": self.mini_qmt_path,
+            "path_exists": bool(self.mini_qmt_path and os.path.exists(self.mini_qmt_path)),
+            "xt_available": bool(XT_AVAILABLE),
+            "session_id": self._session_id,
+            "is_connected": bool(self._is_connected),
+            "status": "active" if self._is_connected else "dead",
+            "xt_trader_ready": bool(self._xt_trader is not None),
+            "local_orders": len(self._local_orders),
+        }
 
     async def connect(self) -> bool:
         if not XT_AVAILABLE:
@@ -162,6 +180,64 @@ class QMTBroker(BaseBroker):
                 self._local_orders[local_id] = mapped
 
         return list(self._local_orders.values())
+
+    async def get_trade_snapshot(self) -> dict[str, Any]:
+        """返回 QMT 通道原始快照（与 ths 通道保持统一包络）。"""
+        meta = {
+            "channel": self.channel_name,
+            "account_id": self.account_id,
+            "path": self.mini_qmt_path,
+            "path_exists": bool(self.mini_qmt_path and os.path.exists(self.mini_qmt_path)),
+            "xt_available": bool(XT_AVAILABLE),
+            "session_id": self._session_id,
+            "connected": bool(self._is_connected),
+        }
+        if not self._is_connected:
+            return {
+                "status": "error",
+                "message": "broker not connected",
+                "data": {
+                    "orders": [asdict(item) for item in self._local_orders.values()],
+                },
+                "meta": meta,
+            }
+
+        try:
+            balance = await self.get_balance()
+            positions = await self.get_positions()
+            orders = await self.get_orders()
+            balance_payload = asdict(balance)
+            positions_payload = [asdict(item) for item in positions]
+            orders_payload = [asdict(item) for item in orders]
+            return {
+                "status": "success",
+                "data": {
+                    "balance": balance_payload,
+                    "positions": positions_payload,
+                    "orders": orders_payload,
+                    "summary": {
+                        "has_balance": bool(
+                            float(balance_payload.get("total_assets", 0.0) or 0.0) > 0
+                            or float(balance_payload.get("available_cash", 0.0) or 0.0) > 0
+                        ),
+                        "positions_count": len(positions_payload),
+                        "orders_count": len(orders_payload),
+                        "available_cash": float(balance_payload.get("available_cash", 0.0) or 0.0),
+                        "total_assets": float(balance_payload.get("total_assets", 0.0) or 0.0),
+                        "market_value": float(balance_payload.get("market_value", 0.0) or 0.0),
+                    },
+                },
+                "meta": meta,
+            }
+        except Exception as exc:  # noqa: BLE001
+            return {
+                "status": "error",
+                "message": f"snapshot read failed: {exc}",
+                "data": {
+                    "orders": [asdict(item) for item in self._local_orders.values()],
+                },
+                "meta": meta,
+            }
 
     async def _submit_order(self, ticker: str, side: OrderSide, price: float, quantity: int) -> OrderResult:
         if not self._is_connected or not self._xt_trader:

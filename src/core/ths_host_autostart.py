@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import csv
 import configparser
 import json
+import subprocess
 import socket
 from io import StringIO
 from pathlib import Path
@@ -17,6 +19,7 @@ MY_SIGNALS_MARKER_FILE = "my_signals_exec.jsonl"
 MY_SIGNALS_ERROR_FILE = "my_signals_error.log"
 BOOTSTRAP_MARKER_FILE = "bootstrap_exec.jsonl"
 BOOTSTRAP_ERROR_FILE = "bootstrap_error.log"
+DEFAULT_STRATEGY_WINDOW_KEYWORDS = ("策略条件单", "信号策略", "条件单", "策略预警")
 
 
 def detect_newline(content: str) -> str:
@@ -402,6 +405,129 @@ def _read_text_tail(path: Path, max_lines: int = 20) -> list[str]:
     lines = [str(line or "").rstrip() for line in text.splitlines()]
     lines = [line for line in lines if line]
     return lines[-max(1, int(max_lines)) :]
+
+
+def _normalize_window_title(value: str) -> str:
+    return "".join(ch for ch in str(value or "").lower() if not ch.isspace())
+
+
+def _match_strategy_window_title(title: str, keywords: tuple[str, ...]) -> bool:
+    normalized = _normalize_window_title(title)
+    if not normalized:
+        return False
+    for keyword in keywords:
+        token = _normalize_window_title(keyword)
+        if token and token in normalized:
+            return True
+    return False
+
+
+def is_xiadan_running() -> tuple[bool | None, str]:
+    try:
+        proc = subprocess.run(
+            ["tasklist", "/FI", "IMAGENAME eq xiadan.exe", "/FO", "CSV", "/NH"],
+            capture_output=True,
+            check=False,
+            text=True,
+            encoding="gbk",
+            errors="ignore",
+        )
+        text = f"{proc.stdout}\n{proc.stderr}".strip().lower()
+        if ("access denied" in text) or ("access is denied" in text):
+            return None, "access_denied"
+        if "no tasks are running" in text:
+            return False, ""
+        if "xiadan.exe" in text:
+            return True, ""
+        if proc.returncode != 0:
+            return None, text.strip() or f"tasklist_rc={proc.returncode}"
+        return False, ""
+    except Exception as exc:  # noqa: BLE001
+        return None, str(exc)
+
+
+def collect_xiadan_ui_context(
+    strategy_window_keywords: tuple[str, ...] | list[str] | None = None,
+) -> dict[str, Any]:
+    keywords_raw = strategy_window_keywords or DEFAULT_STRATEGY_WINDOW_KEYWORDS
+    keywords = tuple(str(item).strip() for item in keywords_raw if str(item).strip())
+    context: dict[str, Any] = {
+        "running": False,
+        "process_count": 0,
+        "strategy_page_open": False,
+        "strategy_window_keywords": list(keywords),
+        "strategy_related_windows": [],
+        "window_titles": [],
+        "processes": [],
+        "error": "",
+    }
+    try:
+        proc = subprocess.run(
+            ["tasklist", "/V", "/FI", "IMAGENAME eq xiadan.exe", "/FO", "CSV", "/NH"],
+            capture_output=True,
+            check=False,
+            text=True,
+            encoding="gbk",
+            errors="ignore",
+        )
+        raw_text = f"{proc.stdout}\n{proc.stderr}".strip()
+        text_lower = raw_text.lower()
+        if "access denied" in text_lower:
+            context["error"] = "access_denied"
+            return context
+        if "no tasks are running" in text_lower:
+            return context
+        if not raw_text:
+            if proc.returncode != 0:
+                context["error"] = f"tasklist_rc={proc.returncode}"
+            return context
+
+        rows: list[dict[str, Any]] = []
+        related_titles: list[str] = []
+        for line in proc.stdout.splitlines():
+            raw = str(line or "").strip()
+            if not raw:
+                continue
+            try:
+                row = next(csv.reader([raw]))
+            except Exception:
+                continue
+            if len(row) < 9:
+                continue
+            if str(row[0]).strip().lower() != "xiadan.exe":
+                continue
+            pid_text = str(row[1]).strip().replace(",", "")
+            try:
+                pid = int(pid_text)
+            except Exception:
+                pid = 0
+            window_title = str(row[8]).strip()
+            rows.append(
+                {
+                    "pid": pid,
+                    "session_name": str(row[2]).strip(),
+                    "session_id": str(row[3]).strip(),
+                    "mem_usage": str(row[4]).strip(),
+                    "status": str(row[5]).strip(),
+                    "user_name": str(row[6]).strip(),
+                    "cpu_time": str(row[7]).strip(),
+                    "window_title": window_title,
+                }
+            )
+            if _match_strategy_window_title(window_title, keywords):
+                related_titles.append(window_title)
+
+        titles = [str(item.get("window_title", "")).strip() for item in rows if str(item.get("window_title", "")).strip()]
+        context["running"] = bool(rows)
+        context["process_count"] = len(rows)
+        context["window_titles"] = titles
+        context["processes"] = rows
+        context["strategy_related_windows"] = related_titles
+        context["strategy_page_open"] = bool(related_titles)
+        return context
+    except Exception as exc:  # noqa: BLE001
+        context["error"] = str(exc)
+        return context
 
 
 def collect_host_observability_snapshot(ths_root: Path = DEFAULT_THS_ROOT, max_lines: int = 20) -> dict[str, Any]:
