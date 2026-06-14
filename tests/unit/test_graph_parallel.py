@@ -20,7 +20,6 @@ from src.graph.trading_graph import (
     TradingGraphAgents,
     build_trading_graph,
     get_graph_topology,
-    report_type_key,
 )
 
 
@@ -46,21 +45,6 @@ class TestMergeReportsReducer:
         right = {"b": 99, "c": 3}
         result = merge_reports(left, right)
         assert result == {"a": 1, "b": 99, "c": 3}  # right 的 b 覆盖 left 的 b
-
-
-# ===== report_type_key helper =====
-class TestReportTypeKey:
-    def test_from_analyst_type_field(self):
-        report = {"analyst_type": "Technical_Agent", "score": 60}
-        assert report_type_key(report, "default") == "technical"
-
-    def test_fallback_to_default(self):
-        report = {"score": 60}
-        assert report_type_key(report, "news") == "news"
-
-    def test_empty_analyst_type_uses_default(self):
-        report = {"analyst_type": "", "score": 60}
-        assert report_type_key(report, "fundamental") == "fundamental"
 
 
 # ===== 拓扑：fan-out/fan-in =====
@@ -92,16 +76,22 @@ class TestParallelTopology:
 
 # ===== 语义：三个 analyst 报告都保留 =====
 class _SleepAnalyst:
-    """模拟 analyst：睡 sleep_s 秒后返回报告（用于验证并行加速）。"""
+    """模拟 analyst：睡 sleep_s 秒后返回报告（用于验证并行加速）。
 
-    def __init__(self, *, name: str, sleep_s: float) -> None:
+    analyst_type 故意与节点名不同（模拟 NewsAnalyst.analyst_name="Sentiment_Agent"），
+    用于回归断言：节点写入的 dict key 必须是节点名（fundamental/technical/news），
+    而非 analyst_type 派生的值。
+    """
+
+    def __init__(self, *, name: str, analyst_type: str, sleep_s: float) -> None:
         self.name = name
+        self.analyst_type = analyst_type
         self.sleep_s = sleep_s
 
     async def analyze(self, state: dict) -> dict:
         await asyncio.sleep(self.sleep_s)
         return {
-            "analyst_type": self.name,
+            "analyst_type": self.analyst_type,
             "ticker": state.get("ticker", ""),
             "score": 60.0,
             "stance": "Bullish",
@@ -126,13 +116,27 @@ class _FakeRisk:
         return {"risk_check": {"passed": True, "reason": "ok"}}
 
 
+def _real_analyst_names() -> tuple[tuple[str, str], tuple[str, str], tuple[str, str]]:
+    """返回 (节点名, analyst_type) 三元组，用真实生产 analyst_name 捕捉 key 稳定性回归。"""
+    return (
+        ("fundamental", "Fundamental_Agent"),
+        ("technical", "Technical_Agent"),
+        ("news", "Sentiment_Agent"),  # 关键：NewsAnalyst.analyst_name 是 Sentiment_Agent
+    )
+
+
 class TestParallelSemanticsAndPerformance:
-    def test_all_three_reports_preserved(self):
-        """并行执行后三个 analyst 的报告都应保留在 analysis_reports。"""
+    def test_all_three_reports_preserved_with_real_analyst_names(self):
+        """并行执行后三个 analyst 的报告都应保留在 analysis_reports。
+
+        用真实 analyst_name（含 Sentiment_Agent）回归断言：dict key 必须是
+        节点名 {fundamental, technical, news}，不能被 analyst_type 派生为 sentiment。
+        """
+        (fn, ft), (tn, tt), (nn, nt) = _real_analyst_names()
         agents = TradingGraphAgents(
-            fundamental=_SleepAnalyst(name="fundamental", sleep_s=0.01),
-            technical=_SleepAnalyst(name="technical", sleep_s=0.01),
-            news=_SleepAnalyst(name="news", sleep_s=0.01),
+            fundamental=_SleepAnalyst(name=fn, analyst_type=ft, sleep_s=0.01),
+            technical=_SleepAnalyst(name=tn, analyst_type=tt, sleep_s=0.01),
+            news=_SleepAnalyst(name=nn, analyst_type=nt, sleep_s=0.01),
             debate=_FakeDebate(),
             trader=_FakeTrader(),
             risk=_FakeRisk(),
@@ -144,7 +148,10 @@ class TestParallelSemanticsAndPerformance:
             "analysis_reports": {}, "context": {},
         }
         result = asyncio.run(graph.ainvoke(state))
+        # 关键断言：key 是节点名，不是 analyst_type 派生值
         assert set(result["analysis_reports"].keys()) == {"fundamental", "technical", "news"}
+        # analyst_type 字段内容仍保留原值（Sentiment_Agent）
+        assert result["analysis_reports"]["news"]["analyst_type"] == "Sentiment_Agent"
 
     def test_parallel_is_faster_than_serial_sum(self):
         """并行执行时间应明显小于三个 analyst 睡眠时间之和。
@@ -154,9 +161,9 @@ class TestParallelSemanticsAndPerformance:
         """
         per_analyst_sleep = 0.2
         agents = TradingGraphAgents(
-            fundamental=_SleepAnalyst(name="fundamental", sleep_s=per_analyst_sleep),
-            technical=_SleepAnalyst(name="technical", sleep_s=per_analyst_sleep),
-            news=_SleepAnalyst(name="news", sleep_s=per_analyst_sleep),
+            fundamental=_SleepAnalyst(name="fundamental", analyst_type="Fundamental_Agent", sleep_s=per_analyst_sleep),
+            technical=_SleepAnalyst(name="technical", analyst_type="Technical_Agent", sleep_s=per_analyst_sleep),
+            news=_SleepAnalyst(name="news", analyst_type="Sentiment_Agent", sleep_s=per_analyst_sleep),
             debate=_FakeDebate(),
             trader=_FakeTrader(),
             risk=_FakeRisk(),

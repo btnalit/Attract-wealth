@@ -41,11 +41,12 @@ def _synthetic_kline(n: int = 120) -> pd.DataFrame:
 
 
 class TestCalibrateHelpers:
-    def test_rule_category_recognizes_trend_rules(self):
-        m = _load_module()
-        assert m._rule_category("MA_GOLDEN_CROSS") == "trend"
-        assert m._rule_category("MACD_TOP_DIVERGENCE") == "trend"
-        assert m._rule_category("UNKNOWN_RULE") == "other"
+    def test_trend_rule_names_shared_constant(self):
+        """共享常量 TREND_RULE_NAMES 应包含关键趋势规则。"""
+        from src.agents.rules.trend_rules import TREND_RULE_NAMES
+        assert "MA_GOLDEN_CROSS" in TREND_RULE_NAMES
+        assert "MACD_TOP_DIVERGENCE" in TREND_RULE_NAMES
+        assert "UNKNOWN_RULE" not in TREND_RULE_NAMES
 
     def test_hit_rates_to_analyst_maps_trend_to_technical(self):
         m = _load_module()

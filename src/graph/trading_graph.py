@@ -34,17 +34,13 @@ def _to_report_dict(report: Any) -> dict[str, Any]:
     return {"raw": str(report)}
 
 
-def report_type_key(report: Any, default: str) -> str:
-    """从 report 中取 analyst_type 作为 key（P2-2：节点只返回自己的 key）。
+def _single_report_patch(*, key: str, report: Any) -> dict[str, Any]:
+    """P2-2：节点只返回自己的单个 report key（并行化后避免覆盖并发兄弟节点）。
 
-    优先用 report.analyst_type（小写归一），找不到则用 default。
+    key 用节点名（fundamental/technical/news）而非 analyst_type，保证
+    NewsAnalyst(Sentiment_Agent) 仍写入 "news" 这个稳定 key。
     """
-    data = _to_report_dict(report)
-    a_type = str(data.get("analyst_type") or default).strip()
-    # 兼容 "Technical_Agent" → "technical"
-    if "_" in a_type:
-        a_type = a_type.split("_")[0]
-    return a_type.lower() or default
+    return {"analysis_reports": {key: _to_report_dict(report)}}
 
 
 GRAPH_NODE_SEQUENCE: tuple[str, ...] = (
@@ -122,15 +118,15 @@ def build_trading_graph(*, agents: TradingGraphAgents | None = None):
     async def _fundamental_node(state: AgentState) -> dict[str, Any]:
         report = await graph_agents.fundamental.analyze(state)
         # P2-2：并行化后只返回自己的 key（reducer 负责合并），避免覆盖并发兄弟节点
-        return {"analysis_reports": {report_type_key(report, "fundamental"): _to_report_dict(report)}}
+        return _single_report_patch(key="fundamental", report=report)
 
     async def _technical_node(state: AgentState) -> dict[str, Any]:
         report = await graph_agents.technical.analyze(state)
-        return {"analysis_reports": {report_type_key(report, "technical"): _to_report_dict(report)}}
+        return _single_report_patch(key="technical", report=report)
 
     async def _news_node(state: AgentState) -> dict[str, Any]:
         report = await graph_agents.news.analyze(state)
-        return {"analysis_reports": {report_type_key(report, "news"): _to_report_dict(report)}}
+        return _single_report_patch(key="news", report=report)
 
     def _signal_processing_node(state: AgentState) -> dict[str, Any]:
         return build_signal_context_patch(state)

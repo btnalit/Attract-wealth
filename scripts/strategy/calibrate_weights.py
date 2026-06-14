@@ -40,6 +40,7 @@ if str(ROOT_DIR) not in sys.path:
 import pandas as pd  # noqa: E402
 
 from src.agents.rules.backtest import backtest_trend_signals  # noqa: E402
+from src.agents.rules.trend_rules import TREND_RULE_NAMES  # noqa: E402
 from src.agents.rules.weights import (  # noqa: E402
     DEFAULT_WEIGHTS,
     calibrate_weights_from_backtest,
@@ -88,7 +89,7 @@ def _hit_rates_to_analyst(hit_rate_by_rule: dict[str, float]) -> dict[str, float
 
     随着规则引擎扩展到基本面/情绪面，可在本函数补全对应映射。
     """
-    tech_rates = [r for rule, r in hit_rate_by_rule.items() if "trend" in _rule_category(rule)]
+    tech_rates = [r for rule, r in hit_rate_by_rule.items() if rule in TREND_RULE_NAMES]
     technical = sum(tech_rates) / len(tech_rates) if tech_rates else 0.5
 
     return {
@@ -97,20 +98,6 @@ def _hit_rates_to_analyst(hit_rate_by_rule: dict[str, float]) -> dict[str, float
         "news": 0.5,
         "sentiment": 0.5,
     }
-
-
-def _rule_category(rule: str) -> str:
-    """根据规则名推断类别（用于把命中率归类到分析师）。"""
-    trend_rules = {
-        "MA_BULLISH_ALIGNMENT", "MA_BEARISH_ALIGNMENT",
-        "MACD_HIST_POSITIVE", "MACD_HIST_NEGATIVE",
-        "PRICE_ABOVE_MA60", "PRICE_BELOW_MA60",
-        "RSI_OVERBOUGHT", "RSI_OVERSOLD",
-        "MA_GOLDEN_CROSS", "MA_DEATH_CROSS",
-        "MACD_GOLDEN_CROSS", "MACD_DEATH_CROSS",
-        "MACD_TOP_DIVERGENCE", "MACD_BOTTOM_DIVERGENCE",
-    }
-    return "trend" if rule in trend_rules else "other"
 
 
 def calibrate_from_tickers(

@@ -103,25 +103,16 @@ def calibrate_from_online_accuracy(
     """
     try:
         from src.agents.rules.online_tracker import get_online_hit_rates
-        from src.agents.rules.backtest import _summarize  # noqa: F401  仅确保模块可导入
+        from src.agents.rules.trend_rules import TREND_RULE_NAMES
 
         rule_rates_raw = get_online_hit_rates(min_samples=min_samples)
         if not rule_rates_raw:
             return None
 
-        # 把按规则的命中率聚合到按分析师（同 calibrate_weights 脚本的映射）
-        trend_rules_set = {
-            "MA_BULLISH_ALIGNMENT", "MA_BEARISH_ALIGNMENT",
-            "MACD_HIST_POSITIVE", "MACD_HIST_NEGATIVE",
-            "PRICE_ABOVE_MA60", "PRICE_BELOW_MA60",
-            "RSI_OVERBOUGHT", "RSI_OVERSOLD",
-            "MA_GOLDEN_CROSS", "MA_DEATH_CROSS",
-            "MACD_GOLDEN_CROSS", "MACD_DEATH_CROSS",
-            "MACD_TOP_DIVERGENCE", "MACD_BOTTOM_DIVERGENCE",
-        }
+        # 把按规则的命中率聚合到按分析师：trend 规则族 → technical 分析师
         tech_rates = [
             info["hit_rate"] for rule, info in rule_rates_raw.items()
-            if rule in trend_rules_set
+            if rule in TREND_RULE_NAMES
         ]
         if not tech_rates:
             return None

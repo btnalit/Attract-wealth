@@ -16,6 +16,18 @@ from typing import Any, Dict, List
 from src.agents.rules.base import Signal
 
 
+# 趋势规则名集合（供校准/在线准确率按分析师归类时共享，避免多处硬编码）
+TREND_RULE_NAMES: frozenset[str] = frozenset({
+    "MA_BULLISH_ALIGNMENT", "MA_BEARISH_ALIGNMENT",
+    "MACD_HIST_POSITIVE", "MACD_HIST_NEGATIVE",
+    "PRICE_ABOVE_MA60", "PRICE_BELOW_MA60",
+    "RSI_OVERBOUGHT", "RSI_OVERSOLD",
+    "MA_GOLDEN_CROSS", "MA_DEATH_CROSS",
+    "MACD_GOLDEN_CROSS", "MACD_DEATH_CROSS",
+    "MACD_TOP_DIVERGENCE", "MACD_BOTTOM_DIVERGENCE",
+})
+
+
 def _f(value: Any, default: float = 0.0) -> float:
     try:
         if value is None:
