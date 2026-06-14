@@ -3926,6 +3926,26 @@
         ]
       }
     },
+    "/api/v1/monitor/graph-topology": {
+      "get": {
+        "description": "获取 Agent 分析图拓扑（节点 + 边），供 AgentWorkshop 动态渲染。",
+        "operationId": "get_graph_topology_api_v1_monitor_graph_topology_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Graph Topology",
+        "tags": [
+          "monitor"
+        ]
+      }
+    },
     "/api/v1/monitor/kline/{ticker}": {
       "get": {
         "description": "获取历史 K 线。",

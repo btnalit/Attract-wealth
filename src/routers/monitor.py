@@ -146,3 +146,31 @@ async def get_market_kline(
     except TradingServiceError as exc:
         return _error_json(exc)
 
+
+@router.get("/graph-topology")
+async def get_graph_topology(request: Request):
+    """获取 Agent 分析图拓扑（节点 + 边），供 AgentWorkshop 动态渲染。"""
+    try:
+        service = _get_service(request)
+        topology: dict[str, Any] = {}
+        vm = getattr(service, "vm", None)
+        if vm is not None and hasattr(vm, "get_governance_snapshot"):
+            snapshot = vm.get_governance_snapshot()
+            topology = snapshot.get("graph", {}) if isinstance(snapshot, dict) else {}
+        if not topology:
+            # 降级：直接从 trading_graph 模块取静态拓扑
+            try:
+                from src.graph.trading_graph import get_graph_topology
+
+                topology = get_graph_topology()
+            except Exception:  # noqa: BLE001
+                topology = {"nodes": [], "edges": [], "node_count": 0, "edge_count": 0}
+        return ok_response(topology)
+    except TradingServiceError as exc:
+        return _error_json(exc)
+    except Exception as exc:  # noqa: BLE001
+        return JSONResponse(
+            status_code=500,
+            content=error_response("INTERNAL_ERROR", "获取图拓扑失败", {"error": str(exc)}),
+        )
+

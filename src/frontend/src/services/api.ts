@@ -585,7 +585,23 @@ export const monitorApi = {
    * 获取数据源健康状态。
    */
   getDataHealth: <T = ApiLooseObject>() => api.get<T>("/api/v1/monitor/data-health"),
+  /**
+   * 获取 Agent 分析图拓扑（节点 + 边），供 AgentWorkshop 动态渲染。
+   */
+  getGraphTopology: <T = GraphTopologyPayload>() => api.get<T>("/api/v1/monitor/graph-topology"),
 };
+
+/**
+ * Agent 图拓扑结构。
+ */
+export interface GraphTopologyPayload {
+  nodes?: string[];
+  edges?: Array<{ from: string; to: string }>;
+  node_count?: number;
+  edge_count?: number;
+  entrypoint_count?: number;
+  [key: string]: unknown;
+}
 
 /**
  * Strategy 域 API。

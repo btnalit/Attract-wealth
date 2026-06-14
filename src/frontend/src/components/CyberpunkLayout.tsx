@@ -25,6 +25,7 @@ import { CommandPalette } from './CommandPalette';
 const navItems = [
   { icon: LayoutDashboard, path: '/', label: '控制面板' },
   { icon: LineChart, path: '/market', label: '行情终端' },
+  { icon: Search, path: '/diagnose', label: '个股诊断' },
   { icon: Cpu, path: '/agents', label: '智能体车间' },
   { icon: GitBranch, path: '/evolution', label: '进化中心' },
   { icon: Database, path: '/memory', label: '记忆库' },

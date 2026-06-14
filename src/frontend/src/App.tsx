@@ -15,6 +15,7 @@ import BacktestLab from './pages/BacktestLab';
 import AuditRisk from './pages/AuditRisk';
 import LogTerminal from './pages/LogTerminal';
 import SystemConfig from './pages/SystemConfig';
+import StockDiagnose from './pages/StockDiagnose';
 
 /** 404 兜底页（F7：原无此路由，访问未知路径白屏） */
 const NotFound = () => (
@@ -36,6 +37,8 @@ export default function App() {
       <Route element={<CyberpunkLayout />}>
         <Route path="/" element={<Dashboard />} />
         <Route path="/market" element={<MarketTerminal />} />
+        <Route path="/diagnose/:ticker" element={<StockDiagnose />} />
+        <Route path="/diagnose" element={<StockDiagnose />} />
         <Route path="/agents" element={<AgentWorkshop />} />
         <Route path="/evolution" element={<EvolutionCenter />} />
         <Route path="/memory" element={<MemoryVault />} />
