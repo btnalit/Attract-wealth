@@ -10,11 +10,11 @@ import logging
 from typing import Dict, Any, List, Optional
 import pandas as pd
 import tushare as ts
-from src.dataflows.interface import DataProvider
+from src.dataflows.interface import DataProvider, DefaultAShareExtendedMixin
 
 logger = logging.getLogger(__name__)
 
-class TushareProvider(DataProvider):
+class TushareProvider(DataProvider, DefaultAShareExtendedMixin):
     def __init__(self, token: Optional[str] = None):
         self.token = token or os.environ.get("TUSHARE_TOKEN")
         if not self.token:
@@ -141,3 +141,104 @@ class TushareProvider(DataProvider):
         except Exception as e:
             logger.error(f"❌ [Tushare] 拉取 {ticker} 历史数据失败: {e}")
             return pd.DataFrame()
+
+    # ============================================
+    # A 股衍生数据接口（积分接口，无积分时软失败返回空）
+    # ============================================
+
+    def _ts_trade_date(self, days_back: int = 5) -> str:
+        """取近 days_back 个交易日的 YYYYMMDD 字符串列表，返回首个。"""
+        try:
+            cal = self.pro.trade_cal(exchange="", start_date="", is_open="1")
+            if cal is None or cal.empty:
+                return ""
+            recent = cal.tail(days_back)
+            return str(recent.iloc[0]["cal_date"]) if not recent.empty else ""
+        except Exception:  # noqa: BLE001
+            return ""
+
+    def get_dragon_tiger(self, ticker: str) -> List[Dict[str, Any]]:
+        """Tushare 龙虎榜（top_list，需 5000+ 积分）。无积分软失败。"""
+        ts_code = self._get_ts_code(ticker)
+        try:
+            trade_date = self._ts_trade_date(10)
+            if not trade_date:
+                return []
+            df = self.pro.top_list(trade_date=trade_date)
+            if df is None or df.empty:
+                return []
+            hit = df[df["ts_code"].astype(str).str.contains(ts_code.split(".")[0])] if "ts_code" in df.columns else df.iloc[0:0]
+            if hit.empty:
+                return []
+            records: List[Dict[str, Any]] = []
+            for _, row in hit.head(20).iterrows():
+                records.append({
+                    "date": str(row.get("trade_date", "")),
+                    "reason": str(row.get("reason", "")),
+                    "name": str(row.get("name", "")),
+                    "close": _safe_float(row.get("close")),
+                    "change_pct": _safe_float(row.get("pct_change")),
+                    "net": _safe_float(row.get("amount")),
+                })
+            return records
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("[Tushare] 龙虎榜拉取失败 %s: %s", ticker, exc)
+            return []
+
+    def get_money_flow(self, ticker: str) -> Dict[str, Any]:
+        """Tushare 资金流（moneyflow，需积分）。"""
+        ts_code = self._get_ts_code(ticker)
+        try:
+            df = self.pro.moneyflow(ts_code=ts_code)
+            if df is None or df.empty:
+                return {}
+            recent = df.head(10)
+            latest = df.iloc[0].to_dict() if not df.empty else {}
+            return {
+                "latest_date": str(latest.get("trade_date", "")),
+                "main_net": _safe_float(latest.get("net_mf_amount")),
+                "super_large_net": _safe_float(latest.get("buy_elg_amount")),
+                "large_net": _safe_float(latest.get("buy_lg_amount")),
+                "medium_net": _safe_float(latest.get("buy_md_amount")),
+                "small_net": _safe_float(latest.get("buy_sm_amount")),
+                "history": [
+                    {"date": str(r.get("trade_date", "")), "main_net": _safe_float(r.get("net_mf_amount"))}
+                    for _, r in recent.iterrows()
+                ],
+            }
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("[Tushare] 资金流拉取失败 %s: %s", ticker, exc)
+            return {}
+
+    def get_financial_abstract(self, ticker: str) -> Dict[str, Any]:
+        """Tushare 财务指标（fina_indicator，需积分）。"""
+        ts_code = self._get_ts_code(ticker)
+        try:
+            df = self.pro.fina_indicator(ts_code=ts_code)
+            if df is None or df.empty:
+                return {}
+            latest = df.iloc[0].to_dict()
+            return {
+                "report_date": str(latest.get("ann_date", "")),
+                "stat_date": str(latest.get("end_date", "")),
+                "indicators": {
+                    "roe_avg": _safe_float(latest.get("roe")),
+                    "np_margin": _safe_float(latest.get("netprofit_margin")),
+                    "gp_margin": _safe_float(latest.get("grossprofit_margin")),
+                    "eps": _safe_float(latest.get("eps")),
+                    "bps": _safe_float(latest.get("bps")),
+                },
+            }
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("[Tushare] 财务指标拉取失败 %s: %s", ticker, exc)
+            return {}
+
+
+def _safe_float(value: Any) -> float:
+    try:
+        if value is None:
+            return 0.0
+        result = float(value)
+        return result if result == result else 0.0
+    except (TypeError, ValueError):
+        return 0.0

@@ -92,9 +92,64 @@ class DebateResearcher:
             self._ask_bull(ticker, reports_text, session_id),
             self._ask_bear(ticker, reports_text, session_id),
         )
-        sentiment_gap = min(100.0, max(0.0, float(len(bull_args) + len(bear_args)) * 10.0))
+        sentiment_gap = self._compute_sentiment_gap(reports_dict, bull_args, bear_args)
         return DebateResult(
             bull_arguments=bull_args,
             bear_arguments=bear_args,
             sentiment_gap=sentiment_gap,
         )
+
+    @staticmethod
+    def _compute_sentiment_gap(
+        reports_dict: dict[str, Any],
+        bull_args: list[str],
+        bear_args: list[str],
+    ) -> float:
+        """真实多空分歧度（0-100，越高分歧越大）。
+
+        旧实现用 (bull+bear)*10，永远 60-100，无信息量。
+        新实现综合：
+        - 各 analyst score 的标准差（分数越分散分歧越大）
+        - stance 多空数量接近度（bull≈bear 时分歧最大）
+        """
+        scores: list[float] = []
+        bull = bear = neutral = 0
+        for value in reports_dict.values():
+            data = value.model_dump() if hasattr(value, "model_dump") else (
+                dict(value) if isinstance(value, dict) else {}
+            )
+            try:
+                scores.append(float(data.get("score", 50.0)))
+            except (TypeError, ValueError):
+                scores.append(50.0)
+            stance = str(data.get("stance", "")).strip().lower()
+            if stance == "bullish":
+                bull += 1
+            elif stance == "bearish":
+                bear += 1
+            else:
+                neutral += 1
+
+        # 因子1：score 标准差（0-50 区间，归一化到 0-100）
+        import statistics
+        if len(scores) >= 2:
+            try:
+                std = statistics.stdev(scores)
+            except statistics.StatisticsError:
+                std = 0.0
+            score_spread = min(100.0, std * 4.0)  # std 25 → 100
+        else:
+            score_spread = 50.0  # 数据不足时中等分歧
+
+        # 因子2：stance 分布分歧（bull≈bear 时最大）
+        total = bull + bear + neutral
+        if total > 0:
+            # 多空平衡度：1 - |bull-bear|/total（完全平衡=1，单边=0）
+            balance = 1.0 - abs(bull - bear) / total
+            stance_gap = balance * 100.0
+        else:
+            stance_gap = 50.0
+
+        # 综合分歧度：score 分布占 60%，stance 平衡度占 40%
+        gap = score_spread * 0.6 + stance_gap * 0.4
+        return round(min(100.0, max(0.0, gap)), 2)

@@ -44,36 +44,94 @@ def normalize_debate_result(payload: Any) -> dict[str, Any]:
 
 
 def build_signal_summary(state: AgentState) -> dict[str, Any]:
-    """Build compact signal summary from analyst reports."""
+    """Build compact signal summary from analyst reports（加权平均 + 冲突检测 + 信号汇聚）。
+
+    重构要点（A 股分析增强）：
+    - 用加权平均替代简单平均：技术面40% / 基本面30% / 情绪20% / 资金面10%
+    - 冲突检测：多空 stance 数量接近时降低最终置信度
+    - 汇聚各 analyst 的 signals 字段为统一信号清单（供前端展示）
+    """
     reports = state.get("analysis_reports", {})
     if not isinstance(reports, dict):
         reports = {}
 
-    scores: list[float] = []
+    # analyst_type → 权重映射（technical 技术面 / fundamental 基本面 / news 情绪面）
+    # 未识别的 analyst 默认权重 20
+    _WEIGHTS = {
+        "technical": 40.0,
+        "fundamental": 30.0,
+        "news": 20.0,
+        "sentiment": 20.0,
+    }
+
     bullish = 0
     bearish = 0
-    for item in reports.values():
+    neutral = 0
+    all_signals: list[dict[str, Any]] = []
+    weighted_score_sum = 0.0
+    weight_total = 0.0
+    simple_scores: list[float] = []  # 向后兼容 avg_score
+
+    for key, item in reports.items():
         report = _to_dict(item)
         try:
             score = float(report.get("score", 0.0))
-            scores.append(score)
         except (TypeError, ValueError):
-            pass
+            score = 50.0
+        simple_scores.append(score)
+
+        # 按 analyst_type 加权（technical_agent → technical 等）
+        a_type = str(report.get("analyst_type", key)).lower()
+        weight = 20.0
+        for prefix, w in _WEIGHTS.items():
+            if prefix in a_type:
+                weight = w
+                break
+        weighted_score_sum += score * weight
+        weight_total += weight
+
         stance = str(report.get("stance", "")).strip().lower()
         if stance == "bullish":
             bullish += 1
         elif stance == "bearish":
             bearish += 1
+        else:
+            neutral += 1
 
-    avg_score = round(sum(scores) / len(scores), 3) if scores else 0.0
+        # 汇聚规则信号
+        sigs = report.get("signals")
+        if isinstance(sigs, list):
+            for s in sigs:
+                if isinstance(s, dict):
+                    all_signals.append(s)
+
+    # 加权综合分（向后兼容保留 avg_score = 简单平均）
+    weighted_score = round(weighted_score_sum / weight_total, 3) if weight_total > 0 else 0.0
+    avg_score = round(sum(simple_scores) / len(simple_scores), 3) if simple_scores else 0.0
+
+    # 冲突检测：多空都 >= 2 且差距 <= 1
+    total_stance = bullish + bearish + neutral
+    conflict = bullish >= 2 and bearish >= 2 and abs(bullish - bearish) <= 1
+    # 一致性置信度：|bull - bear| / total
+    consistency = abs(bullish - bearish) / total_stance if total_stance > 0 else 0.0
+
     report_keys = sorted([str(key) for key in reports.keys()])
     return {
         "report_count": len(report_keys),
         "report_keys": report_keys,
+        # 向后兼容字段
         "avg_score": avg_score,
         "bullish_count": bullish,
         "bearish_count": bearish,
         "has_complete_coverage": len(report_keys) >= 3,
+        # 新增字段
+        "weighted_score": weighted_score,
+        "neutral_count": neutral,
+        "conflict": conflict,
+        "consistency": round(consistency, 3),
+        "confidence": round(consistency * 100, 2),
+        "all_signals": all_signals,
+        "signal_count": len(all_signals),
     }
 
 

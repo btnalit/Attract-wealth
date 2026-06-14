@@ -326,6 +326,62 @@ class DataSourceManager:
             self._cache_set(cache_key, result, ttl=self._cache_ttl["news"])
         return result
 
+    # -------------------------
+    # A 股衍生数据查询（多源 fallback，软失败）
+    # -------------------------
+    def _call_extended(self, method_name: str, ticker: str, *, default: Any) -> Any:
+        """通用衍生数据调用：检测 provider 是否实现扩展接口，未实现则用默认值。
+
+        不走 _call_with_fallback（那个要求 provider 实现 BaseDataSource 三大方法），
+        这里直接遍历有序 provider 调扩展方法，首个非空结果即返回。
+        """
+        cache_key = f"{method_name}:{ticker}"
+        cached = self._cache_get(cache_key)
+        if cached is not None and (cached != default):
+            return cached
+
+        with self._lock:
+            candidates = self._ordered_provider_names()
+
+        for provider_name in candidates:
+            provider = self._providers[provider_name]
+            fn = getattr(provider, method_name, None)
+            if not callable(fn):
+                continue
+            try:
+                value = fn(ticker)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(
+                    "extended data call failed: provider=%s method=%s err=%s",
+                    provider_name, method_name, exc,
+                )
+                continue
+            if value is None:
+                continue
+            if isinstance(value, (dict, list)) and len(value) == 0:
+                continue
+            self._cache_set(cache_key, value, ttl=self._cache_ttl["fundamentals"])
+            return value
+        return default
+
+    def get_dragon_tiger(self, ticker: str) -> list[dict]:
+        return self._call_extended("get_dragon_tiger", ticker, default=[])
+
+    def get_money_flow(self, ticker: str) -> dict:
+        return self._call_extended("get_money_flow", ticker, default={})
+
+    def get_sector_info(self, ticker: str) -> dict:
+        return self._call_extended("get_sector_info", ticker, default={})
+
+    def get_financial_abstract(self, ticker: str) -> dict:
+        return self._call_extended("get_financial_abstract", ticker, default={})
+
+    def get_margin(self, ticker: str) -> dict:
+        return self._call_extended("get_margin", ticker, default={})
+
+    def get_stock_flags(self, ticker: str) -> dict:
+        return self._call_extended("get_stock_flags", ticker, default={})
+
     def record_quality_feedback(
         self,
         *,
@@ -1322,12 +1378,74 @@ class AkShareDataSourceAdapter(BaseDataSource):
         return df.reset_index(drop=True)
 
     def get_fundamentals(self, ticker: str) -> dict:
-        # Reserved for future implementation.
+        """基本面/财务摘要，转发到底层 provider 的扩展接口。"""
+        try:
+            fn = getattr(self._provider, "get_financial_abstract", None)
+            if callable(fn):
+                payload = fn(ticker)
+                return payload if isinstance(payload, dict) else {}
+        except Exception:  # noqa: BLE001
+            pass
         return {}
 
     def get_news(self, ticker: str, limit: int = 10) -> list[dict]:
-        # Reserved for future implementation.
+        """新闻：当前扩展接口未提供，留作后续接 UnifiedNewsTool。"""
         return []
+
+    # ----- A 股衍生数据接口转发（让 adapter 同时满足 AShareExtendedProvider 契约）-----
+
+    def get_dragon_tiger(self, ticker: str) -> list[dict]:
+        fn = getattr(self._provider, "get_dragon_tiger", None)
+        if callable(fn):
+            try:
+                payload = fn(ticker)
+                return payload if isinstance(payload, list) else []
+            except Exception:  # noqa: BLE001
+                pass
+        return []
+
+    def get_money_flow(self, ticker: str) -> dict:
+        fn = getattr(self._provider, "get_money_flow", None)
+        if callable(fn):
+            try:
+                payload = fn(ticker)
+                return payload if isinstance(payload, dict) else {}
+            except Exception:  # noqa: BLE001
+                pass
+        return {}
+
+    def get_sector_info(self, ticker: str) -> dict:
+        fn = getattr(self._provider, "get_sector_info", None)
+        if callable(fn):
+            try:
+                payload = fn(ticker)
+                return payload if isinstance(payload, dict) else {}
+            except Exception:  # noqa: BLE001
+                pass
+        return {}
+
+    def get_financial_abstract(self, ticker: str) -> dict:
+        return self.get_fundamentals(ticker)
+
+    def get_margin(self, ticker: str) -> dict:
+        fn = getattr(self._provider, "get_margin", None)
+        if callable(fn):
+            try:
+                payload = fn(ticker)
+                return payload if isinstance(payload, dict) else {}
+            except Exception:  # noqa: BLE001
+                pass
+        return {}
+
+    def get_stock_flags(self, ticker: str) -> dict:
+        fn = getattr(self._provider, "get_stock_flags", None)
+        if callable(fn):
+            try:
+                payload = fn(ticker)
+                return payload if isinstance(payload, dict) else {}
+            except Exception:  # noqa: BLE001
+                pass
+        return {}
 
     def get_realtime_quote(self, ticker: str) -> dict[str, Any]:
         quote = self._provider.get_realtime_quote(ticker)
@@ -1382,12 +1500,38 @@ class BaostockDataSourceAdapter(BaseDataSource):
         return df.reset_index(drop=True)
 
     def get_fundamentals(self, ticker: str) -> dict:
-        # Reserved for future implementation.
+        """BaoStock 强项：盈利能力数据（覆盖空默认实现）。"""
+        try:
+            fn = getattr(self._provider, "get_financial_abstract", None)
+            if callable(fn):
+                payload = fn(ticker)
+                return payload if isinstance(payload, dict) else {}
+        except Exception:  # noqa: BLE001
+            pass
         return {}
 
     def get_news(self, ticker: str, limit: int = 10) -> list[dict]:
-        # Reserved for future implementation.
         return []
+
+    # ----- A 股衍生数据接口转发（BaoStock 仅财务有实现，其余返回空）-----
+
+    def get_dragon_tiger(self, ticker: str) -> list[dict]:
+        return []
+
+    def get_money_flow(self, ticker: str) -> dict:
+        return {}
+
+    def get_sector_info(self, ticker: str) -> dict:
+        return {}
+
+    def get_financial_abstract(self, ticker: str) -> dict:
+        return self.get_fundamentals(ticker)
+
+    def get_margin(self, ticker: str) -> dict:
+        return {}
+
+    def get_stock_flags(self, ticker: str) -> dict:
+        return {}
 
     def get_realtime_quote(self, ticker: str) -> dict[str, Any]:
         quote = self._provider.get_realtime_quote(ticker)
@@ -1400,6 +1544,59 @@ class BaostockDataSourceAdapter(BaseDataSource):
         if isinstance(df, pd.DataFrame):
             return df
         return pd.DataFrame()
+
+    def get_metrics(self) -> dict[str, Any]:
+        if hasattr(self._provider, "get_metrics"):
+            payload = self._provider.get_metrics()
+            if isinstance(payload, dict):
+                return payload
+        return {}
+
+
+class SinaTencentDataSourceAdapter(BaseDataSource):
+    """Adapter to plug SinaTencentProvider (non-东财 fallback) into DataSourceManager."""
+
+    def __init__(self):
+        from src.dataflows.providers.sina_tencent_provider import SinaTencentProvider
+
+        self._provider = SinaTencentProvider()
+
+    def get_kline(self, ticker: str, start_date: str, end_date: str, timeframe: str = "D") -> pd.DataFrame:
+        if not PANDAS_AVAILABLE:
+            return pd.DataFrame()
+        limit = 400
+        parsed_start = _parse_date(start_date)
+        parsed_end = _parse_date(end_date)
+        if parsed_start and parsed_end and parsed_end >= parsed_start:
+            limit = min(max(60, (parsed_end - parsed_start).days + 10), 2000)
+
+        df = self._provider.get_historical_kline(ticker, limit=limit)
+        if not isinstance(df, pd.DataFrame) or df.empty:
+            return pd.DataFrame()
+
+        if "date" in df.columns:
+            date_series = pd.to_datetime(df["date"], errors="coerce")
+            if parsed_start:
+                df = df[date_series >= pd.Timestamp(parsed_start)]
+            if parsed_end:
+                df = df[date_series <= pd.Timestamp(parsed_end)]
+        return df.reset_index(drop=True)
+
+    def get_fundamentals(self, ticker: str) -> dict:
+        return {}
+
+    def get_news(self, ticker: str, limit: int = 10) -> list[dict]:
+        return []
+
+    def get_realtime_quote(self, ticker: str) -> dict[str, Any]:
+        quote = self._provider.get_realtime_quote(ticker)
+        return quote if isinstance(quote, dict) else {}
+
+    def get_historical_kline(self, ticker: str, limit: int = 100) -> pd.DataFrame:
+        if not PANDAS_AVAILABLE:
+            return pd.DataFrame()
+        df = self._provider.get_historical_kline(ticker, limit=limit)
+        return df if isinstance(df, pd.DataFrame) else pd.DataFrame()
 
     def get_metrics(self) -> dict[str, Any]:
         if hasattr(self._provider, "get_metrics"):
@@ -1465,16 +1662,32 @@ def _bootstrap_default_sources(manager: DataSourceManager) -> None:
             else:
                 logger.warning("akshare data source bootstrap skipped: %s", exc)
 
-    if not _is_env_true("DATA_SOURCE_BOOTSTRAP_BAOSTOCK", default=True):
+    if _is_env_true("DATA_SOURCE_BOOTSTRAP_BAOSTOCK", default=True):
+        try:
+            manager.register("baostock", BaostockDataSourceAdapter(), priority=20, is_primary=False, enabled=True)
+        except Exception as exc:  # noqa: BLE001
+            if "pandas" in str(exc).lower():
+                logger.info("baostock data source bootstrap skipped: %s", exc)
+            else:
+                logger.warning("baostock data source bootstrap skipped: %s", exc)
+    else:
         logger.info("baostock data source bootstrap disabled by env")
-        return
-    try:
-        manager.register("baostock", BaostockDataSourceAdapter(), priority=20, is_primary=False, enabled=True)
-    except Exception as exc:  # noqa: BLE001
-        if "pandas" in str(exc).lower():
-            logger.info("baostock data source bootstrap skipped: %s", exc)
-            return
-        logger.warning("baostock data source bootstrap skipped: %s", exc)
+
+    # 新浪/腾讯备用源：完全不走东财，作为东财限流时的稳定行情/K线降级源。
+    # 优先级最低（30），仅在前两个源都失败时兜底。
+    if _is_env_true("DATA_SOURCE_BOOTSTRAP_SINA_TENCENT", default=True):
+        try:
+            manager.register(
+                "sina_tencent",
+                SinaTencentDataSourceAdapter(),
+                priority=30,
+                is_primary=False,
+                enabled=True,
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("sina_tencent data source bootstrap skipped: %s", exc)
+    else:
+        logger.info("sina_tencent data source bootstrap disabled by env")
 
 
 data_manager = DataSourceManager(cache=cache_manager)

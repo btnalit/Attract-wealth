@@ -662,6 +662,100 @@ export const strategyApi = {
 };
 
 /**
+ * 分析师报告信号（规则引擎产出）。
+ */
+export interface AnalysisSignal {
+  rule?: string;
+  direction?: string; // BULL / BEAR / NEUTRAL
+  strength?: number;
+  description?: string;
+  category?: string;
+  evidence?: ApiLooseObject;
+}
+
+/**
+ * 分析师报告（单 agent 结论）。
+ */
+export interface AnalysisReportPayload {
+  analyst_type?: string;
+  ticker?: string;
+  score?: number;
+  stance?: string; // Bullish / Bearish / Neutral
+  summary?: string;
+  key_factors?: string[];
+  signals?: AnalysisSignal[];
+  metrics?: ApiLooseObject;
+  ashare_flags?: string[];
+  rule_confidence?: number;
+  [key: string]: unknown;
+}
+
+/**
+ * 辩论结果。
+ */
+export interface DebateResultPayload {
+  bull_arguments?: string[];
+  bear_arguments?: string[];
+  sentiment_gap?: number;
+  [key: string]: unknown;
+}
+
+/**
+ * 信号汇聚摘要。
+ */
+export interface SignalSummaryPayload {
+  report_count?: number;
+  avg_score?: number;
+  weighted_score?: number;
+  bullish_count?: number;
+  bearish_count?: number;
+  neutral_count?: number;
+  conflict?: boolean;
+  confidence?: number;
+  all_signals?: AnalysisSignal[];
+  [key: string]: unknown;
+}
+
+/**
+ * analyze 接口返回的完整结果（映射后端 AgentState）。
+ */
+export interface AnalyzeResult {
+  ticker?: string;
+  channel?: string;
+  state?: {
+    ticker?: string;
+    decision?: string;
+    confidence?: number;
+    analysis_reports?: Record<string, AnalysisReportPayload>;
+    debate_results?: DebateResultPayload;
+    trading_decision?: {
+      action?: string;
+      percentage?: number;
+      reason?: string;
+      confidence?: number;
+    };
+    risk_check?: {
+      passed?: boolean;
+      reason?: string;
+    };
+    context?: {
+      technical_indicators?: ApiLooseObject;
+      realtime?: ApiLooseObject;
+      money_flow?: ApiLooseObject;
+      dragon_tiger?: ApiLooseObject[];
+      sector_info?: ApiLooseObject;
+      financials?: ApiLooseObject;
+      ashare_flags?: ApiLooseObject;
+      signal_summary?: SignalSummaryPayload;
+      kline_recent?: ApiLooseObject[];
+      [key: string]: unknown;
+    };
+    [key: string]: unknown;
+  };
+  [key: string]: unknown;
+}
+
+/**
  * Trading 域 API。
  */
 export const tradingApi = {
@@ -669,6 +763,11 @@ export const tradingApi = {
    * 获取交易快照。
    */
   getSnapshot: <T = TradingSnapshotPayload>() => api.get<T>("/api/trading/snapshot"),
+  /**
+   * 触发单股票分析（规则引擎 + LLM 双轨，返回完整分析结果）。
+   */
+  analyze: <T = AnalyzeResult>(ticker: string) =>
+    api.post<T>("/api/trading/analyze", { ticker }),
   /**
    * 获取活动订单列表。
    */

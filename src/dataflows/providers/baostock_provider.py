@@ -9,11 +9,11 @@ import logging
 from typing import Dict, Any, List, Optional
 import pandas as pd
 import baostock as bs
-from src.dataflows.interface import DataProvider
+from src.dataflows.interface import DataProvider, DefaultAShareExtendedMixin
 
 logger = logging.getLogger(__name__)
 
-class BaostockProvider(DataProvider):
+class BaostockProvider(DataProvider, DefaultAShareExtendedMixin):
     def __init__(self):
         # 登录 Baostock
         lg = bs.login()
@@ -146,3 +146,41 @@ class BaostockProvider(DataProvider):
         except Exception as e:
             logger.error(f"❌ [Baostock] 拉取 {ticker} 历史数据失败: {e}")
             return pd.DataFrame()
+
+    def get_financial_abstract(self, ticker: str) -> Dict[str, Any]:
+        """BaoStock 强项：盈利能力数据（roe/净利率/毛利率等）。
+
+        覆盖混入基类的空默认实现。其余 5 个衍生方法仍用基类空默认。
+        """
+        bs_code = self._get_bs_code(ticker)
+        try:
+            rs = bs.query_profit_data(code=bs_code, year="", quarter=0)
+            df = rs.get_data()
+            if df is None or df.empty:
+                return {}
+            latest = df.iloc[-1].to_dict()
+            return {
+                "report_date": str(latest.get("pubDate", "")),
+                "stat_date": str(latest.get("statDate", "")),
+                "indicators": {
+                    "roe_avg": _safe_float(latest.get("roeAvg")),
+                    "np_margin": _safe_float(latest.get("npMargin")),
+                    "gp_margin": _safe_float(latest.get("gpMargin")),
+                    "net_profit_exp": _safe_float(latest.get("netProfitExp")),
+                    "total_share": _safe_float(latest.get("totalShare")),
+                    "liqa_share": _safe_float(latest.get("liqaShare")),
+                },
+            }
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("[Baostock] 财务数据拉取失败 %s: %s", ticker, exc)
+            return {}
+
+
+def _safe_float(value: Any) -> float:
+    try:
+        if value is None:
+            return 0.0
+        result = float(value)
+        return result if result == result else 0.0
+    except (TypeError, ValueError):
+        return 0.0

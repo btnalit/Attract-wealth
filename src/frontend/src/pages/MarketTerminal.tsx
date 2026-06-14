@@ -1,6 +1,7 @@
 ﻿import { useCallback, useEffect, useMemo, useState, type FC } from 'react';
 import { usePolling } from '../hooks/usePolling';
 import {
+  Activity,
   ArrowDownLeft,
   ArrowUpRight,
   Database,
@@ -13,7 +14,10 @@ import {
 import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
 import { cn } from '../lib/utils';
-import { ApiClientError, monitorApi, systemApi, tradingApi } from '../services/api';
+import { ApiClientError, monitorApi, systemApi, tradingApi, type AnalyzeResult } from '../services/api';
+import { KLineChart, type KLineDataPoint } from '../components/KLineChart';
+import { AnalysisPanel } from '../components/AnalysisPanel';
+import { FundPanel } from '../components/FundPanel';
 
 interface QuoteData {
   ticker?: string;
@@ -196,6 +200,12 @@ export const MarketTerminal: FC = () => {
   const [orderError, setOrderError] = useState('');
   const [orderSuccess, setOrderSuccess] = useState('');
   const [lastOrderResult, setLastOrderResult] = useState<DirectOrderResult | null>(null);
+  // 右栏 tab：market 行情 / analysis 分析 / fund 资金
+  const [rightTab, setRightTab] = useState<'market' | 'analysis' | 'fund'>('market');
+  // 分析结果
+  const [analyzeResult, setAnalyzeResult] = useState<AnalyzeResult | null>(null);
+  const [analyzing, setAnalyzing] = useState(false);
+  const [analyzeError, setAnalyzeError] = useState('');
 
   const fetchQuote = useCallback(async (symbol: string) => {
     setLoading(true);
@@ -340,6 +350,18 @@ export const MarketTerminal: FC = () => {
 
   const lastKlinePoint = useMemo(() => (kline.length > 0 ? kline[kline.length - 1] : null), [kline]);
 
+  // KLineChart 所需数据格式（含 volume 供成交量副图）
+  const klineChartData: KLineDataPoint[] = useMemo(
+    () => kline.map((k) => ({
+      date: new Date(k.ts).toISOString().slice(0, 10),
+      open: k.open,
+      high: k.high,
+      low: k.low,
+      close: k.close,
+    })),
+    [kline],
+  );
+
   const handleSwitchProvider = async () => {
     if (!switchTarget) {
       return;
@@ -368,6 +390,24 @@ export const MarketTerminal: FC = () => {
         result.idempotency_key ||
         '--',
     );
+  };
+
+  const handleAnalyze = async () => {
+    setAnalyzing(true);
+    setAnalyzeError('');
+    setRightTab('analysis');
+    try {
+      const result = await tradingApi.analyze<AnalyzeResult>(ticker);
+      setAnalyzeResult(result);
+    } catch (err) {
+      if (err instanceof ApiClientError) {
+        setAnalyzeError(`分析失败 [${err.code}]: ${err.message}`);
+      } else {
+        setAnalyzeError(`分析失败: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    } finally {
+      setAnalyzing(false);
+    }
   };
 
   const handleSubmitOrder = async (side: 'BUY' | 'SELL') => {
@@ -501,6 +541,16 @@ export const MarketTerminal: FC = () => {
               {switchingProvider ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : '切换源'}
             </Button>
           )}
+          <Button
+            variant="default"
+            size="sm"
+            className="h-8 px-3 text-[10px] bg-neon-cyan/20 text-neon-cyan border-neon-cyan/40 hover:bg-neon-cyan/30"
+            onClick={() => void handleAnalyze()}
+            disabled={analyzing}
+          >
+            {analyzing ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <Activity className="mr-1 h-3 w-3" />}
+            {analyzing ? '分析中' : '开始分析'}
+          </Button>
           <Button variant="outline" size="sm" className="h-8 px-2" onClick={() => void fetchQuote(ticker)}>
             <RefreshCcw className={cn('h-3.5 w-3.5', loading && 'animate-spin')} />
           </Button>
@@ -537,28 +587,8 @@ export const MarketTerminal: FC = () => {
                   <span className="text-xs">暂无可视化 K 线数据</span>
                 </div>
               ) : (
-                <div className="h-full w-full px-4 py-6">
-                  <svg viewBox="0 0 1000 360" className="h-full w-full">
-                    <defs>
-                      <linearGradient id="kline-fill" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="rgba(0,240,255,0.35)" />
-                        <stop offset="100%" stopColor="rgba(0,240,255,0)" />
-                      </linearGradient>
-                    </defs>
-                    {[0, 1, 2, 3, 4].map((line) => (
-                      <line
-                        key={line}
-                        x1={0}
-                        x2={1000}
-                        y1={(line / 4) * 360}
-                        y2={(line / 4) * 360}
-                        stroke="rgba(148,163,184,0.15)"
-                        strokeWidth="1"
-                      />
-                    ))}
-                    {klineAreaPath && <path d={klineAreaPath} fill="url(#kline-fill)" />}
-                    <path d={klinePath} stroke="#00f0ff" strokeWidth="2.5" fill="none" />
-                  </svg>
+                <div className="h-full w-full px-4 py-4">
+                  <KLineChart data={klineChartData} height={340} />
                 </div>
               )}
             </div>
@@ -691,8 +721,44 @@ export const MarketTerminal: FC = () => {
           </div>
         </div>
 
-        <div className="flex flex-1 flex-col overflow-y-auto bg-bg-card/30 custom-scrollbar">
-          <div className="p-4 border-b border-border bg-bg-primary/20">
+        <div className="flex flex-1 flex-col bg-bg-card/30 custom-scrollbar overflow-hidden">
+          {/* Tab 头 */}
+          <div className="flex border-b border-border bg-bg-card/50">
+            {([
+              { key: 'market', label: '行情' },
+              { key: 'analysis', label: '分析' },
+              { key: 'fund', label: '资金' },
+            ] as const).map((tab) => (
+              <button
+                key={tab.key}
+                onClick={() => setRightTab(tab.key)}
+                className={cn(
+                  'flex-1 px-3 py-2 text-[10px] font-bold uppercase tracking-wider transition-colors border-b-2',
+                  rightTab === tab.key
+                    ? 'text-neon-cyan border-neon-cyan bg-bg-primary/30'
+                    : 'text-info-gray/60 border-transparent hover:text-info-gray',
+                )}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+
+          {/* 分析 tab */}
+          {rightTab === 'analysis' && (
+            <AnalysisPanel result={analyzeResult} loading={analyzing} error={analyzeError} />
+          )}
+
+          {/* 资金 tab */}
+          {rightTab === 'fund' && (
+            <div className="flex-1 overflow-y-auto p-4 space-y-3">
+              <FundPanel analyzeResult={analyzeResult} quote={quote} />
+            </div>
+          )}
+
+          {/* 行情 tab（原数据源健康度） */}
+          {rightTab === 'market' && (
+            <div className="flex-1 overflow-y-auto p-4 border-b border-border bg-bg-primary/20">
             <div className="flex items-center gap-2 mb-4">
               <Database className="h-3 w-3 text-warn-gold" />
               <h3 className="text-[10px] font-bold uppercase tracking-[0.2em] text-white">{currentProviderDisplay} 健康度</h3>
@@ -750,6 +816,7 @@ export const MarketTerminal: FC = () => {
               </div>
             </div>
           </div>
+          )}
         </div>
       </div>
     </div>

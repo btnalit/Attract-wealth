@@ -10,11 +10,36 @@ import re
 from typing import Dict, Any, List
 import pandas as pd
 import akshare as ak
-from src.dataflows.interface import DataProvider
+from src.dataflows.interface import DataProvider, DefaultAShareExtendedMixin
 
 logger = logging.getLogger(__name__)
 
-class AkShareProvider(DataProvider):
+
+def resolve_ashare_symbol(numeric: str) -> str:
+    """
+    根据纯数字代码推导 akshare 历史接口所需的带前缀符号 (sh/sz/bj)。
+
+    修复原 `startswith("6")` 的缺陷：原逻辑漏了科创板(688)/创业板(300)/
+    北交所(8/4 开头)，导致这些股票取不到 K 线。
+    规则参照沪深北交所代码段划分。
+    """
+    code = re.sub(r'[^\d]', '', numeric)
+    if not code:
+        return code
+    # 上交所：60/68 主板+科创板，90 老B股，11/13 可转债，5x ETF/基金
+    if code.startswith(("60", "68", "90", "11", "13", "50", "51", "52", "53", "54", "55", "56", "58")):
+        return f"sh{code}"
+    # 深交所：00 主板，30 创业板，12 可转债，15/16/18 LOF/ETF
+    if code.startswith(("00", "30", "12", "15", "16", "18")):
+        return f"sz{code}"
+    # 北交所：8 开头（83/87/92 等），920 新代码段，43 原新三板精选层，4 开头
+    if code.startswith(("8", "920", "43", "4")):
+        return f"bj{code}"
+    # 兜底默认深交所（A股绝大多数代码以 0/3 开头）
+    return f"sz{code}"
+
+
+class AkShareProvider(DataProvider, DefaultAShareExtendedMixin):
     def __init__(self):
         # 极简二级多级缓存： {"000001_hist": {"time": 12345678, "data": DataFrame}}
         self._cache: Dict[str, Dict[str, Any]] = {}
@@ -95,8 +120,7 @@ class AkShareProvider(DataProvider):
                 
         # 降级方案：由于整板抓取可能被封锁导致为空，尝试单点拉取日线
         try:
-            market_prefix = "sh" if numeric_ticker.startswith("6") else "sz"
-            symbol = f"{market_prefix}{numeric_ticker}"
+            symbol = resolve_ashare_symbol(numeric_ticker)
             df_hist = ak.stock_zh_a_daily(symbol=symbol, adjust="qfq")
             if not df_hist.empty:
                 last_row = df_hist.iloc[-1]
@@ -146,8 +170,7 @@ class AkShareProvider(DataProvider):
             
             # 提取纯数字代码，并根据市场补齐前缀 sh600000, sz000001
             numeric_ticker = re.sub(r'[^\d]', '', ticker)
-            market_prefix = "sh" if numeric_ticker.startswith("6") else "sz"
-            symbol = f"{market_prefix}{numeric_ticker}"
+            symbol = resolve_ashare_symbol(numeric_ticker)
             
             df = ak.stock_zh_a_daily(symbol=symbol, adjust="qfq")
             # 截取尾部符合限制的数据
@@ -167,3 +190,260 @@ class AkShareProvider(DataProvider):
             return pd.DataFrame()
         finally:
             self._metrics["total_latency_ms"] += (time.time() - start_t) * 1000
+
+    # ============================================
+    # A 股衍生数据接口（龙虎榜/资金流/板块/财务/融券/风险标记）
+    # 全部软失败：拿不到数据返回空，绝不阻断 analyze 链路
+    # ============================================
+
+    def _track_extended_call(self, start_t: float, *, ok: bool):
+        self._metrics["total_requests"] += 1
+        if ok:
+            self._metrics["success_requests"] += 1
+        self._metrics["total_latency_ms"] += (time.time() - start_t) * 1000
+
+    def _spot_row_for(self, numeric_ticker: str) -> Dict[str, Any]:
+        """从东财整板快照里取单票行（复用 _get_spot_board 防封缓存）。"""
+        df = self._get_spot_board()
+        if df is None or df.empty:
+            return {}
+        match = df[df["代码"] == numeric_ticker]
+        if match.empty:
+            return {}
+        return match.iloc[0].to_dict()
+
+    def get_dragon_tiger(self, ticker: str) -> List[Dict[str, Any]]:
+        """龙虎榜：近 N 日上榜明细（营业部/机构席位/买卖净额）。
+
+        数据源：ak.stock_lhb_detail_em（东财龙虎榜详情）。
+        返回 [{"date","reason","seat","buy","sale","net"}, ...]；无上榜返回 []。
+        """
+        start_t = time.time()
+        numeric = re.sub(r'[^\d]', '', ticker)
+        try:
+            df = ak.stock_lhb_detail_em(start_date="", end_date="")
+            if df is None or df.empty:
+                self._track_extended_call(start_t, ok=True)
+                return []
+            hit = df[df["代码"].astype(str).str.contains(numeric)] if "代码" in df.columns else df.iloc[0:0]
+            if hit.empty:
+                self._track_extended_call(start_t, ok=True)
+                return []
+            records: List[Dict[str, Any]] = []
+            for _, row in hit.head(20).iterrows():
+                records.append({
+                    "date": str(row.get("上榜日", "")),
+                    "reason": str(row.get("解读", "")),
+                    "name": str(row.get("名称", "")),
+                    "close": _safe_float(row.get("收盘价")),
+                    "change_pct": _safe_float(row.get("涨跌幅")),
+                    "net": _safe_float(row.get("龙虎榜净买额")),
+                    "buy_total": _safe_float(row.get("买入额")),
+                    "sale_total": _safe_float(row.get("卖出额")),
+                })
+            self._track_extended_call(start_t, ok=True)
+            return records
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("[AkShare] 龙虎榜拉取失败 %s: %s", ticker, exc)
+            self._track_extended_call(start_t, ok=False)
+            return []
+
+    def get_money_flow(self, ticker: str) -> Dict[str, Any]:
+        """个股资金流向：主力净流入、超大/大/中/小单分解（近 N 日）。
+
+        数据源：ak.stock_individual_fund_flow（东财个股资金流）。
+        """
+        start_t = time.time()
+        numeric = re.sub(r'[^\d]', '', ticker)
+        try:
+            df = ak.stock_individual_fund_flow(stock=numeric, market=_market_short(numeric))
+            if df is None or df.empty:
+                self._track_extended_call(start_t, ok=True)
+                return {}
+            recent = df.tail(10)
+            latest = df.iloc[-1].to_dict() if not df.empty else {}
+            self._track_extended_call(start_t, ok=True)
+            return {
+                "latest_date": str(latest.get("日期", "")),
+                "main_net": _safe_float(latest.get("主力净流入-净额")),
+                "main_net_pct": _safe_float(latest.get("主力净流入-净占比")),
+                "super_large_net": _safe_float(latest.get("超大单净流入-净额")),
+                "large_net": _safe_float(latest.get("大单净流入-净额")),
+                "medium_net": _safe_float(latest.get("中单净流入-净额")),
+                "small_net": _safe_float(latest.get("小单净流入-净额")),
+                "recent_main_net_sum": float(pd.to_numeric(recent.get("主力净流入-净额", 0), errors="coerce").fillna(0).sum()),
+                "history": [
+                    {
+                        "date": str(r.get("日期", "")),
+                        "main_net": _safe_float(r.get("主力净流入-净额")),
+                    }
+                    for _, r in recent.iterrows()
+                ],
+            }
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("[AkShare] 资金流拉取失败 %s: %s", ticker, exc)
+            self._track_extended_call(start_t, ok=False)
+            return {}
+
+    def get_sector_info(self, ticker: str) -> Dict[str, Any]:
+        """所属行业/概念板块 + 板块当日涨跌幅。
+
+        数据源：ak.stock_individual_info_em（所属行业/概念）。
+        板块资金流排名按需后续接入。
+        """
+        start_t = time.time()
+        numeric = re.sub(r'[^\d]', '', ticker)
+        try:
+            df = ak.stock_individual_info_em(symbol=numeric)
+            if df is None or df.empty:
+                self._track_extended_call(start_t, ok=True)
+                return {}
+            info = dict(zip(df["item"], df["value"])) if "item" in df.columns else {}
+            self._track_extended_call(start_t, ok=True)
+            return {
+                "name": str(info.get("股票简称", "")),
+                "industry": str(info.get("行业", "")),
+                "concept": str(info.get("概念", "")),
+                "list_date": str(info.get("上市时间", "")),
+                "total_shares": _safe_float(info.get("总股本")),
+                "circulating_shares": _safe_float(info.get("流通股")),
+                "total_market_cap": _safe_float(info.get("总市值")),
+                "circulating_market_cap": _safe_float(info.get("流通市值")),
+            }
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("[AkShare] 板块信息拉取失败 %s: %s", ticker, exc)
+            self._track_extended_call(start_t, ok=False)
+            return {}
+
+    def get_financial_abstract(self, ticker: str) -> Dict[str, Any]:
+        """财务摘要：PE/PB/ROE/营收/净利润/毛利率等核心指标。
+
+        数据源：ak.stock_financial_abstract（东财财务摘要）。
+        """
+        start_t = time.time()
+        numeric = re.sub(r'[^\d]', '', ticker)
+        try:
+            df = ak.stock_financial_abstract(symbol=f"{'sh' if numeric.startswith('6') else 'sz'}{numeric}")
+            if df is None or df.empty:
+                self._track_extended_call(start_t, ok=True)
+                return {}
+            latest = df.iloc[:, :2] if df.shape[1] >= 2 else df
+            kv = {}
+            cols = list(df.columns)
+            if len(cols) >= 2:
+                for idx in range(len(df)):
+                    kv[str(df.iloc[idx, 0])] = _safe_float(df.iloc[idx, 1])
+            self._track_extended_call(start_t, ok=True)
+            return {
+                "indicators": kv,
+                "report_date": str(cols[1]) if len(cols) >= 2 else "",
+            }
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("[AkShare] 财务摘要拉取失败 %s: %s", ticker, exc)
+            self._track_extended_call(start_t, ok=False)
+            return {}
+
+    def get_margin(self, ticker: str) -> Dict[str, Any]:
+        """融资融券：融资余额、融券余额、近 N 日变化。
+
+        数据源：ak.stock_margin_detail_sse / stock_margin_detail_szse（沪深分别）。
+        注意：接口签名随 akshare 版本变化，统一 try/except 软失败。
+        """
+        start_t = time.time()
+        numeric = re.sub(r'[^\d]', '', ticker)
+        try:
+            if numeric.startswith("6"):
+                df = ak.stock_margin_detail_sse(date="", start_date="", end_date="")
+            else:
+                df = ak.stock_margin_detail_szse(date="", start_date="", end_date="")
+            if df is None or df.empty:
+                self._track_extended_call(start_t, ok=True)
+                return {}
+            # 按代码过滤
+            code_col = "信用交易标的证券代码" if "信用交易标的证券代码" in df.columns else ("代码" if "代码" in df.columns else None)
+            if code_col:
+                hit = df[df[code_col].astype(str).str.contains(numeric)]
+            else:
+                hit = df.iloc[0:0]
+            if hit.empty:
+                self._track_extended_call(start_t, ok=True)
+                return {}
+            latest = hit.iloc[-1].to_dict()
+            self._track_extended_call(start_t, ok=True)
+            return {
+                "date": str(latest.get("信用交易日期", latest.get("日期", ""))),
+                "finance_balance": _safe_float(latest.get("融资余额")),
+                "finance_buy": _safe_float(latest.get("融资买入额")),
+                "securities_balance": _safe_float(latest.get("融券余额")),
+                "securities_volume": _safe_float(latest.get("融券余量")),
+            }
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("[AkShare] 融资融券拉取失败 %s: %s", ticker, exc)
+            self._track_extended_call(start_t, ok=False)
+            return {}
+
+    def get_stock_flags(self, ticker: str) -> Dict[str, Any]:
+        """A 股风险/状态标记：ST/退市风险/停牌/涨跌停状态。
+
+        综合 _get_spot_board 整板快照判断（名称含 ST/涨跌幅触及 ±10%/±20%）。
+        """
+        start_t = time.time()
+        numeric = re.sub(r'[^\d]', '', ticker)
+        try:
+            row = self._spot_row_for(numeric)
+            if not row:
+                self._track_extended_call(start_t, ok=True)
+                return {}
+            name = str(row.get("名称", ""))
+            change_pct = _safe_float(row.get("涨跌幅"))
+            price = _safe_float(row.get("最新价"))
+            prev_close = price / (1 + change_pct / 100) if price and change_pct else 0.0
+
+            flags: List[str] = []
+            if "ST" in name.upper() or "*ST" in name:
+                flags.append("ST")
+            # 涨跌停判断：科创板/创业板 ±20%，其余 ±10%（ST 股 ±5%，此处从简）
+            limit_pct = 20.0 if numeric.startswith(("30", "68")) else 10.0
+            if change_pct >= limit_pct - 0.01:
+                flags.append("LIMIT_UP")
+            elif change_pct <= -limit_pct + 0.01:
+                flags.append("LIMIT_DOWN")
+            # 停牌：最新价为 0 或涨跌幅为 0 且无成交额
+            amount = _safe_float(row.get("成交额"))
+            if price == 0 or (change_pct == 0 and amount == 0):
+                flags.append("SUSPENDED")
+
+            self._track_extended_call(start_t, ok=True)
+            return {
+                "name": name,
+                "flags": flags,
+                "is_st": "ST" in flags,
+                "limit_up": "LIMIT_UP" in flags,
+                "limit_down": "LIMIT_DOWN" in flags,
+                "suspended": "SUSPENDED" in flags,
+                "price": price,
+                "prev_close": round(prev_close, 4) if prev_close else 0.0,
+                "change_pct": change_pct,
+                "limit_pct": limit_pct,
+            }
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("[AkShare] 风险标记拉取失败 %s: %s", ticker, exc)
+            self._track_extended_call(start_t, ok=False)
+            return {}
+
+
+def _safe_float(value: Any) -> float:
+    """容错转 float：None/异常字符串返回 0.0。"""
+    try:
+        if value is None:
+            return 0.0
+        result = float(value)
+        return result if result == result else 0.0  # NaN 检测
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _market_short(numeric: str) -> str:
+    """stock_individual_fund_flow 需要 market 参数：sh/sz/bj。"""
+    sym = resolve_ashare_symbol(numeric)
+    return sym[:2] if sym else "sh"

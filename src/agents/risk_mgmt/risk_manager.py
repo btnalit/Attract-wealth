@@ -78,8 +78,96 @@ class RiskManager:
                 self._log_rejection(state, reason)
                 return self._reject_state(reason)
 
+        # ===== A 股特有风控规则 =====
+        # T+1 卖出约束（独立于 ashare_flags，看持仓 available 字段）
+        t1_check = self._check_t_plus_1(ticker, action, portfolio)
+        if t1_check is not None:
+            self._log_rejection(state, t1_check["risk_check"]["reason"])
+            return t1_check
+
+        # ST/涨停/停牌（基于 ashare_flags，flags 为空时软跳过）
+        ashare_check = self._check_ashare_rules(state, ticker, action)
+        if ashare_check is not None:
+            return ashare_check
+
         logger.info("Risk check passed: ticker=%s action=%s requested=%.2f%%", ticker, action, requested_percent)
         return {"risk_check": {"passed": True, "reason": "All checks cleared"}}
+
+    def _check_t_plus_1(
+        self,
+        ticker: str,
+        action: str,
+        portfolio: dict[str, Any],
+    ) -> dict | None:
+        """T+1 卖出约束：当日买入的股票不能卖（available < quantity）。
+
+        独立于 ashare_flags，直接查持仓快照。返回 None 表示通过。
+        """
+        if action != "SELL":
+            return None
+        positions = portfolio.get("positions", {}) if isinstance(portfolio.get("positions", {}), dict) else {}
+        position_info = positions.get(str(ticker or ""), {})
+        if not isinstance(position_info, dict) or not position_info:
+            return None
+        quantity = self._to_float(position_info.get("quantity", 0))
+        available = self._to_float(position_info.get("available", quantity))
+        if quantity > 0 and available <= 0:
+            reason = f"A股风控：T+1 约束，{ticker} 当日买入不可卖出（quantity={quantity}, available={available}）"
+            return self._reject_state(reason)
+        return None
+
+    def _check_ashare_rules(
+        self,
+        state: AgentState,
+        ticker: str,
+        action: str,
+    ) -> dict | None:
+        """A 股特有风控：ST / 涨停 / 停牌。
+
+        基于 context['ashare_flags']，flags 为空时软跳过（不阻断）。
+        返回 None 表示通过。
+        """
+        context = state.get("context", {}) if isinstance(state.get("context", {}), dict) else {}
+        flags_data = context.get("ashare_flags", {})
+        if not isinstance(flags_data, dict) or not flags_data:
+            return None
+
+        flags = flags_data.get("flags") or []
+        if not isinstance(flags, list):
+            flags = []
+        flag_set = set(str(f).upper() for f in flags)
+        is_st = bool(flags_data.get("is_st")) or "ST" in flag_set
+        limit_up = bool(flags_data.get("limit_up")) or "LIMIT_UP" in flag_set
+        suspended = bool(flags_data.get("suspended")) or "SUSPENDED" in flag_set
+
+        # 停牌拦截（买卖都拦）
+        if suspended:
+            reason = f"A股风控：{ticker} 当前停牌，无法交易"
+            self._log_rejection(state, reason)
+            return self._reject_state(reason)
+
+        # ST 拦截买入（可配置开关，默认拦截）
+        if action == "BUY" and is_st:
+            if self._env_true("RISK_BLOCK_ST_BUY", default=True):
+                reason = f"A股风控：{ticker} 为 ST 股票，存在退市风险，买入被拦截（设置 RISK_BLOCK_ST_BUY=false 可关闭）"
+                self._log_rejection(state, reason)
+                return self._reject_state(reason)
+
+        # 涨停板买入拦截（涨停时买不进，拦截避免无效委托）
+        if action == "BUY" and limit_up:
+            reason = f"A股风控：{ticker} 当日涨停，买入委托无法成交，已拦截"
+            self._log_rejection(state, reason)
+            return self._reject_state(reason)
+
+        return None
+
+    @staticmethod
+    def _env_true(name: str, *, default: bool = False) -> bool:
+        import os
+        raw = os.getenv(name)
+        if raw is None:
+            return default
+        return raw.strip().lower() in {"1", "true", "yes", "on"}
 
     def _reject_state(self, reason: str) -> dict:
         return {
