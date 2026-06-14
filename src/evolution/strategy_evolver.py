@@ -18,6 +18,7 @@ from __future__ import annotations
 import hashlib
 import logging
 import os
+import re
 import time
 import uuid
 from dataclasses import dataclass, field, asdict
@@ -136,6 +137,30 @@ CAPTURED_SYSTEM_PROMPT = """你是一个交易模式逆向工程专家。
 # ---------------------------------------------------------------------------
 # Strategy Evolver
 # ---------------------------------------------------------------------------
+
+# G7-1：允许的文件名字符（字母/数字/下划线/连字符/点/中文），其余替换为下划线
+_UNSAFE_NAME_CHARS = re.compile(r"[^A-Za-z0-9_\-\.\u4e00-\u9fff]+")
+
+
+def _sanitize_skill_name(name: str) -> str:
+    """净化策略名，使其可安全用作文件名。
+
+    - 去除路径分隔符（``/`` ``\\``）和 ``..``，杜绝路径遍历
+    - 去除控制字符和空白
+    - 保留中文/字母/数字/``_``-``.``
+    - 长度限制 80 字符，避免过长文件名
+    - 空名兜底为 ``unnamed``
+    """
+    raw = str(name or "").strip()
+    # 先把路径分隔符全部替换，防止 normpath 后逃逸
+    raw = raw.replace("\\", "/")
+    # 连续的 .. 视为路径遍历尝试，替换掉
+    raw = re.sub(r"\.\.+", "_", raw)
+    cleaned = _UNSAFE_NAME_CHARS.sub("_", raw).strip("._")
+    if not cleaned:
+        cleaned = "unnamed"
+    return cleaned[:80]
+
 
 class StrategyEvolver:
     """策略进化器 — 实现 FIX / DERIVED / CAPTURED 三大模式"""
@@ -304,19 +329,33 @@ class StrategyEvolver:
             raise
 
     def _save_skill(self, name: str, content: str, pool: str) -> str:
-        """保存策略文件到 derived 或 captured 目录"""
+        """保存策略文件到 derived 或 captured 目录
+
+        G7-1 修复：对 name 做严格净化 + 路径逃逸校验，防止
+        strategy_name（可能源自用户可控的知识库 title）通过 ``../``
+        写入到 derived/captured 之外的任意位置。
+        """
+        safe_name = _sanitize_skill_name(name)
         if pool == "captured":
             directory = self._captured_dir
         else:
             directory = self._derived_dir
 
-        filename = f"{name}.md"
+        filename = f"{safe_name}.md"
         path = os.path.join(directory, filename)
+
+        # 双重防御：规范化后必须仍在目标目录内
+        base_dir = os.path.abspath(directory)
+        real_path = os.path.abspath(path)
+        if os.path.commonpath([base_dir, real_path]) != base_dir:
+            raise ValueError(
+                f"Refusing to write skill outside target directory: {name!r} -> {real_path}"
+            )
 
         with open(path, "w", encoding="utf-8") as f:
             f.write(content)
 
-        logger.info("Saved skill %s → %s", name, path)
+        logger.info("Saved skill %s → %s", safe_name, path)
         return path
 
     @staticmethod

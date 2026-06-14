@@ -80,8 +80,8 @@ class MemoryManager:
         except sqlite3.Error as e:
             logger.error(f"Failed to initialize warm database: {e}")
 
-    def write(self, memory_type: str, content: str, tags: List[str] = None, 
-              importance_score: float = 0.5, metadata: Dict[str, Any] = None) -> str:
+    def write(self, memory_type: str, content: str, tags: Optional[List[str]] = None,
+              importance_score: float = 0.5, metadata: Optional[Dict[str, Any]] = None) -> str:
         """
         Write a new memory entry to the specified tier.
         """
@@ -115,37 +115,43 @@ class MemoryManager:
             self.hot_memory.popitem(last=False)
         self.hot_memory[entry.id] = entry
 
-    def _write_warm(self, entry: MemoryEntry):
+    def _write_warm(self, entry: MemoryEntry) -> bool:
+        """写入 WARM 层。G7-2：返回是否成功，供 promote/demote 决策。"""
         try:
             with sqlite3.connect(str(self.warm_db_path)) as conn:
                 conn.execute("""
-                    INSERT OR REPLACE INTO warm_memory 
+                    INSERT OR REPLACE INTO warm_memory
                     (id, content, tags, created_at, access_count, importance_score, metadata)
                     VALUES (?, ?, ?, ?, ?, ?, ?)
                 """, (
-                    entry.id, 
-                    entry.content, 
-                    json.dumps(entry.tags), 
-                    entry.created_at, 
-                    entry.access_count, 
-                    entry.importance_score, 
+                    entry.id,
+                    entry.content,
+                    json.dumps(entry.tags),
+                    entry.created_at,
+                    entry.access_count,
+                    entry.importance_score,
                     json.dumps(entry.metadata)
                 ))
                 conn.commit()
+            return True
         except sqlite3.Error as e:
             logger.error(f"Failed to write to warm memory: {e}")
+            return False
 
-    def _write_cold(self, entry: MemoryEntry):
+    def _write_cold(self, entry: MemoryEntry) -> bool:
+        """写入 COLD 层。G7-2：返回是否成功，供 promote/demote 决策。"""
         dt = datetime.fromtimestamp(entry.created_at)
         month_dir = self.cold_root / dt.strftime("%Y-%m")
         month_dir.mkdir(parents=True, exist_ok=True)
-        
+
         file_path = month_dir / f"{entry.id}.json"
         try:
             with open(file_path, "w", encoding="utf-8") as f:
                 f.write(entry.model_dump_json())
+            return True
         except Exception as e:
             logger.error(f"Failed to write to cold memory file: {e}")
+            return False
 
     def search(self, query: str, memory_type: Optional[str] = None, limit: int = 10) -> List[MemoryEntry]:
         """
@@ -239,13 +245,19 @@ class MemoryManager:
         return matches
 
     def promote(self, memory_id: str):
-        """Promote memory: COLD -> WARM -> HOT."""
+        """Promote memory: COLD -> WARM -> HOT.
+
+        G7-2 修复：先写入目标层，确认成功后再删除源层，避免
+        COLD/WARM 写入失败时数据永久丢失。
+        """
         # Check COLD first
         entry = self._get_from_cold(memory_id)
         if entry:
             # COLD -> WARM
             entry.memory_type = "warm"
-            self._write_warm(entry)
+            if not self._write_warm(entry):
+                logger.error(f"Promote COLD->WARM failed for {memory_id}, keep COLD copy")
+                return
             self._delete_from_cold(memory_id)
             logger.info(f"Memory {memory_id} promoted: COLD -> WARM")
             return
@@ -256,31 +268,43 @@ class MemoryManager:
             # WARM -> HOT
             entry.memory_type = "hot"
             self._write_hot(entry)
+            # HOT 是内存结构，写入必成功；WARM 可安全删除
             self._delete_from_warm(memory_id)
             logger.info(f"Memory {memory_id} promoted: WARM -> HOT")
             return
-        
+
         logger.warning(f"Memory {memory_id} not found for promotion")
 
     def demote(self, memory_id: str):
-        """Demote memory: HOT -> WARM -> COLD."""
+        """Demote memory: HOT -> WARM -> COLD.
+
+        G7-2 修复：WARM->COLD 时先写 COLD 文件，确认成功后再删 WARM，
+        避免 COLD 写入失败导致条目永久丢失。
+        """
         # Check HOT
         if memory_id in self.hot_memory:
             entry = self.hot_memory.pop(memory_id)
             entry.memory_type = "warm"
-            self._write_warm(entry)
+            if not self._write_warm(entry):
+                # WARM 写失败，把条目放回 HOT，避免丢失
+                entry.memory_type = "hot"
+                self.hot_memory[memory_id] = entry
+                logger.error(f"Demote HOT->WARM failed for {memory_id}, restored to HOT")
+                return
             logger.info(f"Memory {memory_id} demoted: HOT -> WARM")
             return
-            
+
         # Check WARM
         entry = self._get_from_warm(memory_id)
         if entry:
             entry.memory_type = "cold"
-            self._write_cold(entry)
+            if not self._write_cold(entry):
+                logger.error(f"Demote WARM->COLD failed for {memory_id}, keep WARM record")
+                return
             self._delete_from_warm(memory_id)
             logger.info(f"Memory {memory_id} demoted: WARM -> COLD")
             return
-            
+
         logger.warning(f"Memory {memory_id} not found for demotion")
 
     def _get_from_warm(self, memory_id: str) -> Optional[MemoryEntry]:
@@ -332,40 +356,56 @@ class MemoryManager:
     def auto_maintenance(self):
         """
         Maintenance task for capacity and expiry management.
+
+        G7-3 修复：
+        - 过期 demote 与容量 demote 合并为单次扫描，避免同一 batch
+          里的条目被重复 demote（过期 demote 后容量可能已下降）。
+        - 用集合去重，避免一个 id 被处理两次（demote 后从 WARM 消失，
+          再次 demote 会 warning 噪音）。
         """
         logger.info("Executing auto maintenance...")
         now = time.time()
-        
+
         # 1. HOT Memory Maintenance
         # 1.1 Expiry: 30 minutes
         hot_expiry_limit = now - (self.HOT_EXPIRY_MINS * 60)
         to_demote_hot = [mid for mid, entry in self.hot_memory.items() if entry.created_at < hot_expiry_limit]
         for mid in to_demote_hot:
             self.demote(mid)
-            
-        # 2. WARM Memory Maintenance
+
+        # 2. WARM Memory Maintenance（过期 + 容量合并）
         # 2.1 Expiry: 7 days
         warm_expiry_limit = now - (self.WARM_EXPIRY_DAYS * 24 * 3600)
         try:
+            demote_ids: set = set()
             with sqlite3.connect(str(self.warm_db_path)) as conn:
-                cursor = conn.execute("SELECT id FROM warm_memory WHERE created_at < ?", (warm_expiry_limit,))
-                expired_ids = [row[0] for row in cursor.fetchall()]
-                for mid in expired_ids:
-                    self.demote(mid)
-                    
-            # 2.2 Capacity: 500 items
-            with sqlite3.connect(str(self.warm_db_path)) as conn:
+                cursor = conn.execute(
+                    "SELECT id FROM warm_memory WHERE created_at < ?",
+                    (warm_expiry_limit,),
+                )
+                for row in cursor.fetchall():
+                    demote_ids.add(row[0])
+
+                # 2.2 Capacity: 500 items（仅当仍超容时才补选最老的）
                 count = conn.execute("SELECT COUNT(*) FROM warm_memory").fetchone()[0]
-                if count > self.WARM_MAX_CAPACITY:
-                    overflow_count = count - self.WARM_MAX_CAPACITY
-                    # Demote oldest items
-                    cursor = conn.execute("SELECT id FROM warm_memory ORDER BY created_at ASC LIMIT ?", (overflow_count,))
-                    overflow_ids = [row[0] for row in cursor.fetchall()]
-                    for mid in overflow_ids:
-                        self.demote(mid)
+                # 减去即将被过期 demote 的数量，避免过度 demote
+                projected = count - len(demote_ids)
+                if projected > self.WARM_MAX_CAPACITY:
+                    overflow_count = projected - self.WARM_MAX_CAPACITY
+                    cursor = conn.execute(
+                        "SELECT id FROM warm_memory WHERE created_at >= ? "
+                        "ORDER BY created_at ASC LIMIT ?",
+                        (warm_expiry_limit, overflow_count),
+                    )
+                    for row in cursor.fetchall():
+                        demote_ids.add(row[0])
+
+            # 统一执行 demote（顺序无关：每个 id 只处理一次）
+            for mid in demote_ids:
+                self.demote(mid)
         except sqlite3.Error as e:
             logger.error(f"Maintenance error for warm memory: {e}")
-            
+
         logger.info("Auto maintenance finished.")
 
 if __name__ == "__main__":

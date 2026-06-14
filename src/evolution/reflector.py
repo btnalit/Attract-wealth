@@ -9,9 +9,11 @@
   - Act: 触发 StrategyEvolver 进行进化并更新记忆
 """
 
+import asyncio
+import calendar
 import logging
 import time
-from datetime import datetime, timedelta, date as date_type
+from datetime import datetime, timedelta, date as date_type, timezone
 from dataclasses import dataclass, field
 from typing import Any, List, Dict, Optional
 from pydantic import BaseModel, Field
@@ -96,8 +98,14 @@ class TradingReflector:
         return report
 
     def _observe(self, date_str: str) -> ObservationData:
-        """采集当日交易数据"""
-        # 计算时间戳范围
+        """采集当日交易数据
+
+        G7-8：使用本地时区的午夜作为过滤窗口边界。ledger 写入用 time.time()
+        （本地时区的 epoch），这里也用本地时区解析 date_str，保持一致。
+        显式构造 naive datetime 再取 timestamp() 与 ledger 的 time.time()
+        行为一致（都按本地时区解释）。
+        """
+        # 计算时间戳范围（本地时区，与 ledger 的 time.time() 一致）
         dt = datetime.strptime(date_str, "%Y-%m-%d")
         start_ts = dt.timestamp()
         end_ts = (dt + timedelta(days=1)).timestamp()
@@ -106,13 +114,13 @@ class TradingReflector:
         # 注意：TradingLedger 目前没有按时间过滤的公开方法，这里使用通用 list 并过滤
         all_trades = self.ledger.list_ledger_entries(category="TRADE", limit=1000)
         day_trades = [t for t in all_trades if start_ts <= t['timestamp'] < end_ts]
-        
+
         # 采集 Agent 响应日志与系统日志
         all_entries = self.ledger.list_ledger_entries(limit=2000)
         day_entries = [e for e in all_entries if start_ts <= e['timestamp'] < end_ts]
-        
+
         agent_logs = [e for e in day_entries if e['category'] in ("ANALYSIS", "AGENT")]
-        
+
         # 采集决策链证据
         decision_evidence = self.ledger.list_decision_evidence(limit=500)
         day_evidence = [ev for ev in decision_evidence if start_ts <= ev['timestamp'] < end_ts]
@@ -132,25 +140,40 @@ class TradingReflector:
         """分析偏差原因"""
         # 基础指标统计
         total_trades = len(data.trades)
-        winning_trades = len([t for t in data.trades if t.get('metadata', {}).get('pnl', 0) > 0])
-        win_rate = winning_trades / total_trades if total_trades > 0 else 0.0
-        
-        actual_pnl = sum([t.get('metadata', {}).get('pnl', 0) for t in data.trades])
-        
+
+        # G7-5：trade 记录的 metadata 不一定有 pnl 字段（依赖 broker 是否回填）。
+        # 改为优先用 portfolio 快照的 realized_pnl 作为当日 P&L 真值；
+        # trade 级别胜负只统计明确带 pnl 的记录，避免把"无 pnl=0"误算成平局。
+        actual_pnl = 0.0
+        portfolio = data.portfolio_snapshot or {}
+        if isinstance(portfolio, dict):
+            actual_pnl = float(portfolio.get("realized_pnl", 0.0) or 0.0)
+
+        winning_trades = 0
+        scored_trades = 0
+        for t in data.trades:
+            meta = t.get('metadata', {}) if isinstance(t.get('metadata'), dict) else {}
+            if "pnl" in meta:
+                scored_trades += 1
+                if float(meta.get('pnl', 0) or 0) > 0:
+                    winning_trades += 1
+        # 仅在至少一笔带 pnl 时才算胜率，否则置 0（数据不足）
+        win_rate = (winning_trades / scored_trades) if scored_trades > 0 else 0.0
+
         # 识别偏差来源 (简单规则 + 占位 LLM)
         deviations = []
         root_causes = []
-        
+
         # 检查滑点 (Slippage)
         for t in data.trades:
-            meta = t.get('metadata', {})
-            price = meta.get('price', 0)
-            filled_price = meta.get('filled_price', 0)
+            meta = t.get('metadata', {}) if isinstance(t.get('metadata'), dict) else {}
+            price = float(meta.get('price', 0) or 0)
+            filled_price = float(meta.get('filled_price', 0) or 0)
             if price > 0 and filled_price > 0:
                 slippage = abs(filled_price - price) / price
                 if slippage > 0.005: # > 0.5%
                     deviations.append(f"High slippage on {meta.get('trade_id')}: {round(slippage*100, 2)}%")
-        
+
         # TODO: 使用 LLM 深度分析日志中的逻辑偏差 (幻觉或错误触发)
         if self.llm_client:
             # llm_analysis = self._call_llm_for_analysis(data)
@@ -161,6 +184,7 @@ class TradingReflector:
             date=data.date,
             metrics={
                 "total_trades": total_trades,
+                "scored_trades": scored_trades,
                 "win_rate": win_rate,
                 "actual_pnl": actual_pnl
             },
@@ -190,6 +214,8 @@ class TradingReflector:
                     ))
         
         # 如果胜率过低，触发全方位反思
+        # 注意：win_rate 基于"带 pnl 字段的成交"（scored_trades）；
+        # total_trades 为全部成交笔数（含未回填 pnl 的），用于判断样本是否充足。
         if report.metrics['win_rate'] < 0.4 and report.metrics['total_trades'] > 5:
             active_strategies = self.strategy_store.list_strategy_versions(status="active")
             for s in active_strategies:
@@ -210,11 +236,12 @@ class TradingReflector:
         
         for diag in diagnoses:
             try:
-                # 调用 StrategyEvolver
-                result = self.evolver.evolve(diag)
+                # G7-4：evolver.evolve() 内部 _call_llm 是同步阻塞网络调用，
+                # 在 async 路径里必须用 to_thread 包装，避免阻塞事件循环。
+                result = await asyncio.to_thread(self.evolver.evolve, diag)
                 evolved_list.append(result.child_name)
                 adjustments.append(f"Evolved {diag.strategy_name} -> {result.child_name}")
-                
+
                 # 更新策略 Quality Score
                 # QA FIX L219: update_strategy_metrics 需要 strategy_id (UUID), not name
                 strategies = self.strategy_store.list_strategy_versions(name=diag.strategy_name)
@@ -224,22 +251,24 @@ class TradingReflector:
                     adjustments.append(f"Updated quality score for {diag.strategy_name} (id={strategy_id})")
                 else:
                     logger.warning(f"Strategy '{diag.strategy_name}' not found in store, skipping metric update")
-                
+
             except Exception as e:
                 logger.error(f"Failed to evolve strategy {diag.strategy_name}: {e}")
 
         # 将反思结果写入记忆系统
         reflection_summary = f"Date: {orient_report.date}, PnL: {orient_report.actual_pnl}, Deviations: {len(orient_report.deviations)}"
         # QA FIX L227: use memory_manager.write() instead of non-existent update_memory()
+        # G7-4：memory_manager.write 是同步 sqlite 操作，用 to_thread 避免阻塞事件循环
         if self.memory_manager:
-            self.memory_manager.write(
-                memory_type="warm",
-                content=reflection_summary,
-                tags=["daily_reflection", orient_report.date],
+            await asyncio.to_thread(
+                self.memory_manager.write,
+                "warm",
+                reflection_summary,
+                ["daily_reflection", orient_report.date],
             )
             memory_updates.append("Wrote daily_reflection to WARM memory")
-        
-        # 写入 Ledger 作为系统记录
+
+        # 写入 Ledger 作为系统记录（同步 sqlite，单次写入 <1ms，可接受）
         self.ledger.record_entry(LedgerEntry(
             category="EVOLUTION",
             action="DAILY_REFLECTION",

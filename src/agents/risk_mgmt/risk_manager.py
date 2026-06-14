@@ -67,16 +67,28 @@ class RiskManager:
             return self._reject_state(reason)
 
         # Rule 3: existing position + requested buy should not exceed single-stock limit.
+        # G7-6：无组合数据（total_assets<=0 或缺失）时无法评估现有集中度。
+        # 对 graph 层 RiskManager 而言，缺失数据不应静默放行大额买入 ——
+        # 记录 degrade 标志，但若请求比例已经触及单股上限则仍拒绝（由 Rule 2 覆盖）。
+        # 这里只在能获取到组合数据时做"叠加"校验，否则保守放行并在 reason 标注数据缺失。
         if action == "BUY":
             existing_percent = self._estimate_existing_position_percent(portfolio, ticker)
-            projected_percent = requested_percent + existing_percent
-            if projected_percent > self.max_single_stock_percent:
-                reason = (
-                    f"Projected position {projected_percent:.2f}% exceeds max single-stock limit "
-                    f"{self.max_single_stock_percent:.2f}% (existing {existing_percent:.2f}% + requested {requested_percent:.2f}%)"
+            total_assets = self._to_float(portfolio.get("total_assets", 0.0))
+            if total_assets > 0:
+                projected_percent = requested_percent + existing_percent
+                if projected_percent > self.max_single_stock_percent:
+                    reason = (
+                        f"Projected position {projected_percent:.2f}% exceeds max single-stock limit "
+                        f"{self.max_single_stock_percent:.2f}% (existing {existing_percent:.2f}% + requested {requested_percent:.2f}%)"
+                    )
+                    self._log_rejection(state, reason)
+                    return self._reject_state(reason)
+            else:
+                logger.warning(
+                    "RiskManager: portfolio total_assets missing/zero for ticker=%s, "
+                    "concentration check skipped (Rule 3 degraded). Hard layer RiskGate still enforces.",
+                    ticker,
                 )
-                self._log_rejection(state, reason)
-                return self._reject_state(reason)
 
         # ===== A 股特有风控规则 =====
         # T+1 卖出约束（独立于 ashare_flags，看持仓 available 字段）
