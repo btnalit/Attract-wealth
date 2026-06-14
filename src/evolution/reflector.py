@@ -142,12 +142,30 @@ class TradingReflector:
         total_trades = len(data.trades)
 
         # G7-5：trade 记录的 metadata 不一定有 pnl 字段（依赖 broker 是否回填）。
-        # 改为优先用 portfolio 快照的 realized_pnl 作为当日 P&L 真值；
-        # trade 级别胜负只统计明确带 pnl 的记录，避免把"无 pnl=0"误算成平局。
+        # actual_pnl 用组合快照的现金盈亏（cash - initial_cash）作为真值；
+        # build_portfolio_snapshot 返回 {cash, positions}，无 realized_pnl 字段，
+        # 故用 cash 相对初始资金 1_000_000 的差值。trade 级 pnl 求和仅作回退。
         actual_pnl = 0.0
         portfolio = data.portfolio_snapshot or {}
-        if isinstance(portfolio, dict):
-            actual_pnl = float(portfolio.get("realized_pnl", 0.0) or 0.0)
+        snapshot_has_cash = isinstance(portfolio, dict) and "cash" in portfolio
+        if snapshot_has_cash:
+            cash = float(portfolio.get("cash", 0.0) or 0.0)
+            initial_cash = float(portfolio.get("initial_cash", 1_000_000.0) or 1_000_000.0)
+            actual_pnl = cash - initial_cash
+            # 若快照里直接提供 realized_pnl（未来扩展），优先用它
+            if "realized_pnl" in portfolio:
+                try:
+                    actual_pnl = float(portfolio.get("realized_pnl") or 0.0)
+                except (TypeError, ValueError):
+                    pass
+        else:
+            # 仅当快照无 cash 字段（数据缺失）时，才回退到 trade 级 pnl 求和。
+            # cash==initial 是合法的 0 盈亏真值，不应被 trade 求和覆盖。
+            trade_pnl_sum = sum(
+                float((t.get('metadata', {}) if isinstance(t.get('metadata'), dict) else {}).get('pnl', 0) or 0)
+                for t in data.trades
+            )
+            actual_pnl = trade_pnl_sum
 
         winning_trades = 0
         scored_trades = 0

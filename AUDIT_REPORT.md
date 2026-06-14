@@ -1422,3 +1422,78 @@ self._delete_from_warm(memory_id)  # ← 仍执行，WARM 记录被删
 
 *第七轮深度审查与修复完成。*
 
+---
+
+# 🔁 第七轮复查：修复正确性复核
+
+> **复查日期**：2026-06-15
+> **方式**：逐项核对 AUDIT_REPORT 中 G7-1~G7-8 的代码落地、调用链完整性、测试覆盖与描述一致性。
+
+## 三十七、复查发现的二次问题
+
+对第七轮 8 个修复逐行复核后，发现 4 个**修复本身引入或残留**的问题：
+
+### R1. 🔴 G7-5 修复引入 actual_pnl 断口 —— 字段名不存在，盈亏恒为 0
+
+**根因**：第七轮 G7-5 修复把 `actual_pnl` 改为读 `portfolio.get("realized_pnl")`。但核对 `TradingLedger.build_portfolio_snapshot`（`trading_ledger.py:839`）返回的是 `{"cash": ..., "positions": {...}}`，**根本没有 `realized_pnl` 字段**。实测确认 `'realized_pnl' in src == False`。导致 `actual_pnl` 恒为 0 —— 与修复前同样失真，只是失真原因从"trade 无 pnl"变成了"快照无字段"。
+
+**修复**：`actual_pnl` 改用 `cash - initial_cash`（组合快照的现金相对初始资金的盈亏）。仅当快照缺失 `cash` 字段时才回退到 trade 级 pnl 求和。`cash==initial` 是合法的 0 盈亏真值，不被 trade 求和覆盖。
+
+**验证**：新增 5 个 `_orient` actual_pnl 测试（盈/亏/0/回退/数据缺失），全部通过。
+
+### R2. 🟡 G7-2 `_write_warm` 异常范围窄 —— 破坏"写失败保留源层"保证
+
+**根因**：第七轮 G7-2 让 `_write_warm` 返回 bool 供 promote/demote 决策，但它只捕获 `sqlite3.Error`。磁盘满（`OSError`）、权限错误等非 sqlite 异常会**抛出而非返回 False**，导致 demote 的 `if not self._write_warm(entry)` 分支无法生效，条目仍会丢失。与 `_write_cold`（捕获 `Exception`）不一致。
+
+**修复**：`_write_warm` 改为捕获 `Exception`，与 `_write_cold` 一致，确保任何写失败都返回 False。
+
+### R3. 🟡 G7-2 promote/demote 写失败时 entry.memory_type 状态污染
+
+**根因**：`demote` 在调用 `_write_cold` 前先执行 `entry.memory_type = "cold"`，若写失败 return，entry 的类型已被改成 "cold" 但条目仍在 WARM。虽然 WARM 是 sqlite 不持久化 memory_type 字段（数据完整），但持有该 entry 对象引用的调用方会看到错误类型。
+
+**修复**：promote/demote 写失败时恢复 `entry.memory_type` 为原值（`original_type` 备份）。
+
+### R4. 🟢 G7-6 注释与实现语义不符
+
+**根因**：`risk_manager.py:71` 注释写"缺失数据不应静默放行大额买入"，但实际逻辑是"保守放行 + WARNING"。注释误导维护者。
+
+**修复**：注释改为准确描述"graph 层软风控保守放行 + 硬层 RiskGate 兜底"的设计。
+
+## 三十八、复查确认良好的部分
+
+| 修复点 | 复查结论 |
+|--------|----------|
+| G7-1 路径遍历 | ✅ 双重防御完整，`_sanitize_skill_name` 净化 + `commonpath` 校验均生效。跨盘符边界下 `commonpath` 抛 ValueError，实际场景（同 base_path）不触发，安全意图达成 |
+| G7-3 auto_maintenance | ✅ set 去重 + 容量补选减去过期数，逻辑正确 |
+| G7-4 asyncio.to_thread | ✅ `evolve`/`memory_manager.write` 的 positional args 传递正确，签名匹配 |
+| G7-7 类型注解 | ✅ `Optional` 正确 |
+| G7-8 时区注释 | ✅ 本地时区一致性说明准确 |
+
+## 三十九、复查修复状态
+
+| 编号 | 二次问题 | 严重性 | 状态 | 关键改动 |
+|------|----------|--------|------|----------|
+| **R1** | actual_pnl 字段名断口恒为 0 | 🔴 高 | ✅ 已修复 | 改用 `cash - initial_cash`；无 cash 才回退 trade 求和 |
+| **R2** | `_write_warm` 异常范围窄 | 🟡 中 | ✅ 已修复 | 捕获 `Exception`，与 `_write_cold` 一致 |
+| **R3** | memory_type 状态污染 | 🟡 中 | ✅ 已修复 | 写失败恢复 `original_type` |
+| **R4** | 注释误导 | 🟢 低 | ✅ 已修复 | 注释与"保守放行+硬层兜底"实现一致 |
+
+**新增测试**（9 个）：`test_round7_review_fixes.py`
+- `_write_warm` 宽捕获（OSError 不抛出）：2 个
+- memory_type 无污染：2 个
+- actual_pnl 现金盈亏推导：5 个（盈/亏/0/回退/缺失）
+
+**验证结果**：
+- 后端 pytest：**507 passed, 0 failed**（第七轮后 498 + 复查新增 9），零回归
+
+## 四十、复查结论
+
+复查发现第七轮修复中 **R1（actual_pnl 字段名断口）是一个真实的逻辑回归** —— 修复 G7-5 时引用了不存在的 `realized_pnl` 字段，导致当日盈亏计算仍是恒为 0。这类"修复一个问题引入另一个问题"的情况正是复查的价值所在。R2/R3 是 G7-2 保证链上的残留弱点，R4 是文档准确性。
+
+所有二次问题已修复并通过 9 个针对性回归测试验证。**累计七轮 + 复查共 507 个测试全绿，零回归。**
+
+---
+
+*第七轮复查完成。所有修复经二次复核确认正确落地。*
+
+

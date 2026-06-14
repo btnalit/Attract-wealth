@@ -68,9 +68,9 @@ class RiskManager:
 
         # Rule 3: existing position + requested buy should not exceed single-stock limit.
         # G7-6：无组合数据（total_assets<=0 或缺失）时无法评估现有集中度。
-        # 对 graph 层 RiskManager 而言，缺失数据不应静默放行大额买入 ——
-        # 记录 degrade 标志，但若请求比例已经触及单股上限则仍拒绝（由 Rule 2 覆盖）。
-        # 这里只在能获取到组合数据时做"叠加"校验，否则保守放行并在 reason 标注数据缺失。
+        # 处理策略：能获取组合数据时做"叠加"校验；缺失数据时保守放行（graph 层是
+        # 软风控），并记 WARNING 让降级可观测 —— 硬层 RiskGate（有并发锁 + 硬白名单）
+        # 仍会强制真正的持仓集中度红线，不会因 graph 层放行而失守。
         if action == "BUY":
             existing_percent = self._estimate_existing_position_percent(portfolio, ticker)
             total_assets = self._to_float(portfolio.get("total_assets", 0.0))

@@ -116,7 +116,12 @@ class MemoryManager:
         self.hot_memory[entry.id] = entry
 
     def _write_warm(self, entry: MemoryEntry) -> bool:
-        """写入 WARM 层。G7-2：返回是否成功，供 promote/demote 决策。"""
+        """写入 WARM 层。G7-2：返回是否成功，供 promote/demote 决策。
+
+        捕获 Exception（而非仅 sqlite3.Error），与 _write_cold 保持一致，
+        确保磁盘满/OSError 等情况也能返回 False 而非抛出，从而保证
+        promote/demote 的"写失败保留源层"语义成立。
+        """
         try:
             with sqlite3.connect(str(self.warm_db_path)) as conn:
                 conn.execute("""
@@ -134,7 +139,7 @@ class MemoryManager:
                 ))
                 conn.commit()
             return True
-        except sqlite3.Error as e:
+        except Exception as e:  # noqa: BLE001 G7-2：宽捕获，确保返回 bool
             logger.error(f"Failed to write to warm memory: {e}")
             return False
 
@@ -248,14 +253,17 @@ class MemoryManager:
         """Promote memory: COLD -> WARM -> HOT.
 
         G7-2 修复：先写入目标层，确认成功后再删除源层，避免
-        COLD/WARM 写入失败时数据永久丢失。
+        COLD/WARM 写入失败时数据永久丢失。写失败时恢复 entry 的
+        memory_type，避免对象状态污染。
         """
         # Check COLD first
         entry = self._get_from_cold(memory_id)
         if entry:
             # COLD -> WARM
+            original_type = entry.memory_type
             entry.memory_type = "warm"
             if not self._write_warm(entry):
+                entry.memory_type = original_type
                 logger.error(f"Promote COLD->WARM failed for {memory_id}, keep COLD copy")
                 return
             self._delete_from_cold(memory_id)
@@ -279,7 +287,8 @@ class MemoryManager:
         """Demote memory: HOT -> WARM -> COLD.
 
         G7-2 修复：WARM->COLD 时先写 COLD 文件，确认成功后再删 WARM，
-        避免 COLD 写入失败导致条目永久丢失。
+        避免 COLD 写入失败导致条目永久丢失。写失败时恢复 entry 的
+        memory_type，避免对象状态污染。
         """
         # Check HOT
         if memory_id in self.hot_memory:
@@ -297,8 +306,10 @@ class MemoryManager:
         # Check WARM
         entry = self._get_from_warm(memory_id)
         if entry:
+            original_type = entry.memory_type
             entry.memory_type = "cold"
             if not self._write_cold(entry):
+                entry.memory_type = original_type
                 logger.error(f"Demote WARM->COLD failed for {memory_id}, keep WARM record")
                 return
             self._delete_from_warm(memory_id)
