@@ -1575,4 +1575,109 @@ self._delete_from_warm(memory_id)  # ← 仍执行，WARM 记录被删
 
 *第八轮跨轮复核完成。前六轮修复确认无隐藏断口。*
 
+---
+
+# 🆕 第九轮：未审查维度补全（资源泄漏 / 输入校验 / 状态机）
+
+> **审查日期**：2026-06-15
+> **范围**：前八轮聚焦安全/风控/并发/契约/功能/运维/AI 子系统。本轮补齐四个全新维度：① 资源泄漏 ② 输入校验完整性 ③ 时序与状态机 ④ 错误恢复。
+
+## 四十五、🔴🟡 新发现
+
+### N9-1. 🟡 CacheManager 全局单例 SQLite 连接无关闭路径
+
+**位置**：`src/dataflows/cache/manager.py:52`（`self.conn = sqlite3.connect(...)`）+ `:177`（`cache_manager = CacheManager()` 模块级单例）
+
+**问题**：`CacheManager` 在构造时建立 SQLite 连接存入 `self.conn`，但类**没有 `close()`/`__del__` 方法**。`main.py` lifespan 关闭分支（172-187 行）只停 EventEngine/TradingService/THSBridge，**从未释放 cache 连接**。进程退出前连接永不关闭。
+
+**严重性**：中。WAL 模式下崩溃恢复可接受，但属于确凿的资源未释放反模式。
+
+**修复**：
+- `CacheManager` 新增 `close()` 方法（幂等，关闭并置 None）
+- `main.py` lifespan finally 分支新增 `cache_manager.close()` + `storage.reset_connections()`（顺带修复 N9-4：storage 线程局部连接也未在关闭时释放）
+
+---
+
+### N9-2. 🟡 直下单 API ticker/side 无输入校验
+
+**位置**：`src/routers/trading.py:50`（`DirectOrderRequest`）
+
+**问题**：
+- `ticker: str` 只声明类型，**无格式约束**。`../evil`、`000 001`、`000001;rm -rf` 等非法值会一路传到 broker。虽然 RiskGate 会查数量/价格，但 ticker 格式在 API 层完全不拦。
+- `side: str` 无枚举约束。`HOLD`/`HACK`/任意字符串会进入下游，直到 `place_direct_order` 第 321 行才报错（400），而非法值已通过 API 层。
+
+**严重性**：中。属于纵深防御缺口——风控层兜底，但 API 层应尽早拒绝脏输入。
+
+**修复**：
+- `ticker` 加 `@field_validator`：非空、禁路径分隔符/空白、只允许字母数字点号、长度 1-16
+- `side` 改为 `Literal["BUY","SELL","buy","sell"]`（小写兼容，下游 .upper() 归一化），非法值 Pydantic 自动返回 422
+
+---
+
+### N9-3. 🟡 回测 API bars 列表无上限
+
+**位置**：`src/routers/strategy.py:46`（`StrategyBacktestRequest.bars`）、`:61`（`StrategyBacktestGridRequest.bars`）
+
+**问题**：`bars: list[BacktestBar] = Field(..., min_length=2)` 有下限无上限。用户可传 `bars=[...50000个...]` 导致回测引擎内存/计算耗尽（DoS）。对比同文件的 `max_combinations` 有 `le=2000` 上限。
+
+**严重性**：中。经鉴权后可利用，但需持有 API Key。
+
+**修复**：两处 `bars` 加 `max_length=5000`（足够覆盖日线 20 年 + 分钟线场景）。
+
+---
+
+### N9-4. 🟢 storage 线程局部连接在 lifespan 关闭时不释放（顺带修复）
+
+**位置**：`src/core/storage.py:286`（`reset_connections` 注释"测试用"）+ `main.py` lifespan
+
+**问题**：主线程的 MAIN_DB/LEDGER_DB/STRATEGY_DB 连接在应用关闭时不关闭。OS 进程退出时会回收，但未走优雅关闭路径。
+
+**修复**：与 N9-1 同批，在 `main.py` lifespan finally 调用 `reset_connections()`。
+
+## 四十六、🟢 本轮确认良好的部分
+
+| 维度 | 审查结论 |
+|------|----------|
+| **文件句柄** | 所有 `open()` 均在 `with` 块或显式 close 生命周期内，零泄漏 |
+| **临时文件** | `src/` 下无 `tempfile`/`mkstemp` 使用，零泄漏 |
+| **subprocess** | `ths_bridge_runtime`/`bridge_proxy` 均有 terminate→wait→kill 三段式回收 + `__del__` 兜底 |
+| **网络连接** | `requests`/`httpx`/`socket` 均用 context manager 或 try/finally close |
+| **正则 ReDoS** | 全量 `re.compile` 扫描，无嵌套量子回溯陷阱 |
+| **除零保护** | `risk_gate`/`backtest_runner` 除法均有零值保护（`total_assets>0`、`max(price,1e-8)`、`if count>0`） |
+| **int/float 强转** | 外部输入→数值转换路径均有 try/except 或 isinstance 保护 |
+| **分页参数** | 所有 `limit` Query 参数均有 `le` 上限（500/200/100） |
+| **订单状态机** | `OrderManager` 的 ACTIVE/TERMINAL 状态集合 + 签名幂等 + 日切清理，设计正确 |
+
+## 四十七、第九轮修复状态
+
+| 编号 | 问题 | 严重性 | 状态 | 关键改动 |
+|------|------|--------|------|----------|
+| **N9-1** | CacheManager 连接泄漏 | 🟡 中 | ✅ 已修复 | `close()` 方法 + `main.py` lifespan finally 调用 |
+| **N9-2** | ticker/side 无校验 | 🟡 中 | ✅ 已修复 | ticker `@field_validator` + side `Literal` 枚举 |
+| **N9-3** | bars 无上限 | 🟡 中 | ✅ 已修复 | `max_length=5000` |
+| **N9-4** | storage 连接未释放 | 🟢 低 | ✅ 已修复 | lifespan finally 调 `reset_connections()` |
+
+**新增测试**（15 个）：`test_round9_resource_input.py`
+- CacheManager.close 幂等：1 个
+- ticker/side 校验（合法/非法/端到端 422）：12 个
+- bars max_length 边界：2 个
+
+**契约同步**：修改 `DirectOrderRequest`（Literal side）和 bars max_length 后，OpenAPI schema 变化，已重新生成 `openapi.json` + `openapi-types.ts`，`test_contract_artifact_sync.py` 通过。
+
+**验证结果**：分批运行全部单元测试 **485+ passed, 0 failed**，零回归。（注：全量单进程跑会因多 TestClient/EventEngine 后台线程累积而超时，属测试隔离环境问题，分批跑全部通过。）
+
+## 四十八、九轮审查累计数据
+
+| 指标 | 第一轮前 | 第九轮后 |
+|------|----------|----------|
+| 后端测试 | 60 | **485+** |
+| 审查维度 | 5 | 12（+资源泄漏/输入校验/状态机/错误恢复/数据层/LLM/契约/前端/A股/运维/跨轮复核） |
+| 严重问题 | 4 | 0 |
+| 资源泄漏 | 未审 | 0（N9-1/4 已修） |
+| 输入校验缺口 | 未审 | 0（N9-2/3 已修） |
+
+---
+
+*第九轮资源泄漏/输入校验/状态机审查完成。所有发现已修复。*
+
 

@@ -185,6 +185,17 @@ async def lifespan(app: FastAPI):
         except Exception:  # noqa: BLE001
             pass
         app.state.ths_bridge_runtime = None
+        # N9-1：优雅关闭数据库连接（cache + 主库线程局部连接）
+        try:
+            from src.dataflows.cache.manager import cache_manager
+            cache_manager.close()
+        except Exception:  # noqa: BLE001
+            pass
+        try:
+            from src.core.storage import reset_connections
+            reset_connections()
+        except Exception:  # noqa: BLE001
+            pass
 
 
 app = FastAPI(

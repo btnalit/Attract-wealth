@@ -173,5 +173,19 @@ class CacheManager:
                 "memory_entries": len(self._memory_cache),
             }
 
+    def close(self) -> None:
+        """N9-1：关闭 SQLite 连接，供应用优雅关闭时调用。
+
+        关闭后不应再调用 get/set/delete（会因 self.conn 已关闭而抛错）。
+        本方法幂等，多次调用安全。
+        """
+        with self._lock:
+            if getattr(self, "conn", None) is not None:
+                try:
+                    self.conn.close()
+                except Exception:  # noqa: BLE001
+                    pass
+                self.conn = None  # type: ignore[assignment]
+
 
 cache_manager = CacheManager()

@@ -43,7 +43,7 @@ class BacktestBar(BaseModel):
 
 class StrategyBacktestRequest(BaseModel):
     strategy_id: str = Field(..., description="策略版本 ID")
-    bars: list[BacktestBar] = Field(..., min_length=2, description="回测 K 线")
+    bars: list[BacktestBar] = Field(..., min_length=2, max_length=5000, description="回测 K 线（上限 5000 根）")
     start_cash: float = Field(default=1_000_000.0, gt=0, description="初始资金")
     lot_size: int = Field(default=100, ge=1, description="最小交易单位")
     commission_rate: float = Field(default=0.0003, ge=0, description="手续费率")
@@ -58,7 +58,7 @@ class StrategyBacktestRequest(BaseModel):
 
 class StrategyBacktestGridRequest(BaseModel):
     strategy_id: str = Field(..., description="策略版本 ID")
-    bars: list[BacktestBar] = Field(..., min_length=2, description="回测 K 线")
+    bars: list[BacktestBar] = Field(..., min_length=2, max_length=5000, description="回测 K 线（上限 5000 根）")
     parameter_grid: dict[str, list[Any]] = Field(default_factory=dict, description="参数网格")
     parameter_sets: list[dict[str, Any]] = Field(default_factory=list, description="显式参数组合")
     max_combinations: int = Field(default=128, ge=1, le=2000, description="最大组合数")

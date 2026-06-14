@@ -1,10 +1,11 @@
 ﻿from __future__ import annotations
 
 import os
+from typing import Literal
 
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from src.core.schemas import BaseSchema
 
 from src.core.errors import TradingServiceError, error_response, ok_response
@@ -48,8 +49,8 @@ class ChannelSwitchRequest(BaseSchema):
 
 
 class DirectOrderRequest(BaseSchema):
-    ticker: str = Field(..., description="股票代码，例如 000001")
-    side: str = Field(..., description="BUY 或 SELL")
+    ticker: str = Field(..., min_length=1, max_length=16, description="股票代码，例如 000001")
+    side: Literal["BUY", "SELL", "buy", "sell"] = Field(..., description="BUY 或 SELL")
     quantity: int | None = Field(default=None, ge=1, description="委托数量")
     qty: int | None = Field(default=None, ge=1, description="委托数量（兼容字段）")
     price: float = Field(..., gt=0, description="委托价格")
@@ -63,6 +64,25 @@ class DirectOrderRequest(BaseSchema):
     trace_id: str = Field(default="", description="全链路追踪 ID（可选）")
     manual_confirm: bool = Field(default=False, description="人工确认标记")
     manual_confirm_token: str = Field(default="", description="人工确认 token（可选）")
+
+    @field_validator("ticker")
+    @classmethod
+    def _validate_ticker(cls, v: str) -> str:
+        """N9-2：ticker 基础格式校验——A股为 6 位数字（含可能的 SH/SZ 前缀）。
+
+        风控层（RiskGate）会做更严格的白名单/涨跌停校验，这里只拦掉明显非法输入
+        （空、含路径分隔/空格/特殊字符、超长），避免脏数据一路传到 broker。
+        """
+        cleaned = (v or "").strip()
+        if not cleaned:
+            raise ValueError("ticker 不能为空")
+        # 允许：纯数字（000001）、带点（SH.600000）、带字母前缀（sz000001）
+        # 拒绝：路径分隔符、空白、控制字符、非 A 股代码字符
+        if any(c in cleaned for c in ("/", "\\", "..")) or any(c.isspace() for c in cleaned):
+            raise ValueError("ticker 含非法字符")
+        if not all(c.isalnum() or c == "." for c in cleaned):
+            raise ValueError("ticker 只能含字母、数字、点号")
+        return cleaned
 
 
 def _get_service(request: Request) -> TradingService:

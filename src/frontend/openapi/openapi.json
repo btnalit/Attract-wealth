@@ -279,11 +279,19 @@
           },
           "side": {
             "description": "BUY 或 SELL",
+            "enum": [
+              "BUY",
+              "SELL",
+              "buy",
+              "sell"
+            ],
             "title": "Side",
             "type": "string"
           },
           "ticker": {
             "description": "股票代码，例如 000001",
+            "maxLength": 16,
+            "minLength": 1,
             "title": "Ticker",
             "type": "string"
           },
@@ -589,10 +597,11 @@
             "type": "boolean"
           },
           "bars": {
-            "description": "回测 K 线",
+            "description": "回测 K 线（上限 5000 根）",
             "items": {
               "$ref": "#/components/schemas/BacktestBar"
             },
+            "maxItems": 5000,
             "minItems": 2,
             "title": "Bars",
             "type": "array"
@@ -723,10 +732,11 @@
             "type": "boolean"
           },
           "bars": {
-            "description": "回测 K 线",
+            "description": "回测 K 线（上限 5000 根）",
             "items": {
               "$ref": "#/components/schemas/BacktestBar"
             },
+            "maxItems": 5000,
             "minItems": 2,
             "title": "Bars",
             "type": "array"
