@@ -19,9 +19,32 @@ from src.graph.conditional_logic import build_debate_skip_payload, should_run_de
 from src.graph.reflection import build_reflection_patch
 from src.graph.signal_processing import (
     build_signal_context_patch,
-    merge_analysis_report,
     normalize_debate_result,
 )
+
+
+def _to_report_dict(report: Any) -> dict[str, Any]:
+    """把 AnalystReport（pydantic）或 dict 归一化为 plain dict。"""
+    if hasattr(report, "model_dump"):
+        return report.model_dump()
+    if isinstance(report, dict):
+        return dict(report)
+    if hasattr(report, "__dict__"):
+        return dict(report.__dict__)
+    return {"raw": str(report)}
+
+
+def report_type_key(report: Any, default: str) -> str:
+    """从 report 中取 analyst_type 作为 key（P2-2：节点只返回自己的 key）。
+
+    优先用 report.analyst_type（小写归一），找不到则用 default。
+    """
+    data = _to_report_dict(report)
+    a_type = str(data.get("analyst_type") or default).strip()
+    # 兼容 "Technical_Agent" → "technical"
+    if "_" in a_type:
+        a_type = a_type.split("_")[0]
+    return a_type.lower() or default
 
 
 GRAPH_NODE_SEQUENCE: tuple[str, ...] = (
@@ -34,10 +57,15 @@ GRAPH_NODE_SEQUENCE: tuple[str, ...] = (
     "risk",
     "reflection",
 )
+
+# P2-2：三个 analyst 并行化（fan-out from START → fan-in to signal_processing）。
+# 之前是 fundamental→technical→news 串行，现在并发执行，三者互不依赖。
 GRAPH_EDGE_SEQUENCE: tuple[tuple[str, str], ...] = (
     ("START", "fundamental"),
-    ("fundamental", "technical"),
-    ("technical", "news"),
+    ("START", "technical"),
+    ("START", "news"),
+    ("fundamental", "signal_processing"),
+    ("technical", "signal_processing"),
     ("news", "signal_processing"),
     ("signal_processing", "debate"),
     ("debate", "trader"),
@@ -45,6 +73,9 @@ GRAPH_EDGE_SEQUENCE: tuple[tuple[str, str], ...] = (
     ("risk", "reflection"),
     ("reflection", "END"),
 )
+
+# analyst 并行组（供拓扑元数据 + 测试断言用）
+PARALLEL_ANALYSTS: tuple[str, ...] = ("fundamental", "technical", "news")
 
 
 @dataclass
@@ -78,7 +109,8 @@ def get_graph_topology() -> dict[str, Any]:
         "edges": [{"from": source, "to": target} for source, target in GRAPH_EDGE_SEQUENCE],
         "node_count": len(GRAPH_NODE_SEQUENCE),
         "edge_count": len(GRAPH_EDGE_SEQUENCE),
-        "entrypoint_count": 1,
+        "entrypoint_count": len(PARALLEL_ANALYSTS),  # P2-2: START fan-out 到 3 个 analyst
+        "parallel_groups": [list(PARALLEL_ANALYSTS)],  # 并行 analyst 组
     }
 
 
@@ -89,21 +121,16 @@ def build_trading_graph(*, agents: TradingGraphAgents | None = None):
 
     async def _fundamental_node(state: AgentState) -> dict[str, Any]:
         report = await graph_agents.fundamental.analyze(state)
-        return {
-            "analysis_reports": merge_analysis_report(state, report_type="fundamental", report=report),
-        }
+        # P2-2：并行化后只返回自己的 key（reducer 负责合并），避免覆盖并发兄弟节点
+        return {"analysis_reports": {report_type_key(report, "fundamental"): _to_report_dict(report)}}
 
     async def _technical_node(state: AgentState) -> dict[str, Any]:
         report = await graph_agents.technical.analyze(state)
-        return {
-            "analysis_reports": merge_analysis_report(state, report_type="technical", report=report),
-        }
+        return {"analysis_reports": {report_type_key(report, "technical"): _to_report_dict(report)}}
 
     async def _news_node(state: AgentState) -> dict[str, Any]:
         report = await graph_agents.news.analyze(state)
-        return {
-            "analysis_reports": merge_analysis_report(state, report_type="news", report=report),
-        }
+        return {"analysis_reports": {report_type_key(report, "news"): _to_report_dict(report)}}
 
     def _signal_processing_node(state: AgentState) -> dict[str, Any]:
         return build_signal_context_patch(state)
@@ -132,10 +159,10 @@ def build_trading_graph(*, agents: TradingGraphAgents | None = None):
     builder.add_node("risk", _risk_node)
     builder.add_node("reflection", _reflection_node)
 
-    builder.add_edge(START, "fundamental")
-    builder.add_edge("fundamental", "technical")
-    builder.add_edge("technical", "news")
-    builder.add_edge("news", "signal_processing")
+    # P2-2：三个 analyst 并行化（START fan-out → signal_processing fan-in）
+    for analyst in PARALLEL_ANALYSTS:
+        builder.add_edge(START, analyst)
+        builder.add_edge(analyst, "signal_processing")
 
     builder.add_edge("signal_processing", "debate")
     builder.add_edge("debate", "trader")

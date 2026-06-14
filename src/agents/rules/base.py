@@ -56,12 +56,14 @@ def aggregate_signals(
     signals: List[Signal],
     *,
     weights: Dict[str, float] | None = None,
+    stale_penalty: float = 0.0,
 ) -> Dict[str, Any]:
     """聚合多个信号为综合评分 + 置信度 + 多空分布。
 
     Args:
         signals: 信号列表
         weights: 按 rule 名加权的字典（可选），未列出的规则权重为 1.0
+        stale_penalty: 数据过时/不全时的置信度惩罚（0-30），降低最终 confidence
 
     Returns:
         {
@@ -110,6 +112,9 @@ def aggregate_signals(
     import math
     count_factor = min(1.0, math.log(max(total, 1) + 1) / math.log(7))
     confidence = round(consistency * 100 * count_factor, 2)
+
+    # 数据过时/不全时降低置信度（stale_penalty 由 china_data.data_freshness 提供）
+    confidence = max(0.0, confidence - stale_penalty)
 
     # 冲突检测：多空数量都 >= 2 且差距 <= 1
     conflict = bull >= 2 and bear >= 2 and abs(bull - bear) <= 1

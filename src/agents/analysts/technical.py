@@ -35,12 +35,19 @@ class TechnicalAnalyst(BaseAnalyst):
                 key_factors=["No technical data"],
             )
 
-        # 1. 跑规则引擎（确定性结论）：趋势 + 量价 + 板块联动
+        # 1. 跑规则引擎（确定性结论）：趋势(单点+序列) + 量价 + 板块联动
         signals = []
         signals.extend(trend_rules.evaluate(tech_data))
+        signals.extend(trend_rules.evaluate_with_history(context.get("kline_recent") or []))
         signals.extend(volume_price_rules.evaluate(context))
         signals.extend(sector_rules.evaluate(context))
-        rule_summary = aggregate_signals(signals)
+        # 数据过时/不全时降低置信度
+        freshness = context.get("data_freshness") or {}
+        stale_penalty = float(freshness.get("stale_penalty", 0.0)) if isinstance(freshness, dict) else 0.0
+        rule_summary = aggregate_signals(signals, stale_penalty=stale_penalty)
+
+        # P2-1：把规则信号落盘到 signal_log（软失败，不影响主链路）
+        self._persist_signals(ticker, context, signals)
 
         # 2. 构造给 LLM 的上下文：规则结论 + 关键指标快照
         metrics = {
@@ -72,3 +79,45 @@ class TechnicalAnalyst(BaseAnalyst):
             metrics=metrics,
             rule_confidence=rule_summary["confidence"],
         )
+
+    @staticmethod
+    def _persist_signals(
+        ticker: str,
+        context: dict,
+        signals: list,
+    ) -> None:
+        """P2-1：把规则信号落盘到 signal_log 供未来在线准确率跟踪。
+
+        软失败：任何异常都不影响主分析链路（信号持久化是旁路观测）。
+        """
+        if not signals:
+            return
+        try:
+            from src.dao.signal_log_dao import get_signal_log_dao
+
+            # 信号当日 = kline 最新日期，无则用今天
+            kline_recent = context.get("kline_recent") or []
+            signal_date = ""
+            close_at_signal = None
+            if kline_recent:
+                last = kline_recent[-1] if isinstance(kline_recent[-1], dict) else {}
+                signal_date = str(last.get("date", ""))[:10]
+                close_at_signal = last.get("close")
+            if not signal_date:
+                from datetime import date
+                signal_date = date.today().isoformat()
+
+            dao = get_signal_log_dao()
+            dao.log_signals(
+                ticker=ticker,
+                signal_date=signal_date,
+                signals=[s.to_dict() if hasattr(s, "to_dict") else s for s in signals],
+                close_at_signal=float(close_at_signal) if close_at_signal else None,
+                analyst_type="Technical_Agent",
+            )
+        except Exception:  # noqa: BLE001
+            # 持久化是旁路功能，绝不能拖垮主分析链路
+            import logging
+            logging.getLogger(__name__).debug(
+                "signal_log 持久化失败（已忽略）", exc_info=True
+            )

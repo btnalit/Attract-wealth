@@ -55,14 +55,10 @@ def build_signal_summary(state: AgentState) -> dict[str, Any]:
     if not isinstance(reports, dict):
         reports = {}
 
-    # analyst_type → 权重映射（technical 技术面 / fundamental 基本面 / news 情绪面）
+    # 分析师权重：从 weights 模块获取（支持回测校准 + 环境变量覆盖）
+    from src.agents.rules.weights import get_calibrated_weights
+    _WEIGHTS = get_calibrated_weights()
     # 未识别的 analyst 默认权重 20
-    _WEIGHTS = {
-        "technical": 40.0,
-        "fundamental": 30.0,
-        "news": 20.0,
-        "sentiment": 20.0,
-    }
 
     bullish = 0
     bearish = 0

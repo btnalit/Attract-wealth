@@ -41,6 +41,7 @@ def evaluate_all(context: dict) -> dict:
     indicators = context.get("technical_indicators") or {}
     all_signals = []
     all_signals.extend(trend_rules.evaluate(indicators))
+    all_signals.extend(trend_rules.evaluate_with_history(context.get("kline_recent") or []))
     all_signals.extend(volume_price_rules.evaluate(context))
     all_signals.extend(ashare_rules.evaluate(context))
     all_signals.extend(money_flow_rules.evaluate(context))

@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 from abc import ABC, abstractmethod
 from typing import Any
 
@@ -14,6 +15,18 @@ from src.core.agent_state import AgentState
 from src.llm.openai_compat import create_quick_llm
 
 logger = logging.getLogger(__name__)
+
+
+def _score_clamp_band() -> float:
+    """LLM 评分相对规则锚点的最大偏离（P1-2）。
+
+    优先读环境变量 ASHARE_LLM_SCORE_BAND（默认 15）。设为 0 或负值表示不约束。
+    """
+    try:
+        val = float(os.getenv("ASHARE_LLM_SCORE_BAND", "15"))
+    except (TypeError, ValueError):
+        val = 15.0
+    return max(0.0, val)
 
 
 class AnalystReport(BaseModel):
@@ -30,6 +43,10 @@ class AnalystReport(BaseModel):
     metrics: dict = Field(default_factory=dict, description="关键指标快照")
     ashare_flags: list[str] = Field(default_factory=list, description="A股特有标记")
     rule_confidence: float = Field(default=0.0, description="规则层置信度 0-100")
+    # P1-2：评分区间约束溯源（LLM 原始分 / 规则锚点 / 是否被夹断）
+    llm_raw_score: float | None = Field(default=None, description="LLM 原始评分（未夹断前）")
+    rule_anchor_score: float | None = Field(default=None, description="规则层锚点评分（夹断基准）")
+    score_clamped: bool = Field(default=False, description="LLM 分是否被夹断到锚点±band")
 
 
 class BaseAnalyst(ABC):
@@ -68,6 +85,9 @@ class BaseAnalyst(ABC):
         # 构造 prompt：把规则结论作为"确定性事实"交给 LLM 解读
         rules_block = ""
         if signals:
+            # 规则锚点分（P1-2）：LLM 评分会被夹断到锚点 ± band，提前告知避免越界
+            anchor = self._compute_rule_fallback_score(signals)
+            band = _score_clamp_band()
             rules_block = (
                 "\n【规则引擎已产出的确定性结论】（请基于这些结论综合判断，"
                 "可调整强度但不要与明确方向冲突）:\n"
@@ -76,6 +96,12 @@ class BaseAnalyst(ABC):
                 rules_block += (
                     f"- [{sig.get('category')}] {sig.get('rule')}: "
                     f"{sig.get('direction')} (强度 {sig.get('strength')}) — {sig.get('description')}\n"
+                )
+            if band > 0:
+                rules_block += (
+                    f"\n【评分约束】规则层综合锚点分约 {anchor:.0f}，"
+                    f"你的评分应在 [{max(0.0, anchor - band):.0f}, {min(100.0, anchor + band):.0f}] "
+                    f"区间内（±{band:.0f}），超出会被夹断。\n"
                 )
 
         prompt = (
@@ -98,7 +124,7 @@ class BaseAnalyst(ABC):
             "}"
         )
 
-        # 规则层兜底分数（LLM 失败时用）
+        # 规则层兜底分数（LLM 失败时用，同时作为 P1-2 的评分夹断锚点）
         rule_fallback_score = self._compute_rule_fallback_score(signals)
 
         try:
@@ -110,11 +136,28 @@ class BaseAnalyst(ABC):
             )
             data = self._parse_json_payload(text)
             normalized = self._normalize_payload(ticker=ticker, payload=data)
+
+            # P1-2：把 LLM 评分夹断到规则锚点 ± band（防 LLM 幻觉式偏离规则层结论）
+            llm_raw = float(normalized.get("score", 50.0))
+            clamped, did_clamp = self._clamp_score_to_anchor(
+                llm_raw, rule_fallback_score, has_signals=bool(signals)
+            )
+            if did_clamp:
+                logger.info(
+                    "[%s] LLM 评分 %.1f 超出规则锚点 %.1f±%.0f，夹断为 %.1f",
+                    self.analyst_name, llm_raw, rule_fallback_score,
+                    _score_clamp_band(), clamped,
+                )
+            normalized["score"] = clamped
+
             # 合并规则层字段进 report（LLM 字段优先，规则字段补充）
             normalized["signals"] = signals
             normalized["metrics"] = metrics
             normalized["ashare_flags"] = ashare_flags
             normalized["rule_confidence"] = rule_confidence
+            normalized["llm_raw_score"] = llm_raw
+            normalized["rule_anchor_score"] = rule_fallback_score if signals else None
+            normalized["score_clamped"] = did_clamp
             return AnalystReport(**normalized)
         except Exception as exc:  # noqa: BLE001
             logger.error("[%s] report parsing failed: %s", self.analyst_name, exc)
@@ -131,6 +174,9 @@ class BaseAnalyst(ABC):
                 metrics=metrics,
                 ashare_flags=ashare_flags,
                 rule_confidence=rule_confidence,
+                llm_raw_score=None,
+                rule_anchor_score=rule_fallback_score if signals else None,
+                score_clamped=False,
             )
 
     @staticmethod
@@ -149,6 +195,32 @@ class BaseAnalyst(ABC):
         if weight_sum == 0:
             return 50.0
         return max(0.0, min(100.0, 50.0 + (total / weight_sum) / 2.0))
+
+    @staticmethod
+    def _clamp_score_to_anchor(
+        llm_score: float, anchor: float, *, has_signals: bool
+    ) -> tuple[float, bool]:
+        """P1-2：把 LLM 评分夹断到规则锚点 ± band。
+
+        - 无规则信号时不约束（LLM 自由发挥，避免无锚点强行拉回 50）
+        - band <= 0 时不约束（环境变量关闭）
+        - 否则夹断到 [anchor - band, anchor + band] 并裁剪到 [0, 100]
+
+        Returns:
+            (clamped_score, did_clamp)
+        """
+        if not has_signals:
+            return max(0.0, min(100.0, llm_score)), False
+        band = _score_clamp_band()
+        if band <= 0:
+            return max(0.0, min(100.0, llm_score)), False
+        lo = max(0.0, anchor - band)
+        hi = min(100.0, anchor + band)
+        if llm_score < lo:
+            return lo, True
+        if llm_score > hi:
+            return hi, True
+        return llm_score, False
 
     @staticmethod
     def _score_to_stance(score: float) -> str:

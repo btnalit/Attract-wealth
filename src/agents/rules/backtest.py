@@ -84,6 +84,15 @@ def backtest_trend_signals(
         }
 
         signals = trend_rules.evaluate(indicators)
+        # 同时跑序列规则（金叉/RSI/MACD背离），需要构造 kline_recent 格式
+        kline_recent = []
+        for _, w_row in window.iterrows():
+            kline_recent.append({
+                "close": _f(w_row.get("close")),
+                "ma5": _f(w_row.get("sma_5")),
+                "ma20": _f(w_row.get("sma_20")),
+            })
+        signals.extend(trend_rules.evaluate_with_history(kline_recent))
         close_at_signal = closes[i]
         close_at_future = closes[i + forward_days]
         forward_return = (close_at_future - close_at_signal) / close_at_signal * 100 if close_at_signal else 0.0

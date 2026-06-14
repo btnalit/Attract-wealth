@@ -135,7 +135,70 @@ class ChinaDataAssembler:
         except Exception:  # noqa: BLE001
             context["data_source"] = {}
 
+        # 5. 数据新鲜度 + 完整度评估（供规则引擎降低置信度 + 前端展示）
+        context["data_freshness"] = self._assess_data_freshness(context)
+
         return context
+
+    def _assess_data_freshness(self, context: Dict[str, Any]) -> Dict[str, Any]:
+        """评估各维度数据的新鲜度和完整度。
+
+        返回:
+        {
+            "dimensions": {dim: {"available": bool, "stale": bool, "note": str}},
+            "completeness": float,  # 0-1，有数据的维度占比
+            "is_stale": bool,  # 关键维度是否过时
+            "stale_penalty": float,  # 建议的置信度惩罚（0-30）
+        }
+        """
+        import time as _time
+        from datetime import datetime, timedelta
+
+        # 检查 K 线最新日期是否过时（超过 3 个交易日 ≈ 5 天）
+        kline_recent = context.get("kline_recent") or []
+        kline_date_str = str(kline_recent[-1].get("date", "")) if kline_recent else ""
+        kline_stale = False
+        if kline_date_str:
+            try:
+                kline_date = datetime.strptime(kline_date_str[:10], "%Y-%m-%d")
+                days_old = (datetime.now() - kline_date).days
+                kline_stale = days_old > 5  # 超过 5 天视为过时（含周末）
+            except (ValueError, TypeError):
+                pass
+
+        # 各维度可用性
+        dims = {
+            "realtime": {"available": bool(context.get("realtime")), "stale": False},
+            "technical_indicators": {"available": bool(context.get("technical_indicators")), "stale": kline_stale},
+            "kline_recent": {"available": len(kline_recent) > 0, "stale": kline_stale},
+            "money_flow": {"available": bool(context.get("money_flow")), "stale": False},
+            "dragon_tiger": {"available": bool(context.get("dragon_tiger")), "stale": False},
+            "sector_info": {"available": bool(context.get("sector_info")), "stale": False},
+            "financials": {"available": bool(context.get("financials")), "stale": False},
+            "ashare_flags": {"available": bool(context.get("ashare_flags")), "stale": False},
+        }
+
+        # 完整度：有数据的维度占比
+        total_dims = len(dims)
+        available_count = sum(1 for d in dims.values() if d["available"])
+        completeness = round(available_count / total_dims, 2) if total_dims else 0.0
+
+        # 关键维度过时 → 置信度惩罚
+        is_stale = kline_stale
+        stale_penalty = 0.0
+        if kline_stale:
+            stale_penalty = 20.0
+        if completeness < 0.4:
+            stale_penalty = max(stale_penalty, 25.0)  # 数据严重不全额外惩罚
+
+        return {
+            "dimensions": dims,
+            "completeness": completeness,
+            "is_stale": is_stale,
+            "stale_penalty": stale_penalty,
+            "kline_latest_date": kline_date_str,
+            "assessed_at": int(_time.time()),
+        }
 
     # -------------------------
     # 指标提取辅助
