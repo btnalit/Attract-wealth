@@ -286,10 +286,10 @@ class AkShareProvider(DataProvider, DefaultAShareExtendedMixin):
             return {}
 
     def get_sector_info(self, ticker: str) -> Dict[str, Any]:
-        """所属行业/概念板块 + 板块当日涨跌幅。
+        """所属行业/概念板块 + 板块当日涨跌幅 + 板块资金流。
 
-        数据源：ak.stock_individual_info_em（所属行业/概念）。
-        板块资金流排名按需后续接入。
+        数据源：ak.stock_individual_info_em（所属行业/概念）+
+                ak.stock_board_industry_name_em（板块行情，软失败）。
         """
         start_t = time.time()
         numeric = re.sub(r'[^\d]', '', ticker)
@@ -299,10 +299,11 @@ class AkShareProvider(DataProvider, DefaultAShareExtendedMixin):
                 self._track_extended_call(start_t, ok=True)
                 return {}
             info = dict(zip(df["item"], df["value"])) if "item" in df.columns else {}
-            self._track_extended_call(start_t, ok=True)
-            return {
+            industry = str(info.get("行业", ""))
+
+            result = {
                 "name": str(info.get("股票简称", "")),
-                "industry": str(info.get("行业", "")),
+                "industry": industry,
                 "concept": str(info.get("概念", "")),
                 "list_date": str(info.get("上市时间", "")),
                 "total_shares": _safe_float(info.get("总股本")),
@@ -310,9 +311,43 @@ class AkShareProvider(DataProvider, DefaultAShareExtendedMixin):
                 "total_market_cap": _safe_float(info.get("总市值")),
                 "circulating_market_cap": _safe_float(info.get("流通市值")),
             }
+
+            # 扩展：查板块当日行情（软失败，限流时跳过）
+            if industry:
+                sector_perf = self._fetch_sector_performance(industry)
+                if sector_perf:
+                    result["sector_performance"] = sector_perf
+
+            self._track_extended_call(start_t, ok=True)
+            return result
         except Exception as exc:  # noqa: BLE001
             logger.warning("[AkShare] 板块信息拉取失败 %s: %s", ticker, exc)
             self._track_extended_call(start_t, ok=False)
+            return {}
+
+    def _fetch_sector_performance(self, industry: str) -> Dict[str, Any]:
+        """查行业板块当日涨跌（软失败）。数据源：stock_board_industry_name_em。"""
+        try:
+            df = ak.stock_board_industry_name_em()
+            if df is None or df.empty:
+                return {}
+            # 按板块名匹配
+            name_col = "板块名称" if "板块名称" in df.columns else None
+            if not name_col:
+                return {}
+            match = df[df[name_col].astype(str) == industry]
+            if match.empty:
+                return {}
+            row = match.iloc[0]
+            return {
+                "sector_name": str(row.get("板块名称", industry)),
+                "sector_change_pct": _safe_float(row.get("涨跌幅")),
+                "sector_turnover": _safe_float(row.get("换手率")),
+                "sector_amount": _safe_float(row.get("总市值")),
+                "leader_stock": str(row.get("领涨股票", "")),
+                "leader_change_pct": _safe_float(row.get("领涨股票-涨跌幅")),
+            }
+        except Exception:  # noqa: BLE001
             return {}
 
     def get_financial_abstract(self, ticker: str) -> Dict[str, Any]:
@@ -430,6 +465,46 @@ class AkShareProvider(DataProvider, DefaultAShareExtendedMixin):
             logger.warning("[AkShare] 风险标记拉取失败 %s: %s", ticker, exc)
             self._track_extended_call(start_t, ok=False)
             return {}
+
+    def get_announcements(self, ticker: str, limit: int = 10) -> List[Dict[str, Any]]:
+        """个股公告：重大事项、业绩预告、增减持等。
+
+        数据源：akshare 公告接口（软失败，接口名随版本可能变化）。
+        返回 [{"date","title","type","content"}, ...]。
+        """
+        start_t = time.time()
+        numeric = re.sub(r'[^\d]', '', ticker)
+        try:
+            # 尝试多个 akshare 公告接口（接口名随版本变化，软失败）
+            df = None
+            for api_name in ("stock_notice_report", "stock_zh_a_disclosure_relation"):
+                fn = getattr(ak, api_name, None)
+                if fn is None:
+                    continue
+                try:
+                    df = fn(symbol=numeric) if api_name == "stock_notice_report" else fn(symbol=f"{'sh' if numeric.startswith('6') else 'sz'}{numeric}")
+                    if df is not None and not df.empty:
+                        break
+                except Exception:  # noqa: BLE001
+                    continue
+            if df is None or df.empty:
+                self._track_extended_call(start_t, ok=True)
+                return []
+
+            records: List[Dict[str, Any]] = []
+            for _, row in df.head(limit).iterrows():
+                records.append({
+                    "date": str(row.get("公告日期", row.get("日期", ""))),
+                    "title": str(row.get("公告标题", row.get("标题", ""))),
+                    "type": str(row.get("公告类型", row.get("类型", ""))),
+                    "content": str(row.get("公告内容", row.get("内容", "")))[:500],
+                })
+            self._track_extended_call(start_t, ok=True)
+            return records
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("[AkShare] 公告拉取失败 %s: %s", ticker, exc)
+            self._track_extended_call(start_t, ok=False)
+            return []
 
 
 def _safe_float(value: Any) -> float:

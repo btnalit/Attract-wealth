@@ -2,11 +2,12 @@
 """
 A 股规则引擎库 (Rules Engine)
 
-提供 4 类规则，每类返回结构化 Signal 列表：
+提供 5 类规则，每类返回结构化 Signal 列表：
 - trend_rules: 趋势（均线排列、MACD、价格与 MA60）
 - volume_price_rules: 量价（放量/缩量、量价背离、地量）
 - ashare_rules: A 股特有（ST、涨停、跌停、停牌）
 - money_flow_rules: 资金流（主力净流入、超大单、龙虎榜）
+- sector_rules: 板块联动（同向共振、逆势、板块强弱）
 
 统一入口：evaluate_all(context) 跑全部规则并返回聚合结果。
 """
@@ -19,13 +20,14 @@ from src.agents.rules.base import (
 from src.agents.rules import (
     ashare_rules,
     money_flow_rules,
+    sector_rules,
     trend_rules,
     volume_price_rules,
 )
 
 
 def evaluate_all(context: dict) -> dict:
-    """跑全部 4 类规则，返回 {signals, summary}。
+    """跑全部 5 类规则，返回 {signals, summary}。
 
     Args:
         context: ChinaDataAssembler 产出的完整 context
@@ -42,6 +44,7 @@ def evaluate_all(context: dict) -> dict:
     all_signals.extend(volume_price_rules.evaluate(context))
     all_signals.extend(ashare_rules.evaluate(context))
     all_signals.extend(money_flow_rules.evaluate(context))
+    all_signals.extend(sector_rules.evaluate(context))
 
     summary = aggregate_signals(all_signals)
     return {
@@ -60,4 +63,5 @@ __all__ = [
     "volume_price_rules",
     "ashare_rules",
     "money_flow_rules",
+    "sector_rules",
 ]

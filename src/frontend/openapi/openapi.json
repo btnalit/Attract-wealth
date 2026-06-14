@@ -542,6 +542,44 @@
         "title": "ReconcileUnlockRequest",
         "type": "object"
       },
+      "RulesBacktestRequest": {
+        "properties": {
+          "forward_days": {
+            "default": 5,
+            "description": "未来收益计算天数",
+            "maximum": 30.0,
+            "minimum": 1.0,
+            "title": "Forward Days",
+            "type": "integer"
+          },
+          "limit": {
+            "default": 300,
+            "description": "K 线根数",
+            "maximum": 1000.0,
+            "minimum": 60.0,
+            "title": "Limit",
+            "type": "integer"
+          },
+          "min_strength": {
+            "default": 55.0,
+            "description": "信号强度过滤阈值",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Min Strength",
+            "type": "number"
+          },
+          "ticker": {
+            "description": "股票代码",
+            "title": "Ticker",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ticker"
+        ],
+        "title": "RulesBacktestRequest",
+        "type": "object"
+      },
       "StrategyBacktestGridRequest": {
         "properties": {
           "archive_report": {
@@ -1682,6 +1720,46 @@
           }
         },
         "summary": "Promote Memory",
+        "tags": [
+          "strategy"
+        ]
+      }
+    },
+    "/api/strategy/rules-backtest": {
+      "post": {
+        "description": "对指定股票跑规则引擎回测，验证 trend 规则的历史命中率。\n\n取该股票历史 K 线，计算技术指标，逐日跑 trend 规则，\n统计信号方向与未来 N 日收益方向的一致性（命中率）。",
+        "operationId": "rules_backtest_api_strategy_rules_backtest_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RulesBacktestRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Rules Backtest",
         "tags": [
           "strategy"
         ]

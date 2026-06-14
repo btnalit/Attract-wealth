@@ -12,7 +12,7 @@ from __future__ import annotations
 import json
 
 from src.agents.analysts.base import AnalystReport, BaseAnalyst
-from src.agents.rules import trend_rules, volume_price_rules
+from src.agents.rules import sector_rules, trend_rules, volume_price_rules
 from src.agents.rules.base import aggregate_signals, serialize_signals
 from src.core.agent_state import AgentState
 
@@ -35,10 +35,11 @@ class TechnicalAnalyst(BaseAnalyst):
                 key_factors=["No technical data"],
             )
 
-        # 1. 跑规则引擎（确定性结论）
+        # 1. 跑规则引擎（确定性结论）：趋势 + 量价 + 板块联动
         signals = []
         signals.extend(trend_rules.evaluate(tech_data))
         signals.extend(volume_price_rules.evaluate(context))
+        signals.extend(sector_rules.evaluate(context))
         rule_summary = aggregate_signals(signals)
 
         # 2. 构造给 LLM 的上下文：规则结论 + 关键指标快照

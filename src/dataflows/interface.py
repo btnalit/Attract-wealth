@@ -62,6 +62,10 @@ class AShareExtendedProvider(Protocol):
         """A 股风险/状态标记：ST/退市风险/停牌/涨跌停状态。"""
         ...
 
+    def get_announcements(self, ticker: str, limit: int = 10) -> List[Dict[str, Any]]:
+        """个股公告：重大事项、业绩预告、增减持等结构化公告。"""
+        ...
+
 
 class DefaultAShareExtendedMixin:
     """
@@ -89,6 +93,9 @@ class DefaultAShareExtendedMixin:
 
     def get_stock_flags(self, ticker: str) -> Dict[str, Any]:  # noqa: ARG002
         return {}
+
+    def get_announcements(self, ticker: str, limit: int = 10) -> List[Dict[str, Any]]:  # noqa: ARG002
+        return []
 
 
 class IndicatorEngine(Protocol):

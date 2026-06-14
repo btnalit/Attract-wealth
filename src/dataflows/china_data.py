@@ -94,6 +94,7 @@ class ChinaDataAssembler:
             "financials": {},
             "margin": {},
             "ashare_flags": {},
+            "announcements": [],
             "market_environment": "A-Share T+1 System",
         }
 
@@ -123,6 +124,7 @@ class ChinaDataAssembler:
         context["financials"] = self.data_manager.get_financial_abstract(ticker)
         context["margin"] = self.data_manager.get_margin(ticker)
         context["ashare_flags"] = self.data_manager.get_stock_flags(ticker)
+        context["announcements"] = self.data_manager.get_announcements(ticker, limit=10)
 
         # 4. 汇总数据源快照（供前端展示数据来源与降级状态）
         try:

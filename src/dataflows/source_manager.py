@@ -382,6 +382,29 @@ class DataSourceManager:
     def get_stock_flags(self, ticker: str) -> dict:
         return self._call_extended("get_stock_flags", ticker, default={})
 
+    def get_announcements(self, ticker: str, limit: int = 10) -> list[dict]:
+        """个股公告（多源 fallback，软失败）。带 limit 参数，独立缓存键。"""
+        cache_key = f"get_announcements:{ticker}:{int(limit)}"
+        cached = self._cache_get(cache_key)
+        if isinstance(cached, list) and cached:
+            return cached
+        with self._lock:
+            candidates = self._ordered_provider_names()
+        for provider_name in candidates:
+            provider = self._providers[provider_name]
+            fn = getattr(provider, "get_announcements", None)
+            if not callable(fn):
+                continue
+            try:
+                value = fn(ticker, limit)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("announcements call failed: provider=%s err=%s", provider_name, exc)
+                continue
+            if isinstance(value, list) and len(value) > 0:
+                self._cache_set(cache_key, value, ttl=self._cache_ttl["news"])
+                return value
+        return []
+
     def record_quality_feedback(
         self,
         *,
@@ -1446,6 +1469,16 @@ class AkShareDataSourceAdapter(BaseDataSource):
             except Exception:  # noqa: BLE001
                 pass
         return {}
+
+    def get_announcements(self, ticker: str, limit: int = 10) -> list[dict]:
+        fn = getattr(self._provider, "get_announcements", None)
+        if callable(fn):
+            try:
+                payload = fn(ticker, limit)
+                return payload if isinstance(payload, list) else []
+            except Exception:  # noqa: BLE001
+                pass
+        return []
 
     def get_realtime_quote(self, ticker: str) -> dict[str, Any]:
         quote = self._provider.get_realtime_quote(ticker)

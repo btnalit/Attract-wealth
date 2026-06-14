@@ -1368,3 +1368,68 @@ async def list_strategy_history(
             content=error_response("INTERNAL_ERROR", "Failed to load strategy history", {"error": str(exc)}),
         )
 
+
+# ---------------------------------------------------------------------------
+# Rules Backtest API（规则引擎回测验证）
+# ---------------------------------------------------------------------------
+
+class RulesBacktestRequest(BaseModel):
+    ticker: str = Field(..., description="股票代码")
+    forward_days: int = Field(default=5, ge=1, le=30, description="未来收益计算天数")
+    min_strength: float = Field(default=55.0, ge=0, le=100, description="信号强度过滤阈值")
+    limit: int = Field(default=300, ge=60, le=1000, description="K 线根数")
+
+
+@router.post("/rules-backtest")
+async def rules_backtest(request: Request, body: RulesBacktestRequest):
+    """对指定股票跑规则引擎回测，验证 trend 规则的历史命中率。
+
+    取该股票历史 K 线，计算技术指标，逐日跑 trend 规则，
+    统计信号方向与未来 N 日收益方向的一致性（命中率）。
+    """
+    try:
+        from src.dataflows.source_manager import data_manager
+        from src.dataflows.technical.indicators import PandasTaIndicatorEngine
+        from src.agents.rules.backtest import backtest_trend_signals
+
+        provider = data_manager.get_provider_instance()
+        if provider is None:
+            return JSONResponse(
+                status_code=503,
+                content=error_response("NO_DATA_PROVIDER", "无可用数据源", {}),
+            )
+
+        df = provider.get_historical_kline(body.ticker, limit=body.limit)
+        if df is None or df.empty:
+            return JSONResponse(
+                status_code=504,
+                content=error_response("NO_KLINE_DATA", f"无法获取 {body.ticker} 的 K 线数据（数据源可能被限流）", {}),
+            )
+
+        # 计算技术指标
+        engine = PandasTaIndicatorEngine()
+        enriched_df = engine.calculate_all(df)
+
+        # 跑规则回测
+        result = backtest_trend_signals(
+            enriched_df,
+            forward_days=body.forward_days,
+            min_strength=body.min_strength,
+        )
+
+        return ok_response({
+            "ticker": body.ticker,
+            "kline_count": int(len(df)),
+            "forward_days": body.forward_days,
+            "min_strength": body.min_strength,
+            "summary": result["summary"],
+            "sample_records": result["records"][:50],  # 只返回前 50 条样本，避免响应过大
+            "total_records": len(result["records"]),
+        })
+    except Exception as exc:
+        logger.warning("rules backtest failed: %s", exc)
+        return JSONResponse(
+            status_code=500,
+            content=error_response("INTERNAL_ERROR", "规则回测失败", {"error": str(exc)}),
+        )
+
