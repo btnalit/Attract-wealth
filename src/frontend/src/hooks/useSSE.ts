@@ -12,7 +12,28 @@ interface RawSSEPayload {
 export const useSSE = (enabled: boolean = true) => {
   const { updateAgentStatus, setActiveNode, addLog, updatePnl } = useAgentStore();
   const [isConnected, setIsConnected] = useState(false);
+  const [retryCount, setRetryCount] = useState(0);
   const eventSourceRef = useRef<EventSource | null>(null);
+  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const enabledRef = useRef(enabled);
+  const attemptRef = useRef(0);
+
+  // 同步 enabled 到 ref，避免重连闭包读到旧值
+  useEffect(() => {
+    enabledRef.current = enabled;
+  }, [enabled]);
+
+  /** 清理当前连接与待重连定时器 */
+  const cleanup = () => {
+    if (reconnectTimerRef.current) {
+      clearTimeout(reconnectTimerRef.current);
+      reconnectTimerRef.current = null;
+    }
+    if (eventSourceRef.current) {
+      eventSourceRef.current.close();
+      eventSourceRef.current = null;
+    }
+  };
 
   /** Normalize snake_case from backend → camelCase for the store */
   function mapNodeId(raw: Record<string, unknown>): string | undefined {
@@ -40,10 +61,18 @@ export const useSSE = (enabled: boolean = true) => {
   useEffect(() => {
     if (!enabled) return;
 
+    const MAX_RETRIES = 10;
+    const BASE_DELAY_MS = 1000;
+
+    /** 计算指数退避延迟（带上限 30s） */
+    const backoffDelay = (attempt: number): number =>
+      Math.min(BASE_DELAY_MS * Math.pow(2, attempt), 30000);
+
     const connect = () => {
+      if (!enabledRef.current) return;
       try {
         const url = streamApi.getEventsUrl();
-        console.log(`Connecting to SSE at ${url}...`);
+        console.log(`Connecting to SSE at ${url}... (attempt ${attemptRef.current + 1})`);
 
         const es = new EventSource(url);
         eventSourceRef.current = es;
@@ -51,6 +80,8 @@ export const useSSE = (enabled: boolean = true) => {
         es.onopen = () => {
           console.log('SSE Connection established.');
           setIsConnected(true);
+          setRetryCount(0);
+          attemptRef.current = 0;
         };
 
         es.onmessage = (event) => {
@@ -64,10 +95,21 @@ export const useSSE = (enabled: boolean = true) => {
         };
 
         es.onerror = () => {
-          console.warn('SSE Connection error. Switching to mock mode.');
           setIsConnected(false);
           es.close();
-          // startMockMode(); // Mock mode can be triggered if desired
+          eventSourceRef.current = null;
+
+          // 指数退避自动重连（仅在仍启用且未超最大重试次数时）
+          if (!enabledRef.current) return;
+          if (attemptRef.current >= MAX_RETRIES) {
+            console.error(`SSE max retries (${MAX_RETRIES}) reached, giving up. Page refresh required.`);
+            return;
+          }
+          const delay = backoffDelay(attemptRef.current);
+          attemptRef.current += 1;
+          setRetryCount(attemptRef.current);
+          console.warn(`SSE disconnected, reconnecting in ${delay}ms (attempt ${attemptRef.current}/${MAX_RETRIES})`);
+          reconnectTimerRef.current = setTimeout(connect, delay);
         };
       } catch (err) {
         console.error('SSE initialization error:', err);
@@ -117,12 +159,8 @@ export const useSSE = (enabled: boolean = true) => {
 
     connect();
 
-    return () => {
-      if (eventSourceRef.current) {
-        eventSourceRef.current.close();
-      }
-    };
+    return cleanup;
   }, [enabled, updateAgentStatus, setActiveNode, addLog, updatePnl]);
 
-  return { isConnected };
+  return { isConnected, retryCount };
 };

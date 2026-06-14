@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Outlet, NavLink } from 'react-router-dom';
 import { 
   LayoutDashboard, 
@@ -14,8 +14,6 @@ import {
   Settings,
   Search,
   Bell,
-  Wifi,
-  Zap,
   Clock,
   Terminal
 } from 'lucide-react';
@@ -41,8 +39,20 @@ const navItems = [
 
 export const CyberpunkLayout: React.FC = () => {
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
+  const [clock, setClock] = useState(() => new Date().toLocaleTimeString());
 
   useHotkeys(() => setIsCommandPaletteOpen(true));
+  // SSE 全局化：在 Layout 顶层建立连接，让所有页面都能收到实时推流，
+  // 而非仅 /agents 页面。离开该页面也不断开。
+  const { isConnected: sseConnected, retryCount: sseRetryCount } = useSSE(true);
+
+  // 时钟每秒更新（F6：原来只在挂载时计算一次，永远停在加载时刻）
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      setClock(new Date().toLocaleTimeString());
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   return (
     <div className="flex h-screen w-screen flex-col bg-bg-primary text-info-gray font-inter selection:bg-neon-cyan/30">
@@ -75,18 +85,13 @@ export const CyberpunkLayout: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-6">
+          {/* SSE 连接状态（F2：反映真实状态而非硬编码） */}
           <div className="flex gap-4 text-[10px] font-mono tracking-tighter uppercase">
             <div className="flex flex-col items-end">
-              <span className="text-info-gray/50">CPU 负载</span>
-              <span className="text-up-green">12.4%</span>
-            </div>
-            <div className="flex flex-col items-end border-l border-border pl-4">
-              <span className="text-info-gray/50">内存使用</span>
-              <span className="text-warn-gold">4.2 GB</span>
-            </div>
-            <div className="flex flex-col items-end border-l border-border pl-4">
-              <span className="text-info-gray/50">运行中的智能体</span>
-              <span className="text-neon-cyan">6 / 8</span>
+              <span className="text-info-gray/50">SSE 状态</span>
+              <span className={sseConnected ? "text-up-green" : "text-down-red"}>
+                {sseConnected ? "已连接" : sseRetryCount > 0 ? `重连中(${sseRetryCount})` : "未连接"}
+              </span>
             </div>
           </div>
           <div className="flex h-8 w-8 items-center justify-center rounded-sm border border-border hover:bg-bg-hover transition-colors cursor-pointer">
@@ -134,32 +139,19 @@ export const CyberpunkLayout: React.FC = () => {
       {/* Bottom Status Bar (28px) */}
       <footer className="flex h-[28px] items-center justify-between border-t border-border bg-bg-card px-4 text-[10px] font-mono z-50 uppercase">
         <div className="flex items-center gap-4">
+          {/* SSE 状态反映真实连接（F2） */}
           <div className="flex items-center gap-1.5">
-            <div className="h-2 w-2 rounded-full bg-up-green shadow-[0_0_5px_rgba(0,255,157,0.8)]" />
-            <span className="text-info-gray/80">API: 已连接</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <div className="h-2 w-2 rounded-full bg-up-green shadow-[0_0_5px_rgba(0,255,157,0.8)] animate-pulse" />
-            <span className="text-info-gray/80">WS: 推流中</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <div className="h-2 w-2 rounded-full bg-neon-cyan shadow-[0_0_5px_rgba(0,240,255,0.8)]" />
-            <span className="text-info-gray/80">SSE: 已同步</span>
-          </div>
-          <div className="ml-4 flex items-center gap-1 text-info-gray/40">
-            <Zap className="h-3 w-3" />
-            <span>最后信号: 12ms</span>
+            <div className={`h-2 w-2 rounded-full ${sseConnected ? "bg-up-green shadow-[0_0_5px_rgba(0,255,157,0.8)]" : "bg-down-red"} ${!sseConnected ? "animate-pulse" : ""}`} />
+            <span className="text-info-gray/80">
+              SSE: {sseConnected ? "已同步" : sseRetryCount > 0 ? `重连中 ${sseRetryCount}` : "已断开"}
+            </span>
           </div>
         </div>
 
         <div className="flex items-center gap-6 text-info-gray/60">
           <div className="flex items-center gap-2">
-            <Wifi className="h-3 w-3 text-up-green" />
-            <span>YC-CLUSTER-A1</span>
-          </div>
-          <div className="flex items-center gap-2">
             <Clock className="h-3 w-3" />
-            <span>{new Date().toLocaleTimeString()}</span>
+            <span>{clock}</span>
           </div>
         </div>
       </footer>

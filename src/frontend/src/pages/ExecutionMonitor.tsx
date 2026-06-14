@@ -1,4 +1,5 @@
 ﻿import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { usePolling } from '../hooks/usePolling';
 import {
   Activity,
   AlertOctagon,
@@ -288,6 +289,9 @@ export const ExecutionMonitor: React.FC = () => {
   useEffect(() => {
     void fetchData();
   }, [fetchData]);
+
+  // F5：定时轮询（8 秒），订单/持仓状态自动刷新。
+  usePolling(() => void fetchData(), 8000);
 
   const runtimeDetailUrl = useMemo(() => apiUrl('/api/system/runtime'), []);
   const latestFills = useMemo(() => fills.slice(0, 20), [fills]);

@@ -122,6 +122,7 @@ ERROR_CODE_CATALOG: dict[str, dict[str, Any]] = {
         "http_status": 200,
         "desc": "reconciliation guard was not blocked",
     },
+    "UNAUTHORIZED": {"category": "auth", "retryable": False, "http_status": 401, "desc": "authentication required or failed"},
     "UNAUTHORIZED_UNLOCK": {"category": "auth", "retryable": False, "http_status": 403, "desc": "unauthorized unlock"},
     "DAY_ROLL_RECON_BLOCK": {
         "category": "reconciliation",

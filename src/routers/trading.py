@@ -2,13 +2,14 @@
 
 import os
 
-from fastapi import APIRouter, Query, Request
+from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from src.core.schemas import BaseSchema
 
 from src.core.errors import TradingServiceError, error_response, ok_response
 from src.core.trading_service import TradingService
+from src.routers.auth import require_api_key, require_api_key_strict
 
 router = APIRouter()
 
@@ -82,7 +83,7 @@ def _error_json(exc: TradingServiceError) -> JSONResponse:
     )
 
 
-@router.post("/analyze")
+@router.post("/analyze", dependencies=[Depends(require_api_key_strict)])
 async def analyze(req: TickerRequest, request: Request):
     try:
         service = _get_service(request)
@@ -97,7 +98,7 @@ async def analyze(req: TickerRequest, request: Request):
         )
 
 
-@router.post("/execute")
+@router.post("/execute", dependencies=[Depends(require_api_key_strict)])
 async def execute(req: TickerRequest, request: Request):
     try:
         service = _get_service(request)
@@ -117,7 +118,7 @@ async def execute(req: TickerRequest, request: Request):
         )
 
 
-@router.post("/batch")
+@router.post("/batch", dependencies=[Depends(require_api_key_strict)])
 async def batch(req: BatchRequest, request: Request):
     try:
         service = _get_service(request)
@@ -136,7 +137,7 @@ async def batch(req: BatchRequest, request: Request):
         )
 
 
-@router.get("/positions")
+@router.get("/positions", dependencies=[Depends(require_api_key)])
 async def positions(request: Request):
     try:
         service = _get_service(request)
@@ -150,7 +151,7 @@ async def positions(request: Request):
         )
 
 
-@router.get("/balance")
+@router.get("/balance", dependencies=[Depends(require_api_key)])
 async def balance(request: Request):
     try:
         service = _get_service(request)
@@ -164,7 +165,7 @@ async def balance(request: Request):
         )
 
 
-@router.get("/orders/active")
+@router.get("/orders/active", dependencies=[Depends(require_api_key)])
 async def active_orders(request: Request):
     try:
         service = _get_service(request)
@@ -178,7 +179,7 @@ async def active_orders(request: Request):
         )
 
 
-@router.get("/snapshot")
+@router.get("/snapshot", dependencies=[Depends(require_api_key)])
 async def trade_snapshot(
     request: Request,
     include_channel_raw: bool = Query(default=True, description="是否包含通道原始快照"),
@@ -196,7 +197,7 @@ async def trade_snapshot(
         )
 
 
-@router.post("/orders/sync")
+@router.post("/orders/sync", dependencies=[Depends(require_api_key)])
 async def sync_orders(request: Request):
     try:
         service = _get_service(request)
@@ -210,7 +211,7 @@ async def sync_orders(request: Request):
         )
 
 
-@router.post("/orders/cancel-all")
+@router.post("/orders/cancel-all", dependencies=[Depends(require_api_key_strict)])
 async def cancel_all_orders(req: CancelAllOrdersRequest, request: Request):
     """批量撤销当前活动订单。"""
     try:
@@ -226,7 +227,7 @@ async def cancel_all_orders(req: CancelAllOrdersRequest, request: Request):
         )
 
 
-@router.post("/channel/switch")
+@router.post("/channel/switch", dependencies=[Depends(require_api_key_strict)])
 async def switch_trading_channel(req: ChannelSwitchRequest, request: Request):
     """切换交易通道并重建执行上下文。"""
     try:
@@ -242,7 +243,7 @@ async def switch_trading_channel(req: ChannelSwitchRequest, request: Request):
         )
 
 
-@router.post("/orders/direct")
+@router.post("/orders/direct", dependencies=[Depends(require_api_key_strict)])
 async def direct_order(req: DirectOrderRequest, request: Request):
     try:
         service = _get_service(request)
@@ -321,7 +322,7 @@ async def direct_order(req: DirectOrderRequest, request: Request):
         )
 
 
-@router.get("/orders/trace")
+@router.get("/orders/trace", dependencies=[Depends(require_api_key)])
 async def order_trace(
     request: Request,
     idempotency_key: str = Query(default=""),
@@ -370,7 +371,7 @@ async def order_trace(
         )
 
 
-@router.post("/reconcile")
+@router.post("/reconcile", dependencies=[Depends(require_api_key_strict)])
 async def reconcile(req: ReconcileRequest, request: Request):
     try:
         service = _get_service(request)
@@ -395,7 +396,7 @@ async def reconcile(req: ReconcileRequest, request: Request):
         )
 
 
-@router.post("/reconcile/unlock")
+@router.post("/reconcile/unlock", dependencies=[Depends(require_api_key_strict)])
 async def reconcile_unlock(req: ReconcileUnlockRequest, request: Request):
     try:
         service = _get_service(request)
@@ -428,7 +429,7 @@ async def reconcile_unlock(req: ReconcileUnlockRequest, request: Request):
         )
 
 
-@router.post("/day-roll")
+@router.post("/day-roll", dependencies=[Depends(require_api_key_strict)])
 async def day_roll(req: DayRollRequest, request: Request):
     try:
         service = _get_service(request)

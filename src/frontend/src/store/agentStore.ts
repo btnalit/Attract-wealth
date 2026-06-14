@@ -55,7 +55,9 @@ export const useAgentStore = create<AgentState>((set) => ({
   setActiveNode: (nodeId) => set({ activeNodeId: nodeId }),
 
   addLog: (log) => set((state) => ({ 
-    logs: [log, ...state.logs].slice(0, 100) // Keep last 100 logs
+    // 保留最近 500 条日志（F8：防长时间运行内存膨胀；前插保证最新在前）。
+    // 历史水位由 AgentWorkshop 从审计日志 hydrate，store 仅缓存近期窗口。
+    logs: [log, ...state.logs].slice(0, 500)
   })),
 
   clearLogs: () => set({ logs: [] }),

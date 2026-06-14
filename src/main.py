@@ -41,17 +41,26 @@ else:
 
 load_dotenv()
 
-# Initialize logging to both console and file
+# Initialize logging to both console and file (with rotation to prevent disk bloat)
 log_dir = Path(os.getenv("LOG_DIR", os.path.join(os.path.dirname(sys.executable) if getattr(sys, 'frozen', False) else os.path.dirname(__file__).split("src")[0], "logs")))
 log_dir.mkdir(parents=True, exist_ok=True)
 log_file = log_dir / "laicai_startup.log"
+
+# 日志轮转：单文件最大 10MB，保留 5 个历史备份（共约 60MB 上限），
+# 避免长期运行撑爆磁盘。
+from logging.handlers import RotatingFileHandler
 
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
     handlers=[
         logging.StreamHandler(sys.stdout),
-        logging.FileHandler(log_file, encoding="utf-8")
+        RotatingFileHandler(
+            log_file,
+            maxBytes=10 * 1024 * 1024,  # 10 MB
+            backupCount=5,
+            encoding="utf-8",
+        ),
     ]
 )
 logger = logging.getLogger(__name__)
@@ -185,12 +194,30 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+def _parse_cors_origins() -> tuple[list[str], bool]:
+    """解析允许的 CORS 来源。
+
+    安全策略：
+    - 若显式配置 CORS_ALLOW_ORIGINS，则使用白名单（推荐生产环境）。
+    - 否则默认仅允许本机回环地址，并禁用 credentials（避免 OWASP 高危组合）。
+    - 永远不会同时返回 allow_origins=["*"] + credentials=True（高危组合）。
+    """
+    raw = os.getenv("CORS_ALLOW_ORIGINS", "").strip()
+    if raw:
+        origins = [o.strip() for o in raw.split(",") if o.strip()]
+        allow_credentials = _is_true(os.getenv("CORS_ALLOW_CREDENTIALS", "false"), default=False)
+        return origins, allow_credentials
+    # 安全默认：仅本机回环；显式关闭 credentials。
+    return ["http://localhost", "http://127.0.0.1"], False
+
+
+_cors_origins, _cors_allow_credentials = _parse_cors_origins()
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=_cors_origins,
+    allow_credentials=_cors_allow_credentials,
+    allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "X-Request-ID", "X-Trace-ID"],
 )
 
 

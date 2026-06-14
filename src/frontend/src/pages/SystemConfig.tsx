@@ -27,6 +27,16 @@ interface ConfigSectionProps {
   children: React.ReactNode;
 }
 
+/**
+ * 判断字符串是否是后端返回的掩码值（F11）。
+ *
+ * 旧逻辑用 includes('*') 单字符判断，会误判含单个 * 或 ? 的真实密钥。
+ * 新逻辑：仅当出现连续 2 个及以上掩码字符（星号、圆点、问号）时才认定为掩码。
+ * 后端返回的掩码通常是连续星号形式。
+ */
+const MASK_PATTERN = /[*\u2022?]{2,}/;
+const isMasked = (value: string): boolean => MASK_PATTERN.test(value);
+
 interface LlmConfigState {
   base_url: string;
   model: string;
@@ -69,15 +79,15 @@ export const SystemConfig: React.FC = () => {
   const [bridgeNotice, setBridgeNotice] = useState('');
   const [bridgeError, setBridgeError] = useState('');
 
-  const [tushareToken, setTushareToken] = useState('••••••••••••••••••••••••••••••••');
+  const [tushareToken, setTushareToken] = useState('');
   const [llmConfig, setLlmConfig] = useState<LlmConfigState>({
     base_url: 'https://api.openai.com/v1',
     model: 'gpt-4o-2024-05-13',
     temperature: null,
-    api_key: '••••••••••••••••••••••••••••••••',
+    api_key: '',
   });
   const [webhookUrl, setWebhookUrl] = useState('');
-  const [dingtalkSecret, setDingtalkSecret] = useState('••••••••••••••••••••••••••••••••');
+  const [dingtalkSecret, setDingtalkSecret] = useState('');
   const [dataflowCatalog, setDataflowCatalog] = useState<DataflowProvidersPayload>({
     current_provider: '',
     current_provider_display_name: '',
@@ -148,9 +158,9 @@ export const SystemConfig: React.FC = () => {
           systemApi.getThsBridgeState<ThsBridgeStatePayload>(),
         ]);
         if (sysData) {
-          setTushareToken(String(sysData.tushare_token ?? '••••••••••••••••••••••••••••••••'));
+          setTushareToken(String(sysData.tushare_token ?? ''));
           setWebhookUrl(String(sysData.wechat_webhook ?? ''));
-          setDingtalkSecret(String(sysData.dingtalk_secret ?? '••••••••••••••••••••••••••••••••'));
+          setDingtalkSecret(String(sysData.dingtalk_secret ?? ''));
         }
 
         const config = llmData.config ?? llmData;
@@ -158,7 +168,7 @@ export const SystemConfig: React.FC = () => {
           base_url: String(config.base_url ?? 'https://api.openai.com/v1'),
           model: String(config.model ?? 'gpt-4o-2024-05-13'),
           temperature: toOptionalNumber(config.temperature),
-          api_key: String(config.api_key ?? '••••••••••••••••••••••••••••••••'),
+          api_key: String(config.api_key ?? ''),
         });
 
         applyProviderCatalog(providerData);
@@ -197,7 +207,7 @@ export const SystemConfig: React.FC = () => {
     setShowError(false);
 
     try {
-      const tokenMasked = tushareToken.includes('*') || tushareToken.includes('•');
+      const tokenMasked = isMasked(tushareToken);
       if (!tokenMasked) {
         await systemApi.updateConfig({ tushare_token: tushareToken });
       }
@@ -252,15 +262,15 @@ export const SystemConfig: React.FC = () => {
       const llmPayload = {
         ...llmConfig,
         temperature: llmConfig.temperature === null ? undefined : llmConfig.temperature,
-        api_key: llmConfig.api_key.includes('*') || llmConfig.api_key.includes('•') ? '' : llmConfig.api_key,
-        retain_api_key: llmConfig.api_key.includes('*') || llmConfig.api_key.includes('•'),
+        api_key: isMasked(llmConfig.api_key) ? '' : llmConfig.api_key,
+        retain_api_key: isMasked(llmConfig.api_key),
       };
 
       await Promise.all([
         systemApi.updateConfig({
-          tushare_token: tushareToken.includes('*') || tushareToken.includes('•') ? undefined : tushareToken,
+          tushare_token: isMasked(tushareToken) ? undefined : tushareToken,
           wechat_webhook: webhookUrl,
-          dingtalk_secret: dingtalkSecret.includes('*') || dingtalkSecret.includes('•') ? undefined : dingtalkSecret,
+          dingtalk_secret: isMasked(dingtalkSecret) ? undefined : dingtalkSecret,
         }),
         systemApi.updateLlmConfig(llmPayload),
       ]);

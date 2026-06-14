@@ -354,7 +354,7 @@ def test_day_roll_resets_state_and_calls_broker_new_day(monkeypatch):
 
     import asyncio
 
-    result = asyncio.run(service.day_roll(reason="unit_test"))
+    result = asyncio.run(service.day_roll(reason="unit_test", force=True))
     assert result["simulation_days"] == 4
     assert result["broker_new_day"] is True
     assert broker.new_day_called is True

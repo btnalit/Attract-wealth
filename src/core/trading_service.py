@@ -85,6 +85,11 @@ class TradingService:
         self._order_sync_interval = float(os.getenv("ORDER_SYNC_INTERVAL", "30"))
         self._order_sync_task: Optional[asyncio.Task] = None
 
+        # 下单串行锁：把"读账户状态 → 风控检查 → 提交订单"包成原子操作，
+        # 杜绝并发请求绕过持仓集中度/频次红线的 check-then-act 竞态。
+        # 延迟到 initialize() 中创建，避免在事件循环启动前构造 asyncio.Lock 的告警。
+        self._order_lock: Optional[asyncio.Lock] = None
+
         self._china_data = None
         self._china_data_disabled = False
         self._initialized = False
@@ -93,9 +98,23 @@ class TradingService:
         """初始化并连接执行通道，失败时自动降级到 simulation。"""
         if self._initialized:
             return
+        if self._order_lock is None:
+            self._order_lock = asyncio.Lock()
         await self._ensure_broker_connected()
         self._start_order_sync_if_needed()
         self._initialized = True
+
+    def _order_lock_or_none(self):
+        """返回下单锁上下文管理器；锁未初始化时返回 no-op（兼容未走 initialize 的测试场景）。
+
+        生产路径下 _order_lock 一定在 initialize() 中创建，下单请求会被串行化。
+        """
+        if self._order_lock is not None:
+            return self._order_lock
+        # 返回一个空的 async context manager
+        import contextlib
+
+        return contextlib.nullcontext()
 
     async def shutdown(self):
         try:
@@ -184,43 +203,66 @@ class TradingService:
             )
             return result
 
-        account = await self._safe_get_balance()
-        positions = await self._safe_get_positions()
-        current_positions = {p.ticker: p.market_value for p in positions}
-        daily_pnl = account.daily_pnl if account else 0.0
-        total_assets = account.total_assets if account and account.total_assets > 0 else 0.0
+        async with self._order_lock_or_none():
+            account = await self._safe_get_balance()
+            positions = await self._safe_get_positions()
+            current_positions = {p.ticker: p.market_value for p in positions}
+            daily_pnl = account.daily_pnl if account else 0.0
+            total_assets = account.total_assets if account and account.total_assets > 0 else 0.0
 
-        passed, violations = self.risk_gate.check_order(
-            request=request,
-            total_assets=total_assets,
-            current_positions=current_positions,
-            daily_pnl=daily_pnl,
-            is_live=self.channel != "simulation",
-            simulation_days=self.simulation_days,
-        )
-        if not passed:
-            TradingLedger.record_entry(
-                LedgerEntry(
-                    category="RISK",
-                    level="WARNING",
-                    action="CHECK_REJECT",
-                    detail=f"risk rejected order {request.ticker} {request.side.value} {request.quantity}",
-                    status="rejected",
-                    metadata={
-                        "ticker": request.ticker,
-                        "side": request.side.value,
-                        "quantity": request.quantity,
-                        "price": request.price,
-                        "violations": [asdict(v) for v in violations],
-                    },
-                )
+            passed, violations = self.risk_gate.check_order(
+                request=request,
+                total_assets=total_assets,
+                current_positions=current_positions,
+                daily_pnl=daily_pnl,
+                is_live=self.channel != "simulation",
+                simulation_days=self.simulation_days,
+                position_count=len(positions),
+                total_position_value=sum(p.market_value for p in positions),
             )
+            if not passed:
+                TradingLedger.record_entry(
+                    LedgerEntry(
+                        category="RISK",
+                        level="WARNING",
+                        action="CHECK_REJECT",
+                        detail=f"risk rejected order {request.ticker} {request.side.value} {request.quantity}",
+                        status="rejected",
+                        metadata={
+                            "ticker": request.ticker,
+                            "side": request.side.value,
+                            "quantity": request.quantity,
+                            "price": request.price,
+                            "violations": [asdict(v) for v in violations],
+                        },
+                    )
+                )
+                result = {
+                    "ticker": ticker,
+                    "channel": self.channel,
+                    "decision": state.get("decision", "HOLD"),
+                    "risk_check": {"passed": False, "violations": [asdict(v) for v in violations]},
+                    "order": None,
+                    "state": state,
+                }
+                self._persist_decision_evidence(
+                    ticker=ticker,
+                    state=state,
+                    phase="execute",
+                    risk_check=result.get("risk_check", {}),
+                    order=None,
+                )
+                return result
+
+            order = await self.broker.execute_order(request)
+            self._persist_trade(state=state, order=order)
+            self.order_manager.add_active_order(order)
             result = {
                 "ticker": ticker,
                 "channel": self.channel,
                 "decision": state.get("decision", "HOLD"),
-                "risk_check": {"passed": False, "violations": [asdict(v) for v in violations]},
-                "order": None,
+                "risk_check": {"passed": True, "reason": "All checks cleared"},
+                "order": asdict(order),
                 "state": state,
             }
             self._persist_decision_evidence(
@@ -228,29 +270,9 @@ class TradingService:
                 state=state,
                 phase="execute",
                 risk_check=result.get("risk_check", {}),
-                order=None,
+                order=result.get("order"),
             )
             return result
-
-        order = await self.broker.execute_order(request)
-        self._persist_trade(state=state, order=order)
-        self.order_manager.add_active_order(order)
-        result = {
-            "ticker": ticker,
-            "channel": self.channel,
-            "decision": state.get("decision", "HOLD"),
-            "risk_check": {"passed": True, "reason": "All checks cleared"},
-            "order": asdict(order),
-            "state": state,
-        }
-        self._persist_decision_evidence(
-            ticker=ticker,
-            state=state,
-            phase="execute",
-            risk_check=result.get("risk_check", {}),
-            order=result.get("order"),
-        )
-        return result
 
     async def place_direct_order(
         self,
@@ -426,24 +448,97 @@ class TradingService:
             agent_id="external_api",
         )
 
-        account = await self._safe_get_balance()
-        positions = await self._safe_get_positions()
-        current_positions = {p.ticker: p.market_value for p in positions}
-        daily_pnl = account.daily_pnl if account else 0.0
-        total_assets = account.total_assets if account and account.total_assets > 0 else 0.0
-        passed, violations = self.risk_gate.check_order(
-            request=order_request,
-            total_assets=total_assets,
-            current_positions=current_positions,
-            daily_pnl=daily_pnl,
-            is_live=self.channel != "simulation",
-            simulation_days=self.simulation_days,
-        )
+        async with self._order_lock_or_none():
+            account = await self._safe_get_balance()
+            positions = await self._safe_get_positions()
+            current_positions = {p.ticker: p.market_value for p in positions}
+            daily_pnl = account.daily_pnl if account else 0.0
+            total_assets = account.total_assets if account and account.total_assets > 0 else 0.0
+            passed, violations = self.risk_gate.check_order(
+                request=order_request,
+                total_assets=total_assets,
+                current_positions=current_positions,
+                daily_pnl=daily_pnl,
+                is_live=self.channel != "simulation",
+                simulation_days=self.simulation_days,
+                position_count=len(positions),
+                total_position_value=sum(p.market_value for p in positions),
+            )
 
-        if not passed:
-            risk_check = {"passed": False, "violations": [asdict(v) for v in violations]}
-            trace["status"] = "risk_rejected"
-            trace["steps"]["risk"] = {"status": "rejected", "at": time.time(), "violations": risk_check["violations"]}
+            if not passed:
+                risk_check = {"passed": False, "violations": [asdict(v) for v in violations]}
+                trace["status"] = "risk_rejected"
+                trace["steps"]["risk"] = {"status": "rejected", "at": time.time(), "violations": risk_check["violations"]}
+                trace["steps"]["reconciliation"] = {
+                    "status": "blocked" if self.recon_guard.blocked else "ok",
+                    "at": time.time(),
+                    "guard": self.get_reconciliation_guard_state(),
+                }
+                payload = {
+                    "request_id": norm_request_id,
+                    "idempotency_key": norm_idempotency,
+                    "channel": norm_channel,
+                    "trace_id": norm_trace_id,
+                    "risk_check": risk_check,
+                    "order": None,
+                    "trace": trace,
+                    "idempotent_replay": False,
+                }
+                evidence_id = self._persist_direct_order_evidence(
+                    request_id=norm_request_id,
+                    idempotency_key=norm_idempotency,
+                    client_order_id=norm_client_order_id,
+                    ticker=norm_ticker,
+                    side=norm_side,
+                    channel=norm_channel,
+                    risk_check=risk_check,
+                    order=None,
+                    trace=payload.get("trace", {}),
+                    status="risk_rejected",
+                    request_payload=request_signature,
+                    trace_id=norm_trace_id,
+                )
+                trace["steps"]["audit"] = {"status": "persisted", "at": time.time(), "evidence_id": evidence_id}
+                payload["evidence_id"] = evidence_id
+                TradingLedger.finalize_direct_order_request(
+                    idempotency_key=norm_idempotency,
+                    status="risk_rejected",
+                    error_code="RISK_REJECTED",
+                    error_message="risk gate rejected direct order",
+                    response_payload=payload,
+                )
+                TradingLedger.record_entry(
+                    LedgerEntry(
+                        category="RISK",
+                        level="WARNING",
+                        action="DIRECT_ORDER_RISK_REJECTED",
+                        detail=f"direct order risk rejected {norm_ticker}",
+                        status="rejected",
+                        metadata={
+                            "trace_id": norm_trace_id,
+                            "request_id": norm_request_id,
+                            "idempotency_key": norm_idempotency,
+                            "violations": risk_check["violations"],
+                        },
+                    )
+                )
+                return payload
+
+            self.direct_guard.daily_notional = round(self.direct_guard.daily_notional + order_notional, 6)
+            order = await self.broker.execute_order(order_request)
+            local_order_id = str(getattr(order, "order_id", "") or "")
+            broker_order_id = self._extract_broker_order_id(order.message)
+            order_status = order.status.value if hasattr(order.status, "value") else str(order.status)
+            trace["local_order_id"] = local_order_id
+            trace["broker_order_id"] = broker_order_id
+            trace["status"] = order_status
+            trace["steps"]["risk"] = {"status": "passed", "at": time.time()}
+            trace["steps"]["execute"] = {
+                "status": order_status,
+                "at": time.time(),
+                "local_order_id": local_order_id,
+                "broker_order_id": broker_order_id,
+            }
             trace["steps"]["reconciliation"] = {
                 "status": "blocked" if self.recon_guard.blocked else "ok",
                 "at": time.time(),
@@ -454,11 +549,28 @@ class TradingService:
                 "idempotency_key": norm_idempotency,
                 "channel": norm_channel,
                 "trace_id": norm_trace_id,
-                "risk_check": risk_check,
-                "order": None,
+                "risk_check": {"passed": True, "reason": "All checks cleared"},
+                "order": asdict(order),
                 "trace": trace,
                 "idempotent_replay": False,
             }
+
+            self._persist_direct_trade(
+                order=order,
+                trace=trace,
+                request_payload=request_signature,
+                idempotency_key=norm_idempotency,
+                request_id=norm_request_id,
+            )
+            if order.status in ACTIVE_ORDER_STATUSES:
+                self.order_manager.add_active_order(order)
+
+            error_code = ""
+            if order.status == OrderStatus.REJECTED:
+                error_code = "ORDER_REJECTED"
+            elif order.status == OrderStatus.FAILED:
+                error_code = "ORDER_FAILED"
+
             evidence_id = self._persist_direct_order_evidence(
                 request_id=norm_request_id,
                 idempotency_key=norm_idempotency,
@@ -466,10 +578,10 @@ class TradingService:
                 ticker=norm_ticker,
                 side=norm_side,
                 channel=norm_channel,
-                risk_check=risk_check,
-                order=None,
-                trace=payload.get("trace", {}),
-                status="risk_rejected",
+                risk_check=payload.get("risk_check", {}),
+                order=payload.get("order", {}),
+                trace=trace,
+                status=order_status,
                 request_payload=request_signature,
                 trace_id=norm_trace_id,
             )
@@ -477,118 +589,31 @@ class TradingService:
             payload["evidence_id"] = evidence_id
             TradingLedger.finalize_direct_order_request(
                 idempotency_key=norm_idempotency,
-                status="risk_rejected",
-                error_code="RISK_REJECTED",
-                error_message="risk gate rejected direct order",
+                status=order_status,
+                local_order_id=local_order_id,
+                broker_order_id=broker_order_id,
+                error_code=error_code,
+                error_message=str(order.message or ""),
                 response_payload=payload,
             )
             TradingLedger.record_entry(
                 LedgerEntry(
-                    category="RISK",
-                    level="WARNING",
-                    action="DIRECT_ORDER_RISK_REJECTED",
-                    detail=f"direct order risk rejected {norm_ticker}",
-                    status="rejected",
+                    category="TRADE",
+                    level="INFO" if error_code == "" else "WARNING",
+                    action="DIRECT_ORDER_EXECUTED",
+                    detail=f"direct order executed {norm_ticker} status={order_status}",
+                    status=order_status,
                     metadata={
                         "trace_id": norm_trace_id,
                         "request_id": norm_request_id,
                         "idempotency_key": norm_idempotency,
-                        "violations": risk_check["violations"],
+                        "local_order_id": local_order_id,
+                        "broker_order_id": broker_order_id,
+                        "error_code": error_code,
                     },
                 )
             )
             return payload
-
-        self.direct_guard.daily_notional = round(self.direct_guard.daily_notional + order_notional, 6)
-        order = await self.broker.execute_order(order_request)
-        local_order_id = str(getattr(order, "order_id", "") or "")
-        broker_order_id = self._extract_broker_order_id(order.message)
-        order_status = order.status.value if hasattr(order.status, "value") else str(order.status)
-        trace["local_order_id"] = local_order_id
-        trace["broker_order_id"] = broker_order_id
-        trace["status"] = order_status
-        trace["steps"]["risk"] = {"status": "passed", "at": time.time()}
-        trace["steps"]["execute"] = {
-            "status": order_status,
-            "at": time.time(),
-            "local_order_id": local_order_id,
-            "broker_order_id": broker_order_id,
-        }
-        trace["steps"]["reconciliation"] = {
-            "status": "blocked" if self.recon_guard.blocked else "ok",
-            "at": time.time(),
-            "guard": self.get_reconciliation_guard_state(),
-        }
-        payload = {
-            "request_id": norm_request_id,
-            "idempotency_key": norm_idempotency,
-            "channel": norm_channel,
-            "trace_id": norm_trace_id,
-            "risk_check": {"passed": True, "reason": "All checks cleared"},
-            "order": asdict(order),
-            "trace": trace,
-            "idempotent_replay": False,
-        }
-
-        self._persist_direct_trade(
-            order=order,
-            trace=trace,
-            request_payload=request_signature,
-            idempotency_key=norm_idempotency,
-            request_id=norm_request_id,
-        )
-        if order.status in ACTIVE_ORDER_STATUSES:
-            self.order_manager.add_active_order(order)
-
-        error_code = ""
-        if order.status == OrderStatus.REJECTED:
-            error_code = "ORDER_REJECTED"
-        elif order.status == OrderStatus.FAILED:
-            error_code = "ORDER_FAILED"
-
-        evidence_id = self._persist_direct_order_evidence(
-            request_id=norm_request_id,
-            idempotency_key=norm_idempotency,
-            client_order_id=norm_client_order_id,
-            ticker=norm_ticker,
-            side=norm_side,
-            channel=norm_channel,
-            risk_check=payload.get("risk_check", {}),
-            order=payload.get("order", {}),
-            trace=trace,
-            status=order_status,
-            request_payload=request_signature,
-            trace_id=norm_trace_id,
-        )
-        trace["steps"]["audit"] = {"status": "persisted", "at": time.time(), "evidence_id": evidence_id}
-        payload["evidence_id"] = evidence_id
-        TradingLedger.finalize_direct_order_request(
-            idempotency_key=norm_idempotency,
-            status=order_status,
-            local_order_id=local_order_id,
-            broker_order_id=broker_order_id,
-            error_code=error_code,
-            error_message=str(order.message or ""),
-            response_payload=payload,
-        )
-        TradingLedger.record_entry(
-            LedgerEntry(
-                category="TRADE",
-                level="INFO" if error_code == "" else "WARNING",
-                action="DIRECT_ORDER_EXECUTED",
-                detail=f"direct order executed {norm_ticker} status={order_status}",
-                status=order_status,
-                metadata={
-                    "trace_id": norm_trace_id,
-                    "request_id": norm_request_id,
-                    "idempotency_key": norm_idempotency,
-                    "local_order_id": local_order_id,
-                    "broker_order_id": broker_order_id,
-                    "error_code": error_code,
-                },
-            )
-        )
-        return payload
 
     def get_direct_order_trace(
         self,
@@ -661,6 +686,36 @@ class TradingService:
     async def get_positions(self) -> list[dict[str, Any]]:
         positions = await self._safe_get_positions()
         return [asdict(p) for p in positions]
+
+    async def check_position_risk(self) -> dict[str, Any]:
+        """检查已有持仓的止损/止盈触发（软规则，来自 risk_limits.toml）。
+
+        返回触发的止损/止盈信号列表。本方法不自动下单——调用方（EventEngine/前端）
+        据此决定是否生成卖出操作。这样设计是为了避免风控检查与下单形成循环依赖。
+        """
+        positions = await self._safe_get_positions()
+        position_dicts = [asdict(p) for p in positions]
+        triggered = self.risk_gate.check_positions(position_dicts)
+        alerts = [asdict(v) for v in triggered]
+        if alerts:
+            TradingLedger.record_entry(
+                LedgerEntry(
+                    category="RISK",
+                    level="WARNING",
+                    action="POSITION_RISK_ALERT",
+                    detail=f"stop-loss/take-profit triggered for {len(alerts)} positions",
+                    status="alert",
+                    metadata={"alerts": alerts},
+                )
+            )
+        return {
+            "channel": self.channel,
+            "checked": len(position_dicts),
+            "alerts": alerts,
+            "stop_loss_triggered": [a for a in alerts if a.get("rule") == "STOP_LOSS_TRIGGERED"],
+            "take_profit_triggered": [a for a in alerts if a.get("rule") == "TAKE_PROFIT_TRIGGERED"],
+        }
+
 
     async def get_active_orders(self) -> list[dict[str, Any]]:
         return [asdict(order) for order in self.order_manager.active_orders.values()]

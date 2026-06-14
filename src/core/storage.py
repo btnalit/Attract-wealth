@@ -252,42 +252,72 @@ CREATE INDEX IF NOT EXISTS idx_backtest_reports_created_at ON strategy_backtest_
 # 全局连接与初始化状态缓存
 _DB_STATE = {
     "initialized": False,
-    "connections": {}
+    # 线程局部连接：每个路径对应一个 threading.local，各线程从中取自己的连接。
+    # 这样消除 check_same_thread=False 的跨线程共享隐患，同时保持"每线程一个连接"的复用。
+    "connections": {},  # path_str -> threading.local()
+    "schemas": {},      # path_str -> schema（初始化新连接时需要）
 }
 
 
 def _init_db(db_path: Path, schema: str) -> sqlite3.Connection:
-    """初始化数据库并返回连接。如果已初始化，则仅返回连接。"""
+    """初始化数据库并返回连接。如果已初始化，则仅返回连接。
+
+    check_same_thread=False 保留：连接由线程局部机制保证只在创建它的线程使用，
+    但 asyncio.to_thread 可能在不同线程池线程执行，保留 False 避免无谓报错。
+    真正的安全由"每线程独立连接"保证（见 get_db_connection）。
+    """
     db_path.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(str(db_path), check_same_thread=False)
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA synchronous=NORMAL")
     conn.execute("PRAGMA busy_timeout=5000")
     conn.execute("PRAGMA cache_size=-64000")
-    
+
     # 架构审查优化：仅在未初始化时执行 Schema
     # 我们使用一个轻量级的检查，看是否已经有表存在
     cursor = conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
     if not cursor.fetchone():
         conn.executescript(schema)
         conn.commit()
-        
+
     return conn
 
 
 def reset_connections():
     """测试用：重置全局连接池，防止 teardown 后复用失效连接。"""
     global _DB_STATE
+    # 关闭所有线程的连接
+    for path_str, local in list(_DB_STATE.get("connections", {}).items()):
+        conn = getattr(local, "conn", None)
+        if conn is not None:
+            try:
+                conn.close()
+            except Exception:  # noqa: BLE001
+                pass
     _DB_STATE["connections"] = {}
+    _DB_STATE["schemas"] = {}
     _DB_STATE["initialized"] = False
 
 
 def get_db_connection(db_path: Path, schema: str) -> sqlite3.Connection:
-    """带缓存的数据库连接获取函数。"""
+    """获取当前线程的数据库连接（线程局部，互不干扰）。
+
+    每个线程对每个 db_path 持有独立连接，避免跨线程共享同一连接对象导致的
+    cursor 状态不安全。WAL 模式下多连接可并发读，写仍由 SQLite 内部串行化
+    （busy_timeout=5000 缓解锁争用）。
+    """
+    import threading
+
     path_str = str(db_path)
     if path_str not in _DB_STATE["connections"]:
-        _DB_STATE["connections"][path_str] = _init_db(db_path, schema)
-    return _DB_STATE["connections"][path_str]
+        _DB_STATE["connections"][path_str] = threading.local()
+        _DB_STATE["schemas"][path_str] = schema
+    local = _DB_STATE["connections"][path_str]
+    conn = getattr(local, "conn", None)
+    if conn is None:
+        conn = _init_db(db_path, schema)
+        local.conn = conn
+    return conn
 
 
 def init_all_databases():

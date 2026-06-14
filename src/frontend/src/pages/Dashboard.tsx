@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { usePolling } from "../hooks/usePolling";
 import {
   Activity,
   AlertTriangle,
@@ -138,6 +139,10 @@ export const Dashboard: React.FC = () => {
   useEffect(() => {
     void fetchOverview();
   }, [fetchOverview]);
+
+  // F5：定时轮询（10 秒），让驾驶舱数据自动刷新，而非依赖手动点按钮。
+  // 页面隐藏时自动暂停（见 usePolling 的 visibilitychange 处理）。
+  usePolling(() => void fetchOverview(), 10000);
 
   const wallet = useMemo(() => overview?.wallet ?? {}, [overview]);
   const risk = useMemo(() => overview?.risk ?? {}, [overview]);

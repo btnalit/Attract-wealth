@@ -1,4 +1,5 @@
 ﻿import { useCallback, useEffect, useMemo, useState, type FC } from 'react';
+import { usePolling } from '../hooks/usePolling';
 import {
   ArrowDownLeft,
   ArrowUpRight,
@@ -12,7 +13,7 @@ import {
 import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
 import { cn } from '../lib/utils';
-import { monitorApi, systemApi, tradingApi } from '../services/api';
+import { ApiClientError, monitorApi, systemApi, tradingApi } from '../services/api';
 
 interface QuoteData {
   ticker?: string;
@@ -274,6 +275,10 @@ export const MarketTerminal: FC = () => {
     void fetchQuote(ticker);
   }, [ticker, fetchQuote]);
 
+  // F5：行情定时轮询（15 秒）。行情变化较快，但为避免高频请求压力，用 15 秒间隔。
+  // ticker 变化由上面的 useEffect 触发即时刷新；轮询负责在 ticker 不变时更新最新价。
+  usePolling(() => void fetchQuote(ticker), 15000);
+
   useEffect(() => {
     const latestPrice = Number(quote?.price);
     if (!Number.isFinite(latestPrice) || latestPrice <= 0) {
@@ -386,7 +391,7 @@ export const MarketTerminal: FC = () => {
     const idempotencyKey = `${ticker.toLowerCase()}-${side.toLowerCase()}-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
     setOrderSubmittingSide(side);
     try {
-      const response = await tradingApi.placeDirectOrder<DirectOrderResult>({
+      const result = await tradingApi.placeDirectOrder<DirectOrderResult>({
         ticker: ticker.toLowerCase(),
         side,
         quantity,
@@ -396,17 +401,37 @@ export const MarketTerminal: FC = () => {
         idempotency_key: idempotencyKey,
         memo: `MarketTerminal:${side}`,
       });
-      const result = (response && typeof response === 'object' && 'data' in response)
-        ? ((response as { data?: DirectOrderResult }).data ?? {})
-        : response;
+      // apiRequest 已解包 {ok,code,data}，result 即为 DirectOrderResult
       const resultStatus = String(result.order?.status ?? '').toLowerCase() || 'accepted';
       const orderRef = resolveOrderRef(result);
       setLastOrderResult(result);
       setOrderSuccess(`${side === 'BUY' ? '买入' : '卖出'}委托已提交，状态：${resultStatus}，订单：${orderRef}`);
       await fetchQuote(ticker);
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      setOrderError(`${side === 'BUY' ? '买入' : '卖出'}下单失败：${message}`);
+      // 区分风控拒绝 / 通道拒单 / 通道失败 / 其他错误，给用户精准反馈
+      if (error instanceof ApiClientError) {
+        const sideLabel = side === 'BUY' ? '买入' : '卖出';
+        if (error.code === 'RISK_REJECTED') {
+          // 风控拒绝：展示触发的红线规则
+          const violations = (error.details as { risk_check?: { violations?: Array<{ rule: string; description: string }> } })?.risk_check?.violations
+            ?? (error.details as { violations?: Array<{ rule: string; description: string }> })?.violations
+            ?? [];
+          const rules = violations.map((v) => v.rule).filter(Boolean).join('、');
+          const firstDesc = violations[0]?.description ?? error.message;
+          setOrderError(`${sideLabel}被风控拦截：${rules || '未知规则'}。${firstDesc}`);
+        } else if (error.code === 'ORDER_REJECTED') {
+          setOrderError(`${sideLabel}被通道拒单：${error.message}`);
+        } else if (error.code === 'ORDER_FAILED') {
+          setOrderError(`${sideLabel}通道下单失败：${error.message}`);
+        } else if (error.status === 401) {
+          setOrderError('鉴权失败：请在设置中配置正确的 API Key。');
+        } else {
+          setOrderError(`${sideLabel}下单失败：${error.message}`);
+        }
+      } else {
+        const message = error instanceof Error ? error.message : String(error);
+        setOrderError(`${side === 'BUY' ? '买入' : '卖出'}下单失败：${message}`);
+      }
     } finally {
       setOrderSubmittingSide(null);
     }

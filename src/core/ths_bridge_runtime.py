@@ -151,6 +151,9 @@ class THSBridgeRuntime:
             self._stdout_handle = stdout_log.open("a", encoding="utf-8")
             self._stderr_handle = stderr_log.open("a", encoding="utf-8")
             if start_command:
+                # 安全说明：shell=True 用于支持配置命令中的 shell 语法（&&、管道等）。
+                # start_command 必须来自项目可信配置（config 文件或环境变量），绝不可接受用户 API 输入。
+                # 若未来 start_command 来源变为外部输入，必须改为 shell=False + shlex.split()。
                 self._proc = subprocess.Popen(
                     start_command,
                     cwd=str(self.project_root),

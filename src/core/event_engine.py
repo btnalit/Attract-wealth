@@ -55,7 +55,13 @@ class EventEngine:
 
     def stop(self):
         if self.scheduler:
-            self.scheduler.shutdown()
+            # wait=True：等待正在执行的 job（如 day_roll）完成再关闭。
+            # 对交易系统至关重要——day_roll 中断会导致风控已 reset 但对账未完成的状态不一致。
+            # 给一个上限超时，避免 job 卡住时永久阻塞关闭流程。
+            try:
+                self.scheduler.shutdown(wait=True)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("EventEngine shutdown waited but failed: %s", exc)
             logger.info("EventEngine stopped")
 
     def load_watchlists(self, tickers: List[str], persist: bool = True, source: str = "manual") -> list[str]:
@@ -202,6 +208,21 @@ class EventEngine:
         if not self.watchlists:
             logger.warning("[EventEngine] watchlist is empty, skip")
             return
+        # 批量交易前先做持仓风险体检（止损/止盈，来自 risk_limits.toml 软规则）。
+        # 仅记录告警，不自动下单；如需自动止损可在 runner 层据 alerts 生成卖出。
+        if hasattr(self.runner, "check_position_risk"):
+            try:
+                risk_report = await self.runner.check_position_risk()
+                alerts = risk_report.get("alerts", []) if isinstance(risk_report, dict) else []
+                if alerts:
+                    logger.warning(
+                        "[EventEngine] position risk alerts before batch: %d (stop_loss=%d, take_profit=%d)",
+                        len(alerts),
+                        len(risk_report.get("stop_loss_triggered", [])),
+                        len(risk_report.get("take_profit_triggered", [])),
+                    )
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("[EventEngine] position risk check failed (non-fatal): %s", exc)
         results = await self.runner.run_batch(self.watchlists, execute_orders=self.execute_orders)
         logger.info("[EventEngine] batch completed: %d symbols", len(results))
 

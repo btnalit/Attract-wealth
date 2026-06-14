@@ -10,6 +10,7 @@ import type {
   THSBridgeStartRequest,
   THSBridgeStopRequest,
 } from "../api/generated/openapi-types";
+import { appendAuthQuery, authHeaders } from "./auth";
 
 /**
  * API 成功包络。
@@ -117,6 +118,7 @@ export async function apiRequest<T>(path: string, init: RequestInit = {}, query?
     ...init,
     headers: {
       "Content-Type": "application/json",
+      ...authHeaders(),
       ...(init.headers || {}),
     },
   });
@@ -272,6 +274,64 @@ export interface TradingStrategyPayload {
   quality_score?: number;
   status?: string;
   daily_return?: number;
+  [key: string]: unknown;
+}
+
+/**
+ * 直下单风控检查结果。
+ */
+export interface DirectOrderRiskCheck {
+  passed: boolean;
+  reason?: string;
+  violations?: Array<{
+    rule: string;
+    description: string;
+    value?: number;
+    limit?: number;
+  }>;
+}
+
+/**
+ * 直下单订单结果。
+ */
+export interface DirectOrderResultOrder {
+  order_id?: string;
+  ticker?: string;
+  side?: string;
+  price?: number;
+  quantity?: number;
+  filled_quantity?: number;
+  filled_price?: number;
+  status?: string;
+  message?: string;
+  channel?: string;
+  [key: string]: unknown;
+}
+
+/**
+ * 直下单完整响应（place_direct_order 返回的 payload）。
+ * 与后端 src/core/trading_service.py 的 place_direct_order 返回结构对齐。
+ */
+export interface DirectOrderResult {
+  request_id?: string;
+  idempotency_key?: string;
+  channel?: string;
+  trace_id?: string;
+  risk_check?: DirectOrderRiskCheck;
+  order?: DirectOrderResultOrder | null;
+  trace?: {
+    trace_id?: string;
+    request_id?: string;
+    idempotency_key?: string;
+    channel?: string;
+    local_order_id?: string;
+    broker_order_id?: string;
+    status?: string;
+    steps?: Record<string, unknown>;
+    [key: string]: unknown;
+  };
+  idempotent_replay?: boolean;
+  evidence_id?: string;
   [key: string]: unknown;
 }
 
@@ -620,7 +680,7 @@ export const tradingApi = {
   /**
    * 提交直下单请求。
    */
-  placeDirectOrder: <T = ApiLooseObject>(payload: DirectOrderRequest) =>
+  placeDirectOrder: <T = DirectOrderResult>(payload: DirectOrderRequest) =>
     api.post<T>("/api/trading/orders/direct", payload),
   /**
    * 切换交易通道。
@@ -699,6 +759,7 @@ export const systemApi = {
 export const streamApi = {
   /**
    * 获取统一 SSE 事件流地址。
+   * EventSource 不支持自定义 header，鉴权通过 query param 传递（见 auth.appendAuthQuery）。
    */
-  getEventsUrl: () => apiUrl("/api/v1/stream/events"),
+  getEventsUrl: () => appendAuthQuery(apiUrl("/api/v1/stream/events")),
 };

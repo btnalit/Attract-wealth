@@ -70,11 +70,17 @@ src/frontend/.vite/
 # 来财 运行时数据 (NEVER COMMIT)
 # ============================================
 data/*.db
+data/**/*.db
+data/*-shm
+data/*-wal
+data/**/*.db-shm
+data/**/*.db-wal
 data/knowledge/
 data/memory/
 data/*.csv
 data/*.parquet
 logs/
+runtime-logs/
 sessions/
 
 # ============================================
@@ -88,3 +94,12 @@ docs/
 scripts/installer/output/
 dist/installer/*.exe
 dist/laiCai/
+
+# ============================================
+# 根目录调试残留 (临时 dump / schema 探针输出，永远不入库)
+# ============================================
+/out.json
+/out*.json
+/out*.txt
+/_schema_keys.txt
+/_*.txt

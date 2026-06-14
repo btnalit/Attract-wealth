@@ -1,10 +1,9 @@
 import { useEffect } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 
 
 export const useHotkeys = (onOpenCommandPalette: () => void) => {
   const navigate = useNavigate();
-  const location = useLocation();
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -26,8 +25,8 @@ export const useHotkeys = (onOpenCommandPalette: () => void) => {
         onOpenCommandPalette();
       }
 
-      // Quick Navigation: 1-9
-      if (!e.metaKey && !e.ctrlKey && !e.altKey && e.key >= '1' && e.key <= '9') {
+      // Quick Navigation: Alt+1 ~ Alt+9（F9：原为裸数字键，会干扰页面其他交互）
+      if (e.altKey && !e.metaKey && !e.ctrlKey && !e.shiftKey && e.key >= '1' && e.key <= '9') {
         const routes = [
           '/',          // 1: Dashboard
           '/market',    // 2: Market
@@ -41,24 +40,17 @@ export const useHotkeys = (onOpenCommandPalette: () => void) => {
         ];
         const index = parseInt(e.key) - 1;
         if (routes[index]) {
+          e.preventDefault();
           navigate(routes[index]);
         }
       }
 
-      // Refresh: R
-      if (e.key.toLowerCase() === 'r' && !e.metaKey && !e.ctrlKey) {
-        window.location.reload();
-      }
-
-      // Quick Start/Stop Trading: Space (Only on Agents page)
-      if (e.key === ' ' && location.pathname === '/agents') {
-        e.preventDefault();
-        console.log('Toggle Trading Status');
-        // This would typically interact with a global state or service
-      }
+      // Refresh: Ctrl+R / Cmd+R（F3：原为裸 R 键，会丢失未保存数据）
+      // 现在遵循浏览器原生快捷键约定，不再拦截裸 R。
+      // 注意：浏览器原生 Ctrl+R 已能刷新，这里不重复处理。
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [navigate, location, onOpenCommandPalette]);
+  }, [navigate, onOpenCommandPalette]);
 };
