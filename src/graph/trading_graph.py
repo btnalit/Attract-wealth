@@ -3,6 +3,7 @@ Attract-wealth trading graph composition based on LangGraph.
 """
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from typing import Any
 
@@ -21,6 +22,8 @@ from src.graph.signal_processing import (
     build_signal_context_patch,
     normalize_debate_result,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def _to_report_dict(report: Any) -> dict[str, Any]:
@@ -41,6 +44,23 @@ def _single_report_patch(*, key: str, report: Any) -> dict[str, Any]:
     NewsAnalyst(Sentiment_Agent) 仍写入 "news" 这个稳定 key。
     """
     return {"analysis_reports": {key: _to_report_dict(report)}}
+
+
+def _neutral_fallback_report(*, analyst_type: str, ticker: str, exc: BaseException) -> dict[str, Any]:
+    """单个 analyst 节点异常时的中性降级报告。
+
+    并行化后一个 analyst 挂掉不应中断整个 graph —— 降级为 50 分中性，
+    让 signal_processing/debate 仍能基于剩余 analyst 报告继续决策。
+    """
+    logger.warning("[%s] analyst 节点异常，降级为中性报告: %s", analyst_type, exc, exc_info=True)
+    return {
+        "analyst_type": analyst_type,
+        "ticker": ticker,
+        "score": 50.0,
+        "stance": "Neutral",
+        "summary": f"分析师异常降级（{type(exc).__name__}: {exc}）",
+        "key_factors": [f"{analyst_type} degraded"],
+    }
 
 
 GRAPH_NODE_SEQUENCE: tuple[str, ...] = (
@@ -116,16 +136,27 @@ def build_trading_graph(*, agents: TradingGraphAgents | None = None):
     builder = StateGraph(AgentState)
 
     async def _fundamental_node(state: AgentState) -> dict[str, Any]:
-        report = await graph_agents.fundamental.analyze(state)
-        # P2-2：并行化后只返回自己的 key（reducer 负责合并），避免覆盖并发兄弟节点
+        try:
+            report = await graph_agents.fundamental.analyze(state)
+        except Exception as exc:  # noqa: BLE001 节点级兜底，避免单 analyst 挂掉中断整图
+            report = _neutral_fallback_report(
+                analyst_type="Fundamental_Agent", ticker=state.get("ticker", ""), exc=exc)
         return _single_report_patch(key="fundamental", report=report)
 
     async def _technical_node(state: AgentState) -> dict[str, Any]:
-        report = await graph_agents.technical.analyze(state)
+        try:
+            report = await graph_agents.technical.analyze(state)
+        except Exception as exc:  # noqa: BLE001
+            report = _neutral_fallback_report(
+                analyst_type="Technical_Agent", ticker=state.get("ticker", ""), exc=exc)
         return _single_report_patch(key="technical", report=report)
 
     async def _news_node(state: AgentState) -> dict[str, Any]:
-        report = await graph_agents.news.analyze(state)
+        try:
+            report = await graph_agents.news.analyze(state)
+        except Exception as exc:  # noqa: BLE001
+            report = _neutral_fallback_report(
+                analyst_type="Sentiment_Agent", ticker=state.get("ticker", ""), exc=exc)
         return _single_report_patch(key="news", report=report)
 
     def _signal_processing_node(state: AgentState) -> dict[str, Any]:

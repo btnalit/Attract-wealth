@@ -156,7 +156,10 @@ class ChinaDataAssembler:
 
         # 检查 K 线最新日期是否过时（超过 3 个交易日 ≈ 5 天）
         kline_recent = context.get("kline_recent") or []
-        kline_date_str = str(kline_recent[-1].get("date", "")) if kline_recent else ""
+        last_kline = kline_recent[-1] if kline_recent else {}
+        if not isinstance(last_kline, dict):
+            last_kline = {}
+        kline_date_str = str(last_kline.get("date", ""))
         kline_stale = False
         if kline_date_str:
             try:

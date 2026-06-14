@@ -184,3 +184,64 @@ class TestParallelSemanticsAndPerformance:
         assert elapsed < serial_total * 0.75, (
             f"并行耗时 {elapsed:.3f}s 未明显优于串行 {serial_total:.3f}s"
         )
+
+
+# ===== 节点级容错：单个 analyst 异常不中断整图 =====
+class _BoomAnalyst:
+    """总是抛异常的 analyst（模拟 LLM 超时/取数失败）。"""
+
+    def __init__(self, *, analyst_type: str) -> None:
+        self.analyst_type = analyst_type
+
+    async def analyze(self, state: dict) -> dict:
+        raise RuntimeError(f"{self.analyst_type} crashed")
+
+
+class TestAnalystFaultTolerance:
+    def test_one_analyst_crash_does_not_break_graph(self):
+        """单个 analyst 抛异常时，graph 应降级而非崩溃，其它两个报告仍保留。"""
+        agents = TradingGraphAgents(
+            fundamental=_SleepAnalyst(name="fundamental", analyst_type="Fundamental_Agent", sleep_s=0.01),
+            technical=_BoomAnalyst(analyst_type="Technical_Agent"),  # 崩溃
+            news=_SleepAnalyst(name="news", analyst_type="Sentiment_Agent", sleep_s=0.01),
+            debate=_FakeDebate(),
+            trader=_FakeTrader(),
+            risk=_FakeRisk(),
+        )
+        graph = build_trading_graph(agents=agents)
+        state = {
+            "session_id": "s1", "ticker": "000001", "messages": [],
+            "current_agent": "system", "decision": "HOLD", "confidence": 0.0,
+            "analysis_reports": {}, "context": {},
+        }
+        # 不应抛异常
+        result = asyncio.run(graph.ainvoke(state))
+        # 三个 key 都在（technical 是降级的中性报告）
+        assert set(result["analysis_reports"].keys()) == {"fundamental", "technical", "news"}
+        # technical 降级为中性
+        tech = result["analysis_reports"]["technical"]
+        assert tech["score"] == 50.0
+        assert tech["stance"] == "Neutral"
+        assert "degraded" in tech["summary"].lower() or "异常" in tech["summary"]
+
+    def test_all_analysts_crash_still_produces_reports(self):
+        """所有 analyst 都崩溃时，graph 仍应产出三份降级报告（不空）。"""
+        agents = TradingGraphAgents(
+            fundamental=_BoomAnalyst(analyst_type="Fundamental_Agent"),
+            technical=_BoomAnalyst(analyst_type="Technical_Agent"),
+            news=_BoomAnalyst(analyst_type="Sentiment_Agent"),
+            debate=_FakeDebate(),
+            trader=_FakeTrader(),
+            risk=_FakeRisk(),
+        )
+        graph = build_trading_graph(agents=agents)
+        state = {
+            "session_id": "s2", "ticker": "000002", "messages": [],
+            "current_agent": "system", "decision": "HOLD", "confidence": 0.0,
+            "analysis_reports": {}, "context": {},
+        }
+        result = asyncio.run(graph.ainvoke(state))
+        assert len(result["analysis_reports"]) == 3
+        # 全部降级为中性
+        for r in result["analysis_reports"].values():
+            assert r["score"] == 50.0
