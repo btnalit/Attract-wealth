@@ -52,11 +52,11 @@ const SignalRow: FC<{ signal: AnalysisSignal }> = ({ signal }) => {
       <span className={cn('px-1 py-0.5 rounded border font-bold shrink-0', badge.cls)}>{badge.label}</span>
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
-          <span className="font-mono font-bold text-neon-cyan/80">{signal.rule}</span>
+          <span className="font-mono font-bold text-neon-cyan/80">{signal.rule ?? '--'}</span>
           <span className="text-info-gray/60">强度 {signal.strength ?? '--'}</span>
-          <span className="text-info-gray/40">[{signal.category}]</span>
+          <span className="text-info-gray/40">[{signal.category ?? '--'}]</span>
         </div>
-        <div className="text-info-gray/80 mt-0.5">{signal.description}</div>
+        <div className="text-info-gray/80 mt-0.5">{signal.description ?? '--'}</div>
       </div>
     </div>
   );

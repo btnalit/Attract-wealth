@@ -46,10 +46,11 @@ export const KLineChart: FC<KLineChartProps> = ({ data, height = 360 }) => {
   const chartRef = useRef<Chart | null>(null);
 
   useEffect(() => {
-    if (!containerRef.current) return;
+    const container = containerRef.current;
+    if (!container) return;
 
     // 初始化图表（用默认样式：蜡烛图 + 网格 + 十字线）
-    const chart = init(containerRef.current);
+    const chart = init(container);
     chartRef.current = chart;
 
     if (chart) {
@@ -59,10 +60,9 @@ export const KLineChart: FC<KLineChartProps> = ({ data, height = 360 }) => {
       chart.createIndicator('VOL');
     }
 
+    // cleanup：用闭包内的局部引用，避免 ref 被清空后 dispose 失效
     return () => {
-      if (containerRef.current) {
-        dispose(containerRef.current);
-      }
+      dispose(container);
       chartRef.current = null;
     };
   }, []);

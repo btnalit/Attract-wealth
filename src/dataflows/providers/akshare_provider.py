@@ -221,7 +221,12 @@ class AkShareProvider(DataProvider, DefaultAShareExtendedMixin):
         start_t = time.time()
         numeric = re.sub(r'[^\d]', '', ticker)
         try:
-            df = ak.stock_lhb_detail_em(start_date="", end_date="")
+            # 龙虎榜接口需要具体日期，空字符串会报错——自动填近 5 个交易日的日期范围
+            from datetime import datetime, timedelta
+            today = datetime.now()
+            start_date = (today - timedelta(days=7)).strftime("%Y%m%d")
+            end_date = today.strftime("%Y%m%d")
+            df = ak.stock_lhb_detail_em(start_date=start_date, end_date=end_date)
             if df is None or df.empty:
                 self._track_extended_call(start_t, ok=True)
                 return []
@@ -358,7 +363,7 @@ class AkShareProvider(DataProvider, DefaultAShareExtendedMixin):
         start_t = time.time()
         numeric = re.sub(r'[^\d]', '', ticker)
         try:
-            df = ak.stock_financial_abstract(symbol=f"{'sh' if numeric.startswith('6') else 'sz'}{numeric}")
+            df = ak.stock_financial_abstract(symbol=resolve_ashare_symbol(numeric))
             if df is None or df.empty:
                 self._track_extended_call(start_t, ok=True)
                 return {}
