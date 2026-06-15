@@ -14,59 +14,88 @@
 - 🛡️ **硬核风控 (RiskGate)** — 内置 6 条不可绕过的交易红线（回撤/持仓/频次/白名单），保障资金安全。
 - 🖥️ **赛博朋克控制台** — React + Vite + Tailwind 构建的 11 页专业 HUD，支持 AgentFlow 实时可视化。
 - 🔌 **LLM 自由切换** — OpenAI 兼容协议，支持 DeepSeek, Qwen, Kimi, GPT-4o, Claude 等任意模型。
-- 🪟 **Windows 原生部署** — 内置同花顺路径自适应探测器 (ThsPathResolver) 及一键安装方案 (Inno Setup)。
+- 🪟 **Windows 原生部署** — 内置同花顺路径自适应探测器 (ThsPathResolver)，双击「一键启动.bat」自动检测环境并启动。
 
 ---
 
-## 📥 下载与使用指南 (Download & Usage)
+## 📥 下载与启动
 
-> **当前版本说明**: 这是一个 **绿色便携版 (Portable Build)**，**无需安装**，解压后双击即可运行。
+### 方式一：一键启动（推荐，Windows 用户）
 
-### 📌 快速启动步骤
-1. **打开文件夹**: 解压下载的文件，找到名为 **`laiCai`** 的文件夹（带有齿轮图标）。
-2. **运行主程序**: 进入该文件夹，双击运行 **`laiCai.exe`**。
-   - *Windows 提示*: 如果是第一次运行，系统可能提示“未知发布者”，请点击 **“更多信息” -> “仍要运行”**。
-3. **访问系统**: 
-   - 启动后，请保持弹出的黑色控制台窗口运行。
-   - 打开浏览器访问：
-     - 🌐 **系统控制台 / API**: http://localhost:8000
+1. **克隆/下载源码**
+   ```bash
+   git clone https://github.com/btnalit/Attract-wealth.git
+   ```
+   或到 [Releases](https://github.com/btnalit/Attract-wealth/releases) 下载源码包解压。
 
-> *(注：文件夹中出现的 `.spec`、`build` 等文件为构建残留，后续 CI 版本将自动清理，目前请忽略。)*
+2. **双击 `一键启动.bat`**
 
----
+   脚本会自动完成全部初始化：
+   - 检测/安装 Python 3.10+（可选 winget 自动安装）
+   - 创建 `.venv` 虚拟环境
+   - 安装 Python 依赖（`requirements.txt`）
+   - 检测/安装 Node.js 并构建前端（可选 winget 自动安装）
+   - 从 `.env.example` 生成 `.env` 配置（首次会提示编辑）
+   - 检测同花顺路径（可选）
+   - 启动后端服务
 
-## 🚀 快速开始 (开发环境)
+3. **配置 LLM（必需）**
 
-### 环境要求
-- Python 3.10+
-- Node.js 18+ (前端)
-- Git
+   首次启动前，编辑项目根目录 `.env` 文件，至少填写：
+   ```env
+   LLM_API_KEY=sk-your-key        # AI 分析必需（默认 deepseek）
+   LLM_BASE_URL=https://api.deepseek.com
+   TRADING_CHANNEL=simulation     # 模拟盘（无需券商）
+   ```
 
-### 安装与运行
+4. **访问系统**
+   - 🌐 控制台: http://127.0.0.1:8000
+   - 📖 API 文档: http://127.0.0.1:8000/docs
+
+> 💡 首次初始化完成后，日常启动只需双击 `启动.bat`（跳过环境检测，秒启）。
+
+### 方式二：手动安装（开发/非 Windows）
 
 ```bash
-# 1. 克隆项目
 git clone https://github.com/btnalit/Attract-wealth.git
 cd Attract-wealth
 
-# 2. 创建虚拟环境
+# Python 环境
 python -m venv .venv
-.venv\Scripts\activate  # Windows
+.venv\Scripts\activate          # Windows | source .venv/bin/activate (Linux/Mac)
+pip install -r requirements.txt
 
-# 3. 安装依赖
-pip install -e ".[dev]"
+# 前端构建（可选，不构建则用 npm run dev 开发模式）
+cd src/frontend && npm install && npm run build && cd ../..
 
-# 4. 启动后端 (API + TradingVM)
-python -m src.main
+# 配置
+cp .env.example .env            # 编辑 .env 填写 LLM_API_KEY 等
 
-# 5. (可选) 启动前端
-cd src/frontend
-npm install
-npm run dev
+# 启动
+python -m uvicorn src.main:app --host 127.0.0.1 --port 8000
 ```
 
-- 后端 API 文档: http://localhost:8000/docs
-- 前端控制台: http://localhost:5173
+### 启动脚本说明
+
+| 脚本 | 用途 |
+|------|------|
+| `一键启动.bat` | 完整环境检测 + 依赖安装 + 前端构建 + 启动。**首次运行用这个。** |
+| `启动.bat` | 快速启动（假设 `.venv` 已就绪）。**日常运行用这个。** |
+
+---
+
+## 🚀 实盘交易通道
+
+来财默认使用 `simulation`（模拟盘），无需任何券商配置。切换实盘通道需在 `.env` 设置 `TRADING_CHANNEL`：
+
+| 通道 | 说明 | 需要的配置 |
+|------|------|-----------|
+| `simulation` | 本地模拟撮合（默认，零风险） | 无 |
+| `ths_ipc` | 同花顺 IPC 桥（需运行 bridge 脚本） | `THS_IPC_*` |
+| `ths_auto` | 同花顺 UI 自动化（pywinauto） | `THS_EXE_PATH` 等 |
+| `qmt` | miniQMT（需 xtquant） | `QMT_PATH` 等 |
+
+> ⚠️ 实盘前务必在模拟盘充分验证策略。`RiskGate` 的 6 条红线（回撤/持仓/频次/白名单等）在所有通道下强制生效。
 
 ---
 
@@ -91,17 +120,23 @@ npm run dev
 
 ---
 
-## 📦 自动化构建 (CI/CD)
+## 📦 持续集成 (CI)
 
-本项目配置了 GitHub Actions 自动化流水线。当您推送 `v*` 版本标签时，GitHub 将自动在 Windows 环境中完成打包：
+本项目配置了 GitHub Actions，包含两个 CI 门禁 job：
+
+- **Lint & Test**：ruff 检查 + pytest 单元测试（Windows runner）
+- **Build Frontend**：npm install + vite build，验证前端可正常构建
+
+推送 `v*` 版本标签时，额外触发**源码 Release**（打包源码 zip 上传到 Releases 页面）：
 
 ```bash
-# 推送版本标签触发自动构建
 git tag v0.1.0
 git push origin v0.1.0
 ```
 
-构建产物将自动上传至项目的 **Releases** 页面。
+> 本项目已从 PyInstaller exe 打包方案切换为**源码 + 一键启动脚本**方案。
+> 量化交易系统含 GUI 自动化（pywinauto/pyautogui）和重型数据依赖（baostock/lancedb），
+> 打包成单 exe 体积大、启动慢、平台相关库易崩溃；源码方案更透明、可调试、易更新。
 
 ---
 
